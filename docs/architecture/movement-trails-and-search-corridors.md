@@ -28,15 +28,20 @@ for the first version.
 
 ## Missing-person workflow
 
-1. The user creates a safety plan and pre-authorizes specific people.
-2. The user may define check-ins, an expected destination, and an escalation delay.
-3. After a missed check-in or a trusted person's confirmed concern, an authorized
-   person activates the search view.
-4. The app shows the last verified point, movement trail, estimated corridor, data
-   freshness, and uncertainty.
-5. The app provides emergency-service guidance and an exportable incident summary
-   without claiming that the estimate is fact.
-6. The share expires automatically and records who activated and accessed it.
+**Plan creation:** The user creates a safety plan and pre-authorizes specific people.
+
+**Check-in definition:** The user may define check-ins, an expected destination, and an escalation delay.
+
+**Activation:** After a missed check-in or a trusted person's confirmed concern, an authorized
+person activates the search view.
+
+**Display:** The app shows the last verified point, movement trail, estimated corridor, data
+freshness, and uncertainty.
+
+**Guidance:** The app provides emergency-service guidance and an exportable incident summary
+without claiming that the estimate is fact.
+
+**Expiry:** The share expires automatically and records who activated and accessed it.
 
 ## Boundaries
 
