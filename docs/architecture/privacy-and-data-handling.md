@@ -102,12 +102,12 @@ and [Friend Mosaic Maps](./friend-mosaic-maps.md) for the full feature design.
   at rest for stored location and sensitive records.
 - Access control enforcement at the API layer, not just the UI — see the
   [control sequence for a location read](./security-architecture-and-data-protection.md#control-sequence-for-a-location-read).
-- Related: [§8 Crosscutting Concepts](./08-crosscutting-concepts.md) for
+- Related: [§8 Crosscutting Concepts](./crosscutting-concepts.md) for
   authentication/authorization design, and
   [Security Control Register](../reference/security-control-register.md) for
   control-level test evidence.
 
 ---
-*Referenced from [§8 Crosscutting Concepts](./08-crosscutting-concepts.md) and
+*Referenced from [§8 Crosscutting Concepts](./crosscutting-concepts.md) and
 linked from [docs/reference/](../reference) as the canonical privacy reference.
 Source: vault "14 Privacy and data".*

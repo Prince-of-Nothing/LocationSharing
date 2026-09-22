@@ -63,8 +63,8 @@ permission behavior.
 ## Frozen technology stack (MVP)
 
 This is the frozen, recorded stack decision for the MVP — see also
-[§4.2 Solution Strategy](../architecture/04-solution-strategy.md#42-frozen-mvp-technology-stack)
-and [§2 Constraints](../architecture/02-constraints.md).
+[§4.2 Solution Strategy](../architecture/solution-strategy.md#42-frozen-mvp-technology-stack)
+and [§2 Constraints](../architecture/constraints.md).
 
 | Layer | Choice | Rationale |
 |---|---|---|

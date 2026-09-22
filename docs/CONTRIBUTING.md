@@ -28,7 +28,7 @@ page (e.g. don't bury a how-to inside a tutorial).
 - Keep code samples runnable/copy-pasteable; verify they actually work before
   committing.
 - Prefer diagrams as text (Mermaid) over binary images so diffs are reviewable.
-- Use consistent terminology — check the [glossary](./architecture/12-glossary.md)
+- Use consistent terminology — check the [glossary]../architecture/glossary.md)
   before introducing a new term for an existing concept.
 
 ## Docs-as-code workflow
@@ -54,10 +54,10 @@ audit (e.g. every release or every quarter, whichever is more frequent) to:
    `architecture/` first — they drift fastest).
 2. Confirm every `TBD` placeholder in [`architecture/`](./architecture) has either
    been filled in or is tracked as an open item in
-   [`architecture/11-risks-and-technical-debt.md`](./architecture/11-risks-and-technical-debt.md).
+   [`architecture/11-risks-and-technical-debt.md`](./architecture/risks-and-technical-debt.md).
    For example, doc rot from unfilled placeholders is tracked as risk **R2** there.
 3. Verify the ADR index in
-   [`architecture/09-architecture-decisions.md`](./architecture/09-architecture-decisions.md)
+   [`architecture/09-architecture-decisions.md`]../architecture/architecture-decisions-link.md)
    matches the files actually in [`adr/`](./adr).
 4. Prune or archive guides that describe removed features.
 

@@ -18,7 +18,7 @@ project where contributors change over time.
 We will use Architecture Decision Records, as described by Michael Nygard, to record
 all architecturally significant decisions made in this project. Records are kept in
 [`docs/adr/`](./README.md), one immutable file per decision, indexed from
-[`docs/architecture/09-architecture-decisions.md`](../architecture/09-architecture-decisions.md).
+[`do../architecture/architecture-decisions-link.md`](../architecture/architecture-decisions-link.md).
 
 ## Consequences
 

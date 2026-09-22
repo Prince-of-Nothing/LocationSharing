@@ -10,6 +10,7 @@ tutorials here, only accurate facts.
 | [Profile and Visibility Model](./profile-and-visibility-model.md) | Default-empty non-friend profile rule, relationship-based views |
 | [Domain Data Model](./domain-data-model.md) | Core entities (User, LocationShare, MovementTrail, Cache, Challenge, etc.) |
 | [API Contract](./api-contract.md) | Versioned `api/v1` HTTPS + WebSocket endpoints, RFC 7807 errors |
+| [API Security Implementation](./api-security-implementation.md) | Detailed security implementation for all endpoints: OAuth 2.0/PKCE flow, authorization sequences, rate limiting, input validation, error handling, audit logging |
 | [Technology Stack and Infrastructure](./technology-stack-and-infrastructure.md) | Frozen MVP stack (Flutter/FastAPI/PostgreSQL/Redis/etc.) and rationale |
 | [Security Control Register](./security-control-register.md) | SC-01 through SC-09: problem/relevance/implementation/test/limitation |
 | [MVP Requirements and Acceptance Criteria](./mvp-requirements-and-acceptance-criteria.md) | REQ-01 through REQ-09 with acceptance criteria and explicit non-goals |

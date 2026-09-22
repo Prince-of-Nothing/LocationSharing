@@ -47,4 +47,4 @@ for data classification, boundaries, encryption, authorization, and testing
 design.
 
 ---
-*Part of [§8 Crosscutting Concepts](./08-crosscutting-concepts.md).*
+*Part of [§8 Crosscutting Concepts](./crosscutting-concepts.md).*

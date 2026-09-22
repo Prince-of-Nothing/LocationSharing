@@ -63,5 +63,5 @@ changing the underlying group or friend permissions. See
 [Friend Challenges and Group Prompts](../explanation/friend-challenges-and-group-prompts.md).
 
 ---
-*See also [§12 Glossary](../architecture/12-glossary.md) for short definitions
+*See also [§12 Glossary](../architecture/glossary.md) for short definitions
 of each term, and [API Contract](./api-contract.md) for the wire representation.*

@@ -119,9 +119,12 @@ browser cookies as their primary token store.
 
 See [Security Control Register](../reference/security-control-register.md) for the
 control-level (SC-01 through SC-09) problem/relevance/implementation/test/limitation
-breakdown, and [Security Threats and Controls](./security-threats-and-controls.md)
+breakdown, [Security Threats and Controls](./security-threats-and-controls.md)
 for the threat-first view across location, identity, social/content, sponsorship,
-and infrastructure.
+and infrastructure, and [API Security Implementation](../reference/api-security-implementation.md)
+for detailed endpoint-level security code examples, OAuth 2.0/PKCE flow diagrams,
+authorization sequences, rate limiting configuration, input validation routines,
+error handling patterns, and audit logging specifications.
 
 ---
-*Part of [§8 Crosscutting Concepts](./08-crosscutting-concepts.md).*
+*Part of [§8 Crosscutting Concepts](./crosscutting-concepts.md).*

@@ -27,7 +27,7 @@ This project incorporates earlier location-sharing, group-chat matching, and
 daily-prompt concepts. The imported features are intentionally marked as optional
 or later so the foundation can ship first without losing the ideas. See
 [Scope and MVP Boundaries](./scope-and-mvp-boundaries.md) for the full
-breakdown, and [Roadmap](../explanation/roadmap-and-open-decisions.md) for sequencing.
+breakdown, and [Development Roadmap](../explanation/development-roadmap-and-evidence.md) for sequencing.
 
 ## 1.5 MVP Requirements Overview
 
@@ -61,7 +61,7 @@ Movement trails and search corridors, visited-region maps, friend mosaics, cache
 public prompts, sponsored prompts, messaging, calls, random groups, and advanced
 moderation are documented as later phases (see
 [Scope and MVP Boundaries](./scope-and-mvp-boundaries.md) and
-[Roadmap](../explanation/roadmap-and-open-decisions.md)). Their threat implications
+[Development Roadmap](../explanation/development-roadmap-and-evidence.md)). Their threat implications
 remain in the design, but they are not allowed to inflate the September MVP.
 
 ### Explicit non-goals (MVP)
@@ -72,7 +72,7 @@ media moderation. Those remain documented extension phases.
 
 ## 1.6 Quality Goals
 
-See [§10 Quality Requirements](./10-quality-requirements.md) for the full quality
+See [Quality Requirements](./quality-requirements.md) for the full quality
 tree; the top-priority goals driving early architecture decisions are safety
 (understandable, reliable consent/revocation), privacy (minimum collection, strict
 access control), and battery-aware availability.

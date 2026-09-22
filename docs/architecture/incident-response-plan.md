@@ -65,5 +65,5 @@ and abusive group escalation. Record the result as project evidence and update
 the threat model and control register.
 
 ---
-*Part of [§7 Deployment View](./07-deployment-view.md) and
-[§8 Crosscutting Concepts](./08-crosscutting-concepts.md).*
+*Part of [§7 Deployment View](./deployment-view.md) and
+[§8 Crosscutting Concepts](./crosscutting-concepts.md).*

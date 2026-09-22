@@ -45,4 +45,4 @@ current permissions. Hiding fields only in the app is not sufficient — see
 
 ---
 *Referenced from [Actors and Accounts](./actors-and-accounts.md) and
-[§8 Crosscutting Concepts](../architecture/08-crosscutting-concepts.md).*
+[§8 Crosscutting Concepts](../architecture/crosscutting-concepts.md).*

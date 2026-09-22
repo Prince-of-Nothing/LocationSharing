@@ -1,7 +1,7 @@
 # Social and Community Features
 
 These are deferred, Full-mode features layered on top of the safety-first MVP
-(see [§1 Introduction and Goals](../architecture/01-introduction-and-goals.md)).
+(see [§1 Introduction and Goals](../architecture/introduction-and-goals.md)).
 They are intentionally separate from location permissions and can be added
 after the safety foundation is reliable.
 
@@ -40,4 +40,4 @@ participant roster, with acceptance, decline, leave, and block controls. See
 
 ---
 *Deferred (Full-mode) features — not in the September MVP. See
-[§1.5 MVP Requirements Overview](../architecture/01-introduction-and-goals.md#15-mvp-requirements-overview).*
+[§1.5 MVP Requirements Overview](../architecture/introduction-and-goals.md#15-mvp-requirements-overview).*

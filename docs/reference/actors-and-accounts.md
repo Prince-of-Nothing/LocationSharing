@@ -41,4 +41,4 @@ relationship-based view rules, and
 `FriendRelationship`).
 
 ---
-*Referenced from [§8 Crosscutting Concepts](../architecture/08-crosscutting-concepts.md).*
+*Referenced from [§8 Crosscutting Concepts](../architecture/crosscutting-concepts.md).*

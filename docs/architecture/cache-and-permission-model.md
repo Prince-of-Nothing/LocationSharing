@@ -28,4 +28,4 @@ location never grants access to the visitor's own location.
   users do not confuse a cache rule with proof of another person's presence.
 
 ---
-*Essential feature. Part of [§5 Building Block View](./05-building-block-view.md).*
+*Essential feature. Part of [§5 Building Block View](./building-block-view.md).*

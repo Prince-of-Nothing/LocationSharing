@@ -16,4 +16,4 @@ to ordinary friends or non-friends. See
 [Movement Trails and Search Corridors](./movement-trails-and-search-corridors.md).
 
 ---
-*Part of [§5 Building Block View](./05-building-block-view.md) / [§6 Runtime View](./06-runtime-view.md).*
+*Part of [§5 Building Block View](./building-block-view.md) / [§6 Runtime View](./runtime-view.md).*

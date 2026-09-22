@@ -26,8 +26,8 @@ group must never grant location access.
 See [Social and Community Features](../explanation/social-and-community-features.md)
 and [Creative and Playful Features](../explanation/creative-and-playful-features.md)
 for detail on the optional/later feature set, and
-[Roadmap and Open Decisions](../explanation/roadmap-and-open-decisions.md) for
+[Roadmap and Open Decisions](../explanation/development-roadmap-and-evidence.md) for
 sequencing.
 
 ---
-*Referenced from [§1 Introduction and Goals](./01-introduction-and-goals.md).*
+*Referenced from [§1 Introduction and Goals](./introduction-and-goals.md).*
