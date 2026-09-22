@@ -1,11 +1,15 @@
 # Location Sharing Lifecycle
 
-1. A user selects people, a group, or a sharing duration.
-2. The recipient accepts or declines; no silent enrollment is allowed.
-3. The app displays active sharing, last update, accuracy, and expiry.
-4. Either side can stop, revoke, block, or report the relationship.
-5. Expired sessions stop collection and move to deletion or coarse history
-   according to retention rules.
+**Selection:** A user selects people, a group, or a sharing duration.
+
+**Consent:** The recipient accepts or declines; no silent enrollment is allowed.
+
+**Display:** The app displays active sharing, last update, accuracy, and expiry.
+
+**Control:** Either side can stop, revoke, block, or report the relationship.
+
+**Expiry:** Expired sessions stop collection and move to deletion or coarse history
+according to retention rules.
 
 Background location requires progressive Android/iPhone permission requests and
 must degrade clearly when the OS pauses updates.
