@@ -1,6 +1,6 @@
 # 10. Quality Requirements
 
-## 10.1 Quality goals (see also [§1.4](./01-introduction-and-goals.md))
+## 10.1 Quality goals (see also [§1.4](./introduction-and-goals.md))
 
 | Priority | Quality goal | Motivation |
 |---|---|---|

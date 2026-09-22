@@ -78,7 +78,7 @@ whether hidden resources exist. See [API Contract](../reference/api-contract.md)
 ## 8.8 Accessibility & Internationalization
 
 Screen readers, text alternatives, color contrast, captions, and reduced motion are
-required non-functional goals — see [§10 Quality Requirements](./10-quality-requirements.md).
+required non-functional goals — see [§10 Quality Requirements](./quality-requirements.md).
 
 Each concept above that represents a deliberate choice among alternatives is
 captured as an [ADR](../adr) where the choice is architecturally significant.

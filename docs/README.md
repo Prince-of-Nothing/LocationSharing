@@ -5,7 +5,8 @@ frameworks so that content stays organized as the project grows, and so that
 architectural knowledge and the *reasoning* behind it is never lost:
 
 - **[Diátaxis](https://diataxis.fr/)** — organizes all user/contributor-facing
-  documentation into four modes, each answering a different question:
+  documentation into four distinct modes, each answering a different question
+  and serving a specific purpose:
   - [`tutorials/`](./tutorials) — *learning-oriented*: guided lessons for newcomers.
   - [`how-to/`](./how-to) — *task-oriented*: step-by-step recipes for a specific goal.
   - [`reference/`](./reference) — *information-oriented*: precise, factual descriptions
@@ -24,23 +25,61 @@ architectural knowledge and the *reasoning* behind it is never lost:
   decision itself is superseded. This is the primary mechanism for making sure no
   architectural knowledge is ever lost, even as the system evolves.
 
+## Why this layered structure?
+
+Documentation should match the stakes and context of the project. We chose Diátaxis + arc42 + ADRs because:
+
+1. **Separation of concerns**: Each layer serves a distinct audience and purpose — tutorials teach, how-tos guide, reference informs, explanation clarifies, architecture structures, and ADRs preserve decisions. This avoids the common failure mode of mixed-purpose documents that satisfy no one well.
+
+2. **Compliance & auditability**: GDPR, child-safety regulations, and platform policies demand traceable decisions, clear data-handling documentation, and defensible architectural choices.
+
+3. **Security-critical features**: Location sharing, consent management, and relationship-based access control require documented rationale that can be reviewed and traced from requirements through implementation.
+
+4. **Knowledge retention**: ADRs ensure architectural reasoning survives team changes, refactors, and rewrites — the single biggest source of "lost architecture knowledge" in most projects.
+
+5. **Scalability**: Clear ownership and separation of concerns means documentation scales with the project rather than becoming an unmaintainable mess.
+
+### Trade-offs we accept
+
+| Aspect | Informal/Mixed Approach | Layered Approach (Our Choice) |
+|---|---|---|
+| Initial overhead | Low | Higher (must classify, follow templates) |
+| Onboarding speed | Fast for simple tasks | Slower start, predictable path to mastery |
+| Knowledge retention | Fragile (scattered in issues/chat) | Durable (ADRs preserve rationale) |
+| Scalability | Breaks down as project grows | Scales well with clear ownership |
+| Auditability | Hard to trace decisions | Full traceability REQ → ARCH → TEST |
+| Flexibility | Easy pivot, risks inconsistency | Structured change via ADRs ensures consistency |
+
+**This isn't universal superiority** — it's context matching. For a fast prototype
+with no regulatory constraints or sensitive data, a lighter approach might be preferable.
+For Always Together's combination of compliance, security, and safety concerns, the
+additional documentation overhead is a feature, not a bug.
+
+For comparison: Bluesky's docs mix guides, API reference, and design notes informally
+with minimal decision history in-repo. That works for their context (fast-moving protocol,
+technical audience, synchronous communication). Our stricter structure responds to
+different pressures: sensitive data handling, internship constraints with mentor review,
+and the high cost of getting privacy/security wrong.
+
+## Documentation Structure
+
+This documentation tree is organized following **Diátaxis**, **arc42**, and **ADRs** to ensure layered, navigable content for different audiences and purposes. For internship report preparation, we recommend starting with the key reference documents listed below, then diving into architecture and explanation sections as needed.
+
+### Quick Navigation for Report Writing
+
+| Topic | Primary Documents | Supporting Documents |
+|---|---|---|
+| **Product Vision & Scope** | [§1 Introduction and Goals](./architecture/introduction-and-goals.md), [Scope and MVP Boundaries](./architecture/scope-and-mvp-boundaries.md) | [Social and Community Features](./explanation/social-and-community-features.md), [Roadmap](./explanation/development-roadmap-and-evidence.md) |
+| **Requirements** | [MVP Requirements](./reference/mvp-requirements-and-acceptance-criteria.md), [Traceability Matrix](./reference/requirements-traceability-matrix.md) | [Actors and Accounts](./reference/actors-and-accounts.md), [UI Navigation](./reference/ui-navigation-and-wireframes.md) |
+| **Architecture** | [Architecture Models](./architecture/architecture-models.md), [Building Block View](./architecture/building-block-view.md), [Deployment View](./architecture/deployment-view.md) | [C4 Diagrams](./architecture/diagrams/README.md), [Technology Stack](./reference/technology-stack-and-infrastructure.md) |
+| **Security & Privacy** | [Security Architecture](./architecture/security-architecture-and-data-protection.md), [Security Control Register](./reference/security-control-register.md), [Privacy and Data Handling](./architecture/privacy-and-data-handling.md) | [Threats and Controls](./architecture/security-threats-and-controls.md), [Incident Response Plan](./architecture/incident-response-plan.md) |
+| **Data Model** | [Domain Data Model](./reference/domain-data-model.md), [Profile and Visibility Model](./reference/profile-and-visibility-model.md) | [API Contract](./reference/api-contract.md) |
+| **Research & Validation** | [Research Notes and References](./explanation/research-notes-and-references.md) | [Constraints](./architecture/constraints.md), [Quality Requirements](./architecture/quality-requirements.md) |
+| **Roadmap & Evidence** | [Development Roadmap](./explanation/development-roadmap-and-evidence.md), [DAS Internship Alignment](./explanation/das-internship-alignment.md) | [Risks and Technical Debt](./architecture/risks-and-technical-debt.md), [ADR Index](./architecture/architecture-decisions-link.md) |
+
 See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for how to decide where new content goes,
 the docs-as-code review workflow, style conventions, and the doc-audit cadence used
 to keep this from rotting.
-
-## Why this structure (vs. e.g. Bluesky's docs)
-
-Bluesky's own docs (`bsky-docs` + the `atproto` repo) are a reasonable reference, but
-they mix guides, API reference, and design notes fairly informally, and store almost
-no architectural rationale or decision history in-repo. For a project like **Always
-Together**, Diátaxis + arc42 + ADRs gives us:
-
-- A **stronger separation of concerns** for user-facing docs (Diátaxis), avoiding the
-  common failure mode of half-tutorial/half-reference pages that satisfy no one well.
-- A **standard, complete architecture template** (arc42) instead of ad-hoc design docs,
-  so nothing structural gets forgotten (constraints, quality goals, risks, glossary...).
-- **Durable decision history** (ADRs) that survives refactors and rewrites — the
-  single biggest source of "lost architecture knowledge" in most projects.
 
 ## Layout
 

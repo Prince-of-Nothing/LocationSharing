@@ -29,7 +29,7 @@ history.
 ## 7.5 CI/CD
 
 Docker + GitHub Actions per the frozen stack (see
-[§4.2](./04-solution-strategy.md#42-frozen-mvp-technology-stack)). CI should
+[§4.2](./solution-strategy.md#42-frozen-mvp-technology-stack)). CI should
 include tests, dependency vulnerability scanning, secret scanning, schema-change
 checks, and mobile permission behavior checks (see
 [Technology Stack and Infrastructure §"Security and operations"](../reference/technology-stack-and-infrastructure.md)).

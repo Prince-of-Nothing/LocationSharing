@@ -2,25 +2,25 @@
 
 This is the arc42-structured architecture documentation for **Always
 Together** (a consent-based location-sharing safety/social app). Each
-numbered file corresponds to a standard arc42 section. Diagrams follow the
+file corresponds to a standard arc42 section. Diagrams follow the
 C4 model and live in [`diagrams/`](./diagrams).
 
-| # | Section |
-|---|---------|
-| 1 | [Introduction and Goals](./01-introduction-and-goals.md) |
-| — | [Scope and MVP Boundaries](./scope-and-mvp-boundaries.md) |
-| 2 | [Constraints](./02-constraints.md) |
-| 3 | [Context and Scope](./03-context-and-scope.md) |
-| 4 | [Solution Strategy](./04-solution-strategy.md) |
-| — | [Architecture Models](./architecture-models.md) |
-| 5 | [Building Block View](./05-building-block-view.md) |
-| 6 | [Runtime View](./06-runtime-view.md) |
-| 7 | [Deployment View](./07-deployment-view.md) |
-| 8 | [Crosscutting Concepts](./08-crosscutting-concepts.md) |
-| 9 | [Architecture Decisions](./09-architecture-decisions.md) (index into [ADRs](../adr)) |
-| 10 | [Quality Requirements](./10-quality-requirements.md) |
-| 11 | [Risks and Technical Debt](./11-risks-and-technical-debt.md) |
-| 12 | [Glossary](./12-glossary.md) |
+| Section | File |
+|---------|------|
+| 1. Introduction and Goals | [introduction-and-goals.md](./introduction-and-goals.md) |
+| — Scope and MVP Boundaries | [scope-and-mvp-boundaries.md](./scope-and-mvp-boundaries.md) |
+| 2. Constraints | [constraints.md](./constraints.md) |
+| 3. Context and Scope | [context-and-scope.md](./context-and-scope.md) |
+| 4. Solution Strategy | [solution-strategy.md](./solution-strategy.md) |
+| — Architecture Models | [architecture-models.md](./architecture-models.md) |
+| 5. Building Block View | [building-block-view.md](./building-block-view.md) |
+| 6. Runtime View | [runtime-view.md](./runtime-view.md) |
+| 7. Deployment View | [deployment-view.md](./deployment-view.md) |
+| 8. Crosscutting Concepts | [crosscutting-concepts.md](./crosscutting-concepts.md) |
+| 9. Architecture Decisions | [architecture-decisions-link.md](./architecture-decisions-link.md) (index into [ADRs](../adr)) |
+| 10. Quality Requirements | [quality-requirements.md](./quality-requirements.md) |
+| 11. Risks and Technical Debt | [risks-and-technical-debt.md](./risks-and-technical-debt.md) |
+| 12. Glossary | [glossary.md](./glossary.md) |
 
 ## Deep-dive / standalone architecture documents
 
@@ -38,6 +38,7 @@ C4 model and live in [`diagrams/`](./diagrams).
 
 For the full documentation structure and rationale, see
 [docs/README.md](../README.md). For product scope, requirements, data model,
-API contract, and security control register, see
-[docs/reference/](../reference). For deferred/Full-mode feature rationale,
-see [docs/explanation/](../explanation).
+API contract, API security implementation, and security control register, see
+[docs/reference/](../reference). For deferred/Full-mode feature rationale, see
+[docs/explanation/](../explanation). For recorded architectural decisions and their
+rationale, see [docs/adr/](../adr).

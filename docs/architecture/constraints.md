@@ -14,7 +14,7 @@
 | Constraint | Background / Rationale |
 |------------|-------------------------|
 | Internship timeline (DAS internship, September MVP + Oct–Dec continuation) | See [DAS Internship Alignment](../explanation/das-internship-alignment.md) and [Development Roadmap and Evidence](../explanation/development-roadmap-and-evidence.md) for the week-by-week plan and evidence checklist |
-| September MVP scope is deliberately narrow | Location trails, friend mosaics, caches, groups, prompts, and moderation are explicitly deferred so the safety foundation ships first (see [§1.5](./01-introduction-and-goals.md#15-mvp-requirements-overview)) |
+| September MVP scope is deliberately narrow | Location trails, friend mosaics, caches, groups, prompts, and moderation are explicitly deferred so the safety foundation ships first (see [§1.5](./introduction-and-goals.md#15-mvp-requirements-overview)) |
 
 ## 2.3 Conventions
 

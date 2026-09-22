@@ -72,5 +72,5 @@ replacement for the location permission check. See
 [Cache and Permission Model](./cache-and-permission-model.md).
 
 ---
-*Deferred feature — not in the September MVP. See [§1.5](./01-introduction-and-goals.md#15-mvp-requirements-overview).
-Part of [§5 Building Block View](./05-building-block-view.md).*
+*Deferred feature — not in the September MVP. See [§1.5](./introduction-and-goals.md#15-mvp-requirements-overview).
+Part of [§5 Building Block View](./building-block-view.md).*

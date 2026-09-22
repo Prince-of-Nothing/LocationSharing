@@ -13,5 +13,5 @@
   assistance must be optional, reviewable, and never treated as proof of safety.
 
 ---
-*Referenced from [§4 Solution Strategy](./04-solution-strategy.md) and
-[§5 Building Block View](./05-building-block-view.md).*
+*Referenced from [§4 Solution Strategy](./solution-strategy.md) and
+[§5 Building Block View](./building-block-view.md).*

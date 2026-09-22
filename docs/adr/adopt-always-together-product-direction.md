@@ -62,5 +62,5 @@ Concretely:
   a deliberate final review confirming nothing was lost in translation.
 
 ---
-*See [§1 Introduction and Goals](../architecture/01-introduction-and-goals.md)
-and [Roadmap and Open Decisions](../explanation/roadmap-and-open-decisions.md).*
+*See [§1 Introduction and Goals](../architecture/introduction-and-goals.md)
+and [Roadmap and Open Decisions](../explanation/development-roadmap-and-evidence.md).*

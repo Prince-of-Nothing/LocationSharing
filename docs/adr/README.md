@@ -25,12 +25,12 @@ location data retention/privacy policy, mobile framework, hosting/cloud provider
 2. Fill it in — status starts as `Proposed`.
 3. Discuss/review; once agreed, set status to `Accepted` (or `Rejected`).
 4. Add a row to the index in
-   [`architecture/09-architecture-decisions.md`](../architecture/09-architecture-decisions.md).
+   [`architecture/09-architecture-decisions.md`](../architecture/architecture-decisions-link.md).
 5. **Never edit or delete an old ADR's decision after acceptance.** If circumstances
    change, write a *new* ADR that supersedes it, and mark the old one
    `Superseded by ADR-NNNN`.
 
 ## Index
 
-See [`architecture/09-architecture-decisions.md`](../architecture/09-architecture-decisions.md)
+See [`architecture/09-architecture-decisions.md`](../architecture/architecture-decisions-link.md)
 for the full, up-to-date list.

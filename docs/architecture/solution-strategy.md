@@ -53,7 +53,7 @@ Recorded as a decision, not a hidden assumption — see
 
 ## 4.4 Organizational Strategy
 
-Work is sequenced per the [Roadmap and Open Decisions](../explanation/roadmap-and-open-decisions.md)
+Work is sequenced per the [Roadmap and Open Decisions](../explanation/development-roadmap-and-evidence.md)
 and [Development Roadmap and Evidence](../explanation/development-roadmap-and-evidence.md):
 trusted location sharing and safety controls ship first; social, creative, and
 experimental features layer on afterward without changing the safety foundation.

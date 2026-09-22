@@ -25,4 +25,4 @@ participation after they withdraw. See
 
 ---
 *Deferred (Full-mode) feature — not in the September MVP.
-Part of [§5 Building Block View](./05-building-block-view.md).*
+Part of [§5 Building Block View](./building-block-view.md).*
