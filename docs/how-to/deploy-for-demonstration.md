@@ -14,10 +14,10 @@ cd docker/
 docker-compose up -d
 
 # Run migrations
-docker-compose exec fastapi-backend python -m alembic upgrade head
+docker-compose exec api-backend npx prisma migrate deploy
 
 # Seed demo data
-docker-compose exec fastapi-backend python scripts/seed_dev_data.py
+docker-compose exec api-backend node scripts/seed-dev-data.js
 
 # Launch mobile app
 cd ../mobile/

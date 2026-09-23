@@ -86,7 +86,7 @@ This document provides detailed security implementation guidance for all API end
 - Client authentication: public client (PKCE required)
 
 **Request Validation:**
-```python
+```typescript
 def validate_token_request(request):
     # Validate required fields
     assert 'code' in request.body
@@ -193,7 +193,7 @@ def validate_token_request(request):
 - Block checking before any data return
 
 **Authorization Sequence:**
-```python
+```typescript
 def get_user_profile(viewer_id, target_id):
     # Step 1: Check blocks
     if is_blocked(viewer_id, target_id) or is_blocked(target_id, viewer_id):
@@ -284,7 +284,7 @@ def empty_profile_response():
 - Block checking
 
 **Request Validation:**
-```python
+```typescript
 def send_friendship_request(requester_id, target_user_id):
     # Check rate limit
     recent_requests = count_recent_friend_requests(requester_id, window_minutes=60)
@@ -343,7 +343,7 @@ def send_friendship_request(requester_id, target_user_id):
 - Recipient notification
 
 **Authorization Sequence:**
-```python
+```typescript
 def create_location_share(owner_id, recipient_id, precision, purpose, expires_at):
     # Step 1: Verify mutual friendship
     friendship = get_mutual_friendship(owner_id, recipient_id)
@@ -427,7 +427,7 @@ def create_location_share(owner_id, recipient_id, precision, purpose, expires_at
 **Precision Transformation:**
 
 When `precision=approximate`, the backend transforms coordinates:
-```python
+```typescript
 def apply_approximate_precision(lat, lng, precision_level='approximate'):
     """
     Add random noise to coordinates for approximate location.
@@ -456,7 +456,7 @@ def apply_approximate_precision(lat, lng, precision_level='approximate'):
 - Precision transformation per share settings
 
 **Authorization Sequence:**
-```python
+```typescript
 def get_friends_latest_locations(viewer_id):
     # Step 1: Get all friends
     friends = get_friends_list(viewer_id)
@@ -607,7 +607,7 @@ X-RateLimit-Reset: 1699900860
 
 ### Coordinate Validation
 
-```python
+```typescript
 def validate_coordinates(latitude, longitude):
     """Validate latitude and longitude values."""
     if not isinstance(latitude, (int, float)):
@@ -628,7 +628,7 @@ def validate_coordinates(latitude, longitude):
 
 ### Username Validation
 
-```python
+```typescript
 def validate_username(username):
     """Validate username format and availability."""
     if not isinstance(username, str):

@@ -9,7 +9,7 @@ timeline. Interfaces around identity, relationships, location, content, and
 notifications are kept separable so they *can* be split out later if scale
 requires it. See [Technology Stack and Infrastructure](../reference/technology-stack-and-infrastructure.md).
 
-## 4.2 Frozen MVP Technology Stack
+## 4.2 Selected MVP Technology Stack
 
 Recorded as a decision, not a hidden assumption — see
 [ADR-0002](../adr/0002-adopt-always-together-product-direction.md):
@@ -17,10 +17,10 @@ Recorded as a decision, not a hidden assumption — see
 - **Mobile client:** Flutter + native location modules (Android/iOS platform
   channels for background permissions, battery-aware sampling, geofencing,
   platform notifications).
-- **Backend:** FastAPI + SQLAlchemy + Alembic, versioned HTTPS API.
-- **Database:** PostgreSQL (system of record for users, relationships, permissions,
-  check-ins, audit metadata).
-- **Queue/cache:** Redis + Celery, strict TTLs; Redis is never authoritative for
+- **Backend:** Node.js + TypeScript (NestJS), versioned HTTPS API.
+- **Database:** PostgreSQL with Prisma ORM and versioned migrations (system of
+  record for users, relationships, permissions, check-ins, audit metadata).
+- **Queue/cache:** Redis + BullMQ, strict TTLs; Redis is never authoritative for
   location permissions or consent.
 - **Object storage:** S3-compatible encrypted storage, signed URLs, upload scanning.
 - **Realtime transport:** authenticated WebSocket gateway, per-connection

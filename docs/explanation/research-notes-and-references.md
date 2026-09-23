@@ -210,7 +210,7 @@ This document serves multiple purposes:
 
 **Cross-references:**
 - [§2 Constraints](../architecture/constraints.md) — how research shaped technology constraints
-- [Technology Stack and Infrastructure](../reference/technology-stack-and-infrastructure.md) — frozen stack rationale
+- [Technology Stack and Infrastructure](../reference/technology-stack-and-infrastructure.md) — selected stack rationale
 - [Security Control Register](../reference/security-control-register.md) — SC-01 through SC-09 with test procedures
 - [Privacy and Data Handling](../architecture/privacy-and-data-handling.md) — GDPR compliance details
 - [Incident Response Plan](../architecture/incident-response-plan.md) — NIST SP 800-61 alignment

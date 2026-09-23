@@ -7,7 +7,7 @@
 | 1 | Safety & consent-correctness | The product's entire trust model depends on sharing being explicit, revocable, and never silently escalated |
 | 2 | Privacy | Location is highly sensitive data; over-collection or leakage is the top reputational/legal risk |
 | 3 | Reliability of "freshness" signals | False confidence in stale location is itself a safety hazard |
-| 4 | Maintainability under a frozen stack | The MVP is time-boxed to an internship schedule; changes must stay within the frozen stack |
+| 4 | Maintainability under a selected stack | The MVP is time-boxed to an internship schedule; changes must stay within the selected stack, or update the stack ADR |
 
 ## 10.2 Quality tree / scenarios
 

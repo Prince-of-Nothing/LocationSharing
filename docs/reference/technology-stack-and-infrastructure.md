@@ -60,29 +60,33 @@ for future self-hosting. Android is the most realistic first production
 target; iPhone and web support should follow validated battery and
 permission behavior.
 
-## Frozen technology stack (MVP)
+## Selected technology stack (MVP)
 
-This is the frozen, recorded stack decision for the MVP — see also
-[§4.2 Solution Strategy](../architecture/solution-strategy.md#42-frozen-mvp-technology-stack)
-and [§2 Constraints](../architecture/constraints.md).
+This is the recorded stack decision for the MVP — see also
+[§4.2 Solution Strategy](../architecture/solution-strategy.md#42-selected-mvp-technology-stack)
+and [§2 Constraints](../architecture/constraints.md). The selection is based
+on capability fit against the quality requirements (safety, privacy,
+battery-aware availability) and remains revisable through the ADR process.
 
 | Layer | Choice | Rationale |
 |---|---|---|
 | Mobile client | Flutter + native platform channels (Android/iOS) for background permissions, battery-aware sampling, geofencing, notifications | Shared UI code and consistent map/UI behavior across Android/iPhone |
-| Backend | FastAPI + SQLAlchemy + Alembic, versioned HTTPS API | Typed APIs, rapid development, async endpoints, background-job integration with Celery, readable security surface |
-| Database | PostgreSQL with SQLAlchemy ORM | Transactions, relationships, system of record for users, relationships, permissions, check-ins, audit metadata |
-| Queue/cache | Redis with strict TTLs + Celery | Durable job queue (reminders, stale-state transitions, expiry, moderation tasks, prompt scheduling, notifications); Redis is never authoritative for permissions/consent |
+| Backend | Node.js + TypeScript (NestJS), versioned HTTPS API | End-to-end type safety with the Flutter/Dart client ecosystem, first-class async/WebSocket support, mature validation and security middleware, single-language toolchain across web companion and backend |
+| Database | PostgreSQL with Prisma ORM and versioned migrations | Transactions, relationships, system of record for users, relationships, permissions, check-ins, audit metadata |
+| Queue/cache | Redis with strict TTLs + BullMQ | Durable job queue (reminders, stale-state transitions, expiry, moderation tasks, prompt scheduling, notifications); Redis is never authoritative for permissions/consent |
 | Object storage | S3-compatible encrypted storage, signed URLs, scanning | Metadata in PostgreSQL; short-lived signed URLs; uploads scanned before release; content limits and retention/deletion per policy |
 | Realtime transport | Authenticated WebSocket gateway, per-connection authorization | Recipients subscribe only to resources already allowed by current consent |
 | Identity & auth | OIDC/OAuth 2.0 with PKCE S256 | Short-lived access tokens, rotating refresh tokens, device/session management, passkeys where practical; backend authorization independent of token validity |
 | Maps | OSM-derived tile/routing provider behind a map adapter, with attribution | External navigation deep links in MVP; no private location history sent to map services |
-| Operations | Docker + GitHub Actions CI/CD; managed container hosting with managed PostgreSQL and object storage | Hybrid: managed services for pilot, infra-as-code designed for future self-hosting; Celery worker runs alongside the API |
+| Operations | Docker + GitHub Actions CI/CD; managed container hosting with managed PostgreSQL and object storage | Hybrid: managed services for pilot, infra-as-code designed for future self-hosting; queue worker runs alongside the API |
 | Security controls | SC-01 through SC-09 (see [Security Control Register](./security-control-register.md)) implemented at the API boundary | TLS in transit, encryption at rest, separated key management, least-privilege service accounts, rate limits, audit events |
 
-The choice between Flutter/React Native, FastAPI/Django, and specific hosting
-providers is a recorded decision rather than a hidden assumption. All
-interfaces (identity, relationships, location, content, notifications) are
-designed so they can be separated later if scale requires it.
+Alternative frameworks were considered (e.g., Django, Spring Boot, Go) and
+the selection above is a recorded, reviewable decision rather than a hidden
+assumption. All interfaces (identity, relationships, location, content,
+notifications) are designed so they can be separated later if scale requires
+it, and the backend framework itself sits behind those interfaces, keeping a
+future swap contained.
 
 ## Baseline architecture rationale
 
@@ -94,5 +98,5 @@ identity, relationships, location, content, and notifications are kept
 separable so the system can be split later if scale requires it.
 
 ---
-*See also [ADR index](../adr) — the frozen stack and modular-monolith choice
+*See also [ADR index](../adr) — the selected stack and modular-monolith choice
 are architecturally significant decisions and should be backed by ADRs.*
