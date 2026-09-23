@@ -20,19 +20,24 @@ failure, and compromised moderation access.
 
 ## Response stages
 
-1. **Detect:** receive alert, report, audit anomaly, user complaint, or mentor
-   escalation.
-2. **Triage:** confirm scope, affected accounts/data, severity, confidence, and
-   immediate physical-safety risk.
-3. **Contain:** revoke sessions/tokens, disable affected sharing, freeze
-   compromised accounts, isolate services, block abusive content, and preserve
-   only necessary evidence.
-4. **Eradicate:** patch the vulnerability, remove malicious access, rotate
-   keys/secrets, correct permissions, and validate dependencies.
-5. **Recover:** restore from verified backups if needed, re-enable services
-   gradually, notify affected users, and monitor for recurrence.
-6. **Review:** record timeline, root cause, controls that failed, user impact,
-   decisions, and improvements.
+**Detect:** receive alert, report, audit anomaly, user complaint, or mentor
+escalation.
+
+**Triage:** confirm scope, affected accounts/data, severity, confidence, and
+immediate physical-safety risk.
+
+**Contain:** revoke sessions/tokens, disable affected sharing, freeze
+compromised accounts, isolate services, block abusive content, and preserve
+only necessary evidence.
+
+**Eradicate:** patch the vulnerability, remove malicious access, rotate
+keys/secrets, correct permissions, and validate dependencies.
+
+**Recover:** restore from verified backups if needed, re-enable services
+gradually, notify affected users, and monitor for recurrence.
+
+**Review:** record timeline, root cause, controls that failed, user impact,
+decisions, and improvements.
 
 ## Location-specific procedure
 

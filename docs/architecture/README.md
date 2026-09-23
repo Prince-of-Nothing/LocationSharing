@@ -1,9 +1,8 @@
-# 0. Architecture Documentation
+# Architecture Documentation
 
-This is the arc42-structured architecture documentation for **Always
-Together** (a consent-based location-sharing safety/social app). Each
-file corresponds to a standard arc42 section. Diagrams follow the
-C4 model and live in [`diagrams/`](./diagrams).
+This directory contains the **arc42-structured** architecture documentation for **Always Together**. Each file corresponds to a standard arc42 section. Diagrams follow the C4 model and are stored in [`diagrams/`](./diagrams).
+
+## arc42 Sections
 
 | Section | File |
 |---------|------|
@@ -22,7 +21,9 @@ C4 model and live in [`diagrams/`](./diagrams).
 | 11. Risks and Technical Debt | [risks-and-technical-debt.md](./risks-and-technical-debt.md) |
 | 12. Glossary | [glossary.md](./glossary.md) |
 
-## Deep-dive / standalone architecture documents
+## Deep-dive Documents
+
+These documents provide detailed coverage of specific topics and are referenced from the main arc42 sections:
 
 | Document | Topic |
 |---|---|
@@ -36,9 +37,9 @@ C4 model and live in [`diagrams/`](./diagrams).
 | [Cache and Permission Model](./cache-and-permission-model.md) | Location-bound content and location-locked/public caches |
 | [Messaging and Group Lifecycle](./messaging-and-group-lifecycle.md) | Deferred: direct messaging, groups, in-chat challenges |
 
-For the full documentation structure and rationale, see
-[docs/README.md](../README.md). For product scope, requirements, data model,
-API contract, API security implementation, and security control register, see
-[docs/reference/](../reference). For deferred/Full-mode feature rationale, see
-[docs/explanation/](../explanation). For recorded architectural decisions and their
-rationale, see [docs/adr/](../adr).
+## Related Documentation
+
+- Full documentation structure: [docs/README.md](../README.md)
+- Product scope, requirements, data model, API contract: [docs/reference/](../reference)
+- Deferred-feature rationale: [docs/explanation/](../explanation)
+- Architectural decisions: [docs/adr/](../adr)

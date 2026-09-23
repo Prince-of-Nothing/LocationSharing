@@ -1,137 +1,151 @@
-# Documentation
+# Always Together — Documentation
 
-This project's documentation follows two complementary, widely used open-source
-frameworks so that content stays organized as the project grows, and so that
-architectural knowledge and the *reasoning* behind it is never lost:
+This repository contains the complete technical documentation for **Always Together**, a consent-based location-sharing application designed for safety and real-world connection.
 
-- **[Diátaxis](https://diataxis.fr/)** — organizes all user/contributor-facing
-  documentation into four distinct modes, each answering a different question
-  and serving a specific purpose:
-  - [`tutorials/`](./tutorials) — *learning-oriented*: guided lessons for newcomers.
-  - [`how-to/`](./how-to) — *task-oriented*: step-by-step recipes for a specific goal.
-  - [`reference/`](./reference) — *information-oriented*: precise, factual descriptions
-    (APIs, configuration, data schemas, CLI flags).
-  - [`explanation/`](./explanation) — *understanding-oriented*: discussion, background,
-    and the "why" behind design choices.
+## Purpose and Audience
 
-- **[arc42](https://arc42.org/)** + **[C4 model](https://c4model.com/)** — organizes the
-  **system architecture** itself into a standard 12-section template, with diagrams at
-  four levels of zoom (Context → Container → Component → Code). See
-  [`architecture/`](./architecture).
+This documentation serves as **assessment evidence** for university evaluation. It demonstrates:
+- Engineering decision-making under constraints (GDPR compliance, child safety, battery limitations)
+- Security-first architecture for sensitive location data
+- Traceable requirements from user needs through implementation
+- Professional documentation practices matching industry standards
 
-- **[Architecture Decision Records (ADRs)](https://adr.github.io/)** — every significant
-  architectural decision is captured as a small, immutable, numbered record in
-  [`adr/`](./adr), so that *why* a decision was made is preserved even after the
-  decision itself is superseded. This is the primary mechanism for making sure no
-  architectural knowledge is ever lost, even as the system evolves.
-
-## Why this layered structure?
-
-Documentation should match the stakes and context of the project. We chose Diátaxis + arc42 + ADRs because:
-
-1. **Separation of concerns**: Each layer serves a distinct audience and purpose — tutorials teach, how-tos guide, reference informs, explanation clarifies, architecture structures, and ADRs preserve decisions. This avoids the common failure mode of mixed-purpose documents that satisfy no one well.
-
-2. **Compliance & auditability**: GDPR, child-safety regulations, and platform policies demand traceable decisions, clear data-handling documentation, and defensible architectural choices.
-
-3. **Security-critical features**: Location sharing, consent management, and relationship-based access control require documented rationale that can be reviewed and traced from requirements through implementation.
-
-4. **Knowledge retention**: ADRs ensure architectural reasoning survives team changes, refactors, and rewrites — the single biggest source of "lost architecture knowledge" in most projects.
-
-5. **Scalability**: Clear ownership and separation of concerns means documentation scales with the project rather than becoming an unmaintainable mess.
-
-### Trade-offs we accept
-
-| Aspect | Informal/Mixed Approach | Layered Approach (Our Choice) |
-|---|---|---|
-| Initial overhead | Low | Higher (must classify, follow templates) |
-| Onboarding speed | Fast for simple tasks | Slower start, predictable path to mastery |
-| Knowledge retention | Fragile (scattered in issues/chat) | Durable (ADRs preserve rationale) |
-| Scalability | Breaks down as project grows | Scales well with clear ownership |
-| Auditability | Hard to trace decisions | Full traceability REQ → ARCH → TEST |
-| Flexibility | Easy pivot, risks inconsistency | Structured change via ADRs ensures consistency |
-
-**This isn't universal superiority** — it's context matching. For a fast prototype
-with no regulatory constraints or sensitive data, a lighter approach might be preferable.
-For Always Together's combination of compliance, security, and safety concerns, the
-additional documentation overhead is a feature, not a bug.
-
-For comparison: Bluesky's docs mix guides, API reference, and design notes informally
-with minimal decision history in-repo. That works for their context (fast-moving protocol,
-technical audience, synchronous communication). Our stricter structure responds to
-different pressures: sensitive data handling, internship constraints with mentor review,
-and the high cost of getting privacy/security wrong.
+This is not intended as a learning resource for external users. The structure exists to provide graders with clear, auditable evidence of technical competence.
 
 ## Documentation Structure
 
-This documentation tree is organized following **Diátaxis**, **arc42**, and **ADRs** to ensure layered, navigable content for different audiences and purposes. For internship report preparation, we recommend starting with the key reference documents listed below, then diving into architecture and explanation sections as needed.
+The documentation follows three complementary frameworks chosen for their fit with high-stakes, compliance-heavy projects:
 
-### Quick Navigation for Report Writing
+### Diátaxis Framework (4 Modes)
 
-| Topic | Primary Documents | Supporting Documents |
-|---|---|---|
-| **Product Vision & Scope** | [§1 Introduction and Goals](./architecture/introduction-and-goals.md), [Scope and MVP Boundaries](./architecture/scope-and-mvp-boundaries.md) | [Social and Community Features](./explanation/social-and-community-features.md), [Roadmap](./explanation/development-roadmap-and-evidence.md) |
-| **Requirements** | [MVP Requirements](./reference/mvp-requirements-and-acceptance-criteria.md), [Traceability Matrix](./reference/requirements-traceability-matrix.md) | [Actors and Accounts](./reference/actors-and-accounts.md), [UI Navigation](./reference/ui-navigation-and-wireframes.md) |
-| **Architecture** | [Architecture Models](./architecture/architecture-models.md), [Building Block View](./architecture/building-block-view.md), [Deployment View](./architecture/deployment-view.md) | [C4 Diagrams](./architecture/diagrams/README.md), [Technology Stack](./reference/technology-stack-and-infrastructure.md) |
-| **Security & Privacy** | [Security Architecture](./architecture/security-architecture-and-data-protection.md), [Security Control Register](./reference/security-control-register.md), [Privacy and Data Handling](./architecture/privacy-and-data-handling.md) | [Threats and Controls](./architecture/security-threats-and-controls.md), [Incident Response Plan](./architecture/incident-response-plan.md) |
-| **Data Model** | [Domain Data Model](./reference/domain-data-model.md), [Profile and Visibility Model](./reference/profile-and-visibility-model.md) | [API Contract](./reference/api-contract.md) |
-| **Research & Validation** | [Research Notes and References](./explanation/research-notes-and-references.md) | [Constraints](./architecture/constraints.md), [Quality Requirements](./architecture/quality-requirements.md) |
-| **Roadmap & Evidence** | [Development Roadmap](./explanation/development-roadmap-and-evidence.md), [DAS Internship Alignment](./explanation/das-internship-alignment.md) | [Risks and Technical Debt](./architecture/risks-and-technical-debt.md), [ADR Index](./architecture/architecture-decisions-link.md) |
+| Mode | Purpose | Location |
+|------|---------|----------|
+| **Tutorials** | Learning-oriented lessons for team onboarding | [`tutorials/`](./tutorials/) |
+| **How-to Guides** | Task-oriented recipes for specific goals | [`how-to/`](./how-to/) |
+| **Reference** | Factual specifications (APIs, data models, requirements) | [`reference/`](./reference/) |
+| **Explanation** | Design rationale, context, and trade-off analysis | [`explanation/`](./explanation/) |
 
-See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for how to decide where new content goes,
-the docs-as-code review workflow, style conventions, and the doc-audit cadence used
-to keep this from rotting.
+### arc42 Template (Architecture)
 
-## Layout
+Standard 12-section architecture documentation covering goals, constraints, building blocks, runtime, deployment, security, quality requirements, and risks. Located in [`architecture/`](./architecture/).
+
+### Architecture Decision Records (ADRs)
+
+Immutable, numbered records preserving the reasoning behind significant architectural choices. Located in [`adr/`](./adr/).
+
+## Why This Structure
+
+A 20-year engineering veteran would recognize this pattern: **structure matches stakes**. 
+
+For a fast prototype with no sensitive data? Lightweight docs work fine. For Always Together — where privacy failures enable stalking, consent bugs breach GDPR, and location leaks endanger users — the overhead is justified:
+
+| Benefit | Why It Matters Here |
+|---------|---------------------|
+| **Traceability** | GDPR Article 5 requires documented purpose limitation. Every data field traces back to a requirement. |
+| **Audit Readiness** | Child safety regulations demand clear consent flows. Auditors can follow REQ → API → DB → Test. |
+| **Decision Durability** | ADRs prevent "why did we choose this?" conversations after team changes or refactors. |
+| **Security Clarity** | Threat models, controls, and incident response are explicit, not scattered in chat logs. |
+| **Mentor Review** | Internship evaluators need visible engineering rigor, not just working code. |
+
+### Trade-offs Acknowledged
+
+This approach costs more upfront. That's acceptable because:
+- The project has regulatory constraints (GDPR, UK Children's Code)
+- Failure modes include real-world harm (stalking, harassment)
+- University assessment rewards demonstrated process, not just outcomes
+- Security-critical systems benefit from explicit rationale
+
+Compare to Bluesky's informal docs: their approach works for protocol experimentation with technical users. Our approach fits safety-critical apps with non-technical stakeholders and compliance requirements.
+
+## Quick Navigation for Assessment
+
+| Evidence Category | Primary Documents |
+|-------------------|-------------------|
+| **Product Vision** | [Introduction & Goals](./architecture/introduction-and-goals.md), [Scope & MVP](./architecture/scope-and-mvp-boundaries.md) |
+| **Requirements Engineering** | [MVP Requirements](./reference/mvp-requirements-and-acceptance-criteria.md), [Traceability Matrix](./reference/requirements-traceability-matrix.md) |
+| **Architecture Design** | [Architecture Models](./architecture/architecture-models.md), [Building Blocks](./architecture/building-block-view.md), [Deployment](./architecture/deployment-view.md) |
+| **Security Engineering** | [Security Architecture](./architecture/security-architecture-and-data-protection.md), [Threat Controls](./architecture/security-threats-and-controls.md), [Security Control Register](./reference/security-control-register.md) |
+| **Data Protection** | [Privacy & Data Handling](./architecture/privacy-and-data-handling.md), [Domain Data Model](./reference/domain-data-model.md) |
+| **API Design** | [API Contract](./reference/api-contract.md), [API Security Implementation](./reference/api-security-implementation.md) |
+| **Research & Validation** | [Pre-Implementation Validation](./explanation/pre-implementation-validation.md), [Research Notes](./explanation/research-notes-and-references.md) |
+| **Decision History** | [ADR Index](./architecture/architecture-decisions-link.md) |
+| **Project Planning** | [Development Roadmap](./explanation/development-roadmap-and-evidence.md) |
+
+## Design Artifacts
+
+**Figma UI/UX Designs**: [Always Together Prototypes](https://www.figma.com/design/BqFYN5OtLLti55TAtB8xPX/Untitled?node-id=0-1&t=HoAPPUeyP4vFTEoP-0)
+
+Wireframes, user flows, and visual designs complementing the technical documentation. Key screens also documented in [UI Navigation & Wireframes](./reference/ui-navigation-and-wireframes.md).
+
+### Embedding Figma Images
+
+For detailed visual reference, export relevant frames from Figma and place them in the [`assets/`](./assets/) directory:
+
+```markdown
+![Login Flow](./assets/ui-flows/login-sequence.png)
+*Figure: User authentication flow from onboarding to verified account.*
+```
+
+See [`assets/README.md`](./assets/README.md) for conventions on exporting from Figma, naming files, and embedding images in documentation.
+
+## Future Community Feedback
+
+*Coming soon:* A Discord server will be created for external feedback and suggestions. Link will be added here once available.
+
+## Documentation Layout
 
 ```
 docs/
-├── README.md               <- this file
-├── CONTRIBUTING.md         <- how to write/review docs, style, audit cadence
-├── tutorials/              <- Diátaxis: learning-oriented guides
-├── how-to/                 <- Diátaxis: task-oriented recipes (testing strategy, ...)
-├── reference/              <- Diátaxis: API contract, data model, security control
-│                              register, actors/accounts, MVP requirements, RTM, ...
-├── explanation/            <- Diátaxis: social/creative features, roadmap, research
-│                              notes, internship alignment, ...
-├── architecture/           <- arc42-structured architecture documentation
-│   ├── 01-introduction-and-goals.md
+├── README.md                 # this file
+├── CONTRIBUTING.md           # documentation standards and review process
+│
+├── tutorials/                # Learning-oriented onboarding
+├── how-to/                   # Task-oriented guides
+├── reference/                # APIs, data models, requirements
+├── explanation/              # Design rationale and research
+│
+├── architecture/             # arc42 template (12 sections)
+│   ├── introduction-and-goals.md
 │   ├── scope-and-mvp-boundaries.md
-│   ├── 02-constraints.md
-│   ├── 03-context-and-scope.md
-│   ├── 04-solution-strategy.md
+│   ├── constraints.md
+│   ├── context-and-scope.md
+│   ├── solution-strategy.md
 │   ├── architecture-models.md
-│   ├── 05-building-block-view.md
-│   ├── 06-runtime-view.md
-│   ├── 07-deployment-view.md
-│   ├── 08-crosscutting-concepts.md
-│   ├── privacy-and-data-handling.md          <- standalone, referenced from §8
+│   ├── building-block-view.md
+│   ├── runtime-view.md
+│   ├── deployment-view.md
+│   ├── crosscutting-concepts.md
+│   ├── privacy-and-data-handling.md
 │   ├── security-architecture-and-data-protection.md
 │   ├── security-threats-and-controls.md
 │   ├── incident-response-plan.md
 │   ├── location-sharing-lifecycle.md
-│   ├── movement-trails-and-search-corridors.md   <- deferred feature
-│   ├── friend-mosaic-maps.md                     <- deferred feature
+│   ├── movement-trails-and-search-corridors.md
+│   ├── friend-mosaic-maps.md
 │   ├── cache-and-permission-model.md
-│   ├── messaging-and-group-lifecycle.md          <- deferred feature
-│   ├── 09-architecture-decisions.md   <- index into adr/
-│   ├── 10-quality-requirements.md
-│   ├── 11-risks-and-technical-debt.md
-│   ├── 12-glossary.md
-│   └── diagrams/            <- C4 diagrams (context/container/component/code)
-└── adr/                     <- Architecture Decision Records (one file per decision)
+│   ├── messaging-and-group-lifecycle.md
+│   ├── architecture-decisions-link.md
+│   ├── quality-requirements.md
+│   ├── risks-and-technical-debt.md
+│   ├── glossary.md
+│   └── diagrams/             # C4 model diagrams (Mermaid)
+│
+└── adr/                      # Architecture Decision Records
     ├── template.md
-    ├── 0001-record-architecture-decisions.md
-    └── 0002-adopt-always-together-product-direction.md
+    ├── record-architecture-decisions.md
+    └── adopt-always-together-product-direction.md
 ```
 
-## Keeping architecture knowledge from being lost
+## Maintaining Documentation Quality
 
-1. **Every non-trivial architectural decision gets an ADR** before or as it is made —
-   not retroactively. Use [`adr/template.md`](./adr/template.md).
-2. **arc42 sections are living documents.** When the system changes shape, update the
-   relevant section (building blocks, runtime, deployment, etc.) in the same PR as the
-   code change, not "later."
-3. **Superseded decisions are marked, not deleted.** ADRs are numbered and immutable;
-   a new ADR that changes course references and supersedes the old one.
-4. **Diagrams are text-based** (Mermaid/PlantUML) and versioned alongside the docs, so
-   diffs are reviewable and diagrams never silently drift from reality.
+1. **ADRs precede implementation** — Significant decisions are recorded before or during code changes, never retroactively.
+
+2. **Architecture updates ship with code** — When the system changes, relevant arc42 sections update in the same PR.
+
+3. **Superseded ≠ deleted** — Old ADRs remain immutable; new ADRs reference and supersede them.
+
+4. **Diagrams as code** — All diagrams use Mermaid/PlantUML for version control and diff review.
+
+5. **No documentation debt** — "Update docs later" is not an acceptable PR comment.
+
+See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for detailed standards, style conventions, and audit procedures.

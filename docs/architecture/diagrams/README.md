@@ -1,8 +1,8 @@
 # Architecture Diagrams
 
-Diagrams here follow the **C4 model** levels and are written as text
-(Mermaid) so they are diffable and reviewable in pull requests, and never
-silently drift out of sync with the code.
+Diagrams here follow the **C4 model** levels and are written as text (Mermaid) so they are diffable and reviewable in pull requests, and never silently drift out of sync with the code.
+
+## C4 Model Levels
 
 | Level | File | Purpose |
 |-------|------|---------|
@@ -12,9 +12,9 @@ silently drift out of sync with the code.
 | Runtime | `sequence-*.md` | Key runtime scenarios ([§6](../runtime-view.md)) |
 | Deployment | `deployment-diagram.md` | Physical/infra topology ([§7](../deployment-view.md)) |
 
-## Example Mermaid context diagram
+## Getting Started
 
-Use this as a starting template (`context-diagram.md`):
+Use the example below as a starting template for `context-diagram.md`:
 
 ```mermaid
 C4Context
@@ -30,5 +30,12 @@ C4Context
     Rel(app, maps, "Requests map tiles / geocoding from")
 ```
 
-Add real diagrams here as the architecture is defined, and keep this README's table
-up to date with the files that actually exist.
+## Adding Diagrams
+
+Add real diagrams here as the architecture is defined, and keep this README's table up to date with the files that actually exist.
+
+**Tips:**
+- Use Mermaid for sequence diagrams and simple structure diagrams
+- Use PlantUML for complex component diagrams if needed
+- Keep diagram titles descriptive
+- Reference diagrams from the main architecture documents
