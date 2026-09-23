@@ -16,7 +16,7 @@ This document outlines the implementation roadmap for the Always Together MVP ba
 
 #### Day 1-2: Repository Structure and Docker Environment
 - [ ] Create backend directory structure following modular monolith pattern
-- [ ] Initialize FastAPI project with SQLAlchemy and Alembic
+- [ ] Initialize NestJS (Node.js + TypeScript) project with Prisma ORM and migrations
 - [ ] Configure Docker Compose for PostgreSQL, Redis, and API service
 - [ ] Set up environment variable management (.env templates)
 - [ ] Configure GitHub Actions CI/CD pipeline
@@ -26,7 +26,7 @@ This document outlines the implementation roadmap for the Always Together MVP ba
 - [ ] Implement relationship tables: `friend_relationships`, `consent_grants`, `location_shares`
 - [ ] Implement location tables: `location_updates`, `check_ins`
 - [ ] Implement audit table: `audit_events`
-- [ ] Create Alembic migration scripts with rollback capability
+- [ ] Create Prisma migration scripts with rollback capability
 - [ ] Write database seeding scripts for development
 
 #### Day 5: Database Security Hardening
@@ -103,7 +103,7 @@ This document outlines the implementation roadmap for the Always Together MVP ba
 - [ ] Implement create check-in endpoint (manual/scheduled/trip)
 - [ ] Add check-in status endpoint
 - [ ] Create complete/cancel/acknowledge endpoints
-- [ ] Build background job for reminder scheduling (Celery + Redis)
+- [ ] Build background job for reminder scheduling (BullMQ + Redis)
 - [ ] Implement grace period logic
 
 ---
@@ -162,7 +162,7 @@ This document outlines the implementation roadmap for the Always Together MVP ba
 ### Week 7: Security Control Implementation and Testing
 
 #### Day 1-2: Input Validation and API Security
-- [ ] Implement Pydantic validators for all endpoints
+- [ ] Implement class-validator DTO validation for all endpoints
 - [ ] Add coordinate validation (lat/lng bounds)
 - [ ] Test SQL injection prevention (parameterized queries)
 - [ ] Validate pagination parameters

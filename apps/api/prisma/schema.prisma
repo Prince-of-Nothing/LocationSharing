@@ -1,0 +1,143 @@
+// Always Together MVP — data model (docs/reference/domain-data-model.md)
+// PostgreSQL is the system of record; consent/permission state is never
+// stored only in cache.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  resident
+  administrator
+}
+
+enum FriendshipStatus {
+  pending
+  accepted
+  declined
+  blocked
+}
+
+enum SharePrecision {
+  exact
+  approximate
+  city_only
+}
+
+model User {
+  id                  String    @id @default(uuid()) @db.Uuid
+  email               String    @unique @db.VarChar(255)
+  emailNormalized     String    @unique @db.VarChar(255)
+  passwordHash        String    @db.VarChar(255)
+  fullName            String    @db.VarChar(100)
+  role                UserRole  @default(resident)
+  isActive            Boolean   @default(true)
+  isLocked            Boolean   @default(false)
+  failedLoginAttempts Int       @default(0)
+  mustChangePassword  Boolean   @default(false)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime? @updatedAt
+  lastLoginAt         DateTime?
+
+  refreshTokens RefreshToken[]
+  sentRequests  Friendship[]   @relation("Requester")
+  receivedReqs  Friendship[]   @relation("Receiver")
+  ownedShares   LocationShare[] @relation("ShareOwner")
+  recvShares    LocationShare[] @relation("ShareRecipient")
+  locations     LatestLocation[]
+  checkins      CheckIn[]
+  auditEvents   AuditEvent[]
+
+  @@index([emailNormalized])
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  tokenHash String    @unique @db.VarChar(64) // SHA-256 hex; raw token never stored
+  userId    String    @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  familyId  String    @db.Uuid // rotation family for reuse detection
+  expiresAt DateTime
+  revokedAt DateTime?
+  replacedBy String?  @db.Uuid
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([familyId])
+}
+
+model AuditEvent {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String?  @db.Uuid
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String   @db.VarChar(100)
+  outcome   String   @db.VarChar(20) // success | failure | denied
+  ip        String?  @db.VarChar(45)
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model Friendship {
+  id          String           @id @default(uuid()) @db.Uuid
+  requesterId String           @db.Uuid
+  requester   User             @relation("Requester", fields: [requesterId], references: [id], onDelete: Cascade)
+  receiverId  String           @db.Uuid
+  receiver    User             @relation("Receiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  status      FriendshipStatus @default(pending)
+  createdAt   DateTime         @default(now())
+  respondedAt DateTime?
+
+  shares LocationShare[]
+
+  @@unique([requesterId, receiverId])
+}
+
+model LocationShare {
+  id          String         @id @default(uuid()) @db.Uuid
+  ownerId     String         @db.Uuid
+  owner       User           @relation("ShareOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  recipientId String         @db.Uuid
+  recipient   User           @relation("ShareRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  precision   SharePrecision @default(exact)
+  purpose     String?        @db.VarChar(200)
+  isActive    Boolean        @default(true)
+  expiresAt   DateTime?
+  createdAt   DateTime       @default(now())
+
+  @@index([recipientId, isActive])
+  @@index([ownerId, recipientId])
+}
+
+model LatestLocation {
+  id             String   @id @default(uuid()) @db.Uuid
+  ownerId        String   @db.Uuid @unique // latest-only; MVP keeps no history
+  owner          User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  lat            Decimal  @db.Decimal(9, 6)
+  lng            Decimal  @db.Decimal(9, 6)
+  accuracyMeters Int?
+  batteryLevel   Int?
+  observedAt     DateTime
+  createdAt      DateTime @default(now())
+}
+
+model CheckIn {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @db.Uuid
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type           String   @db.VarChar(20) // manual | scheduled | trip
+  state          String   @db.VarChar(20)
+  dueAt          DateTime?
+  graceEndsAt    DateTime?
+  acknowledgedBy Json?
+  completedAt    DateTime?
+  createdAt      DateTime @default(now())
+
+  @@index([userId, state])
+}

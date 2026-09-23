@@ -7,10 +7,9 @@ This tutorial walks through setting up a complete local development environment 
 Before starting, ensure you have:
 
 - **Docker Desktop** (v20.10+) installed and running
-- **Python 3.11+** installed locally
+- **Node.js 20 LTS+** and npm installed locally (backend runtime)
 - **Flutter SDK** (v3.13+) installed and configured
 - **Git** for version control
-- **Node.js 18+** (optional, for some tooling)
 
 ## Step 1: Clone the Repository
 
@@ -21,7 +20,7 @@ cd always-together
 
 ## Step 2: Start Backend Services with Docker
 
-The backend requires PostgreSQL, Redis, and FastAPI. Use Docker Compose to start all services:
+The backend requires PostgreSQL, Redis, and the Node.js API service. Use Docker Compose to start all services:
 
 ```bash
 cd docker/
@@ -31,7 +30,7 @@ docker-compose up -d
 This starts:
 - **PostgreSQL** on port 5432
 - **Redis** on port 6379
-- **FastAPI backend** on port 8000
+- **API backend (Node.js)** on port 8000
 
 Verify services are running:
 
@@ -44,13 +43,13 @@ Expected output:
 NAME                    STATUS         PORTS
 postgres               Up (healthy)   5432/tcp
 redis                  Up (healthy)   6379/tcp
-fastapi-backend        Up             0.0.0.0:8000->8000/tcp
+api-backend            Up             0.0.0.0:8000->8000/tcp
 ```
 
 ## Step 3: Run Database Migrations
 
 ```bash
-docker-compose exec fastapi-backend python -m alembic upgrade head
+docker-compose exec api-backend npx prisma migrate deploy
 ```
 
 This creates all required tables including:
@@ -66,7 +65,7 @@ This creates all required tables including:
 For demonstration purposes, seed the database with test users:
 
 ```bash
-docker-compose exec fastapi-backend python scripts/seed_dev_data.py
+docker-compose exec api-backend node scripts/seed-dev-data.js
 ```
 
 This creates:
@@ -161,7 +160,7 @@ For iOS simulator, `localhost` works correctly.
 ```bash
 docker-compose down -v
 docker-compose up -d
-docker-compose exec fastapi-backend python -m alembic upgrade head
+docker-compose exec api-backend npx prisma migrate deploy
 ```
 
 ## Next Steps

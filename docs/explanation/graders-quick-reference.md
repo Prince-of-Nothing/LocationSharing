@@ -68,7 +68,7 @@ This document provides university evaluators with a quick reference for assessin
 - [API Contract](../reference/api-contract.md) — Versioned API specification
 
 **What to Look For:**
-- Frozen technology stack with clear rationale
+- Documented technology stack selection with clear rationale
 - API versioning strategy (`api/v1`)
 - Error handling following RFC 7807 (Problem Details)
 - Test pyramid coverage (unit, integration, security, accessibility)

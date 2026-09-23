@@ -34,7 +34,7 @@ Concretely:
 - The **product rule** "location is only ever shared with mutual,
   explicit, revocable consent — never public, never silent" becomes the
   foundational constraint referenced throughout the architecture docs.
-- The MVP scope, frozen technology stack, security model, data model, API
+- The MVP scope, selected technology stack, security model, data model, API
   contract, and requirements traceability matrix from the vault become the
   authoritative content of `docs/architecture/`, `docs/reference/`, and
   `docs/explanation/`.
@@ -47,8 +47,9 @@ Concretely:
 - `docs/` becomes the single source of truth for product scope,
   architecture, and decisions — easier onboarding, easier auditing, no risk
   of the vault and the docs silently drifting apart.
-- The frozen MVP technology stack (Flutter, FastAPI, PostgreSQL, Redis,
-  S3-compatible storage, OIDC/PKCE, WebSocket gateway, OSM-derived maps,
+- The selected MVP technology stack (Flutter, Node.js/TypeScript with NestJS,
+  PostgreSQL + Prisma, Redis + BullMQ, S3-compatible storage, OIDC/PKCE,
+  WebSocket gateway, OSM-derived maps,
   Docker/GitHub Actions) is now a recorded, reviewable decision rather than
   an implicit assumption — see
   [Technology Stack and Infrastructure](../reference/technology-stack-and-infrastructure.md)
