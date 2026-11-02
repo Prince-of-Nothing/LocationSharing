@@ -37,7 +37,7 @@ alembic upgrade head && alembic check   # needs DATABASE_URL (PostgreSQL)
 
 Full stack: `docker compose up --build` → http://localhost:8080 (seeds demo accounts; local-only credentials). Python API on :8001 via `docker compose --profile python up --build python-api`.
 
-Android (from `mobile/`; needs JDK 17 + Android SDK 35 — **not installable on the original dev machine**, so compile verification happens in CI's `mobile` job):
+Android (from `mobile/`; needs JDK 17 + Android SDK 35. CI's `mobile` job compiles every push; a local build also works once those are installed — set `JAVA_HOME`/`ANDROID_HOME` and run from `mobile/`):
 
 ```bash
 gradle :app:assembleDebug          # debug APK; points at http://10.0.2.2:8000/api/v1/
@@ -53,6 +53,7 @@ CI (`.github/workflows/ci.yml`) runs all of the above plus migrations against a 
 - Security is thesis-mandated: server-side enforcement only, no secrets or real user data anywhere including tests (root `CONTRIBUTING.md`).
 - Password/session/token logic differs between the Go and Python implementations — mirror changes deliberately, and check which stack a doc describes before editing.
 - Mobile module rules (enforced by Gradle deps): `:feature:*` sees `:core:domain` only; Retrofit/OkHttp stay in `:core:network`; MapLibre stays in `:core:map` (only `MapLibreIntegration.kt` + `OfflineMapManager.kt` import `org.maplibre.*`). New dependencies go in `mobile/gradle/libs.versions.toml`.
+- MapLibre Android coordinates are `org.maplibre.gl:android-sdk` on **Maven Central** — `org.maplibre:maplibre-android` does not exist anywhere and breaks dependency resolution.
 - Mobile privacy baseline is thesis-relevant: no Firebase/FCM/analytics/crash SDKs, ever. Any new third-party lib must be added to `mobile/THIRD_PARTY_NOTICES.md` in the same PR. OSM attribution must stay visible on the map screen (ODbL).
 
 ## Commits
@@ -63,6 +64,9 @@ Every commit is co-authored by the human team members (not bots). Add trailers o
 Co-authored-by: Mordret <blacksnake@noreply.codeberg.org>
 Co-authored-by: Andrei Cliucovschi <cliucovschiandrei@gmail.com>
 Co-authored-by: Pleșu Dinu <dinu.plesu@isa.utm.md>
+Co-authored-by: Nedelea Dragoș <63261775+dragos-nedelea@users.noreply.github.com>
+Co-authored-by: dana-r19 <200202105+dana-r19@users.noreply.github.com>
+Co-authored-by: Tcacenco Nichita <nichita.tcacenco@isa.utm.md>
 ```
 
 Exclude bots: `qwen.ai[bot]`, copilot, dependabot. Local git author is already Mordret.

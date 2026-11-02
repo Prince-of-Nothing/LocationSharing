@@ -1,18 +1,15 @@
 # Always Together
 
-A privacy-first location-sharing platform for trusted friends. Friendship does
-not grant access to anyone's location: each person explicitly chooses who can
-see them, at what precision, and for how long. Every share can be revoked, and
-recipients can see whether a location is fresh or stale.
+**A privacy-first location-sharing platform for trusted friends.**
 
-This repository contains both backend implementations:
+Friendship does not grant access to anyone's location: each person explicitly chooses who can see them, at what precision, and for how long. Every share can be revoked, and recipients can see whether a location is fresh or stale.
 
-- **Go API** in `backend/cmd` and `backend/internal` (the default Docker stack).
-- **Python/FastAPI API** in `backend/app` (available as an alternate Docker
-  profile and for local development).
+This repository contains two backend implementations sharing the same API:
 
-Both implementations are accompanied by the web client, tests, database
-migrations, security controls, and project documentation.
+- **Go API** (default Docker stack): `backend/cmd/server` + `backend/internal/`
+- **Python/FastAPI API** (alternate): `backend/app`, migrations in `backend/alembic/`, tests in `backend/tests/`
+
+Web clients: `web/` (Go stack, nginx) and `backend/web/` (Python-served). Android app: `mobile/` — Kotlin/Jetpack Compose, Clean Architecture modules (`app` composition root + `core:{domain,network,data,map}` + `feature:{auth,map,friends,sharing}`), MapLibre maps, 0 trackers.
 
 ## Features
 
@@ -21,92 +18,35 @@ migrations, security controls, and project documentation.
 - Directional location sharing with precision, purpose, expiry, and revocation
 - Live, stale, and expired location states
 - Safety check-ins, admin account management, and audit logging
-- Browser client with an OpenStreetMap map
+- Browser client with an OpenStreetMap map (MapLibre Native, zero telemetry, ODbL attribution visible)
 
-## Quick start: Go API and web client
+## Quick Start
 
-```bash
-docker compose up --build
-```
-
-Open <http://localhost:8080>. The local demo stack seeds demo accounts; these
-credentials and its default secrets are for local development only.
-
-## Run the Python/FastAPI API
-
-The Python service is available separately on <http://localhost:8001>. It uses
-PostgreSQL and Redis from the optional `python` Compose profile:
+### Go API (default Docker stack)
 
 ```bash
-docker compose --profile python up --build python-api
-```
-
-For local development without Docker:
-
-```powershell
 cd backend
-python -m venv .venv
-.venv\Scripts\Activate.ps1
+go build ./... && go vet ./...
+DB_DRIVER=memory SEED_DEMO_DATA=true WEB_ROOT=...web/public go run ./cmd/server   # port 8000
+```
+
+### Python/FastAPI API (alternate)
+
+```bash
+cd backend
 pip install -r requirements-dev.txt
-pytest
+pytest                                   # addopts: -q, testpaths=tests
+alembic upgrade head                     # needs DATABASE_URL (PostgreSQL)
 ```
 
-See [Local Development Setup](docs/tutorials/local-development-setup.md) for
-the Python database setup and additional details.
+Full stack: `docker compose up --build` → http://localhost:8080
 
-## Run the Go API locally
+## Contribution Rules
 
-```bash
-cd backend
-go test ./...
-go run ./cmd/server
-```
+- Small PRs, Conventional Commits, docs in the same PR
+- Security changes need a regression test *and* a fail-closed test
+- Every commit co-authored by the human team members (see `CONTRIBUTING.md`)
 
-The Go API listens on port 8000 by default. Set `PORT` to change it.
+## License
 
-## Repository layout
-
-```text
-backend/app/          Python/FastAPI implementation
-backend/alembic/      Python database migrations
-backend/tests/        Python test suite
-backend/cmd/          Go API entry point
-backend/internal/     Go configuration, handlers, models, security, and store
-backend/web/          Python-served web client
-web/                  Go deployment web client and nginx reverse proxy
-mobile/               Kotlin/Jetpack Compose Android app (see mobile/README.md)
-docker/               PostgreSQL role setup and Caddy HTTPS configuration
-docs/                 Architecture, reference, deployment, and project guides
-```
-
-## Android app
-
-The `mobile/` directory holds a privacy-first Android client (0 trackers):
-Clean Architecture modules, MapLibre maps with offline region downloads,
-`geo:`-URI navigation hand-off, and Keystore-encrypted sessions. Build
-instructions, the module map, and full third-party licensing notes (OSM
-ODbL, MapLibre BSD-2, tile-usage policy compliance) live in
-[mobile/README.md](mobile/README.md) and
-[mobile/THIRD_PARTY_NOTICES.md](mobile/THIRD_PARTY_NOTICES.md). CI compiles
-it on every push (`mobile` job).
-
-## Web client (Go stack)
-
-`web/` holds a privacy-first browser client: modular vanilla ES modules with
-no build step and zero third-party JavaScript (0 trackers enforced by CSP),
-offline app shell via service worker (UI only — location data is never
-cached), session restore across reloads, and policy-compliant OSM tiles with
-visible ODbL attribution. See [web/README.md](web/README.md) and
-[web/THIRD_PARTY_NOTICES.md](web/THIRD_PARTY_NOTICES.md). The Python stack
-serves a separate Leaflet-based client from `backend/web/`.
-
-## Documentation
-
-- [Documentation home](docs/README.md)
-- [Project overview](docs/PROJECT.md) and [architecture](docs/ARCHITECTURE.md)
-- [Deployment](docs/DEPLOYMENT.md) and [testing](docs/TESTING.md)
-- [Security policy](docs/SECURITY.md) and [privacy](docs/PRIVACY.md)
-- [Python API contract](docs/reference/api-contract.md)
-- [Python local development guide](docs/tutorials/local-development-setup.md)
-- [Go backend guide](backend/README.md)
-- [Roadmap](docs/ROADMAP.md)
+MIT © 2025 Always Together
