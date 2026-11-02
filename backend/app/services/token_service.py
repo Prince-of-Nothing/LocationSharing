@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
-TOKEN_TYPE_ACCESS = "access"  # noqa: S105 - token type label, not a secret
-TOKEN_TYPE_REFRESH = "refresh"  # noqa: S105 - token type label, not a secret
+TOKEN_TYPE_ACCESS = "access"  # nosec B105 - token type label, not a secret  # noqa: S105
+TOKEN_TYPE_REFRESH = "refresh"  # nosec B105 - token type label, not a secret  # noqa: S105
 
 
 @dataclass(frozen=True)

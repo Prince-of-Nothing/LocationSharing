@@ -45,9 +45,9 @@ class AuthErrorCode(StrEnum):
     """Machine-readable authentication failure codes (never leak state)."""
 
     INVALID_CREDENTIALS = "AUTHENTICATION_FAILED"
-    INVALID_TOKEN = "INVALID_TOKEN"  # noqa: S105 - error code, not a secret
-    PASSWORD_CHANGE_REQUIRED = "PASSWORD_CHANGE_REQUIRED"  # noqa: S105 - error code
-    WEAK_PASSWORD = "WEAK_PASSWORD"  # noqa: S105 - error code, not a secret
+    INVALID_TOKEN = "INVALID_TOKEN"  # nosec B105 - error code  # noqa: S105, not a secret  # noqa: S105
+    PASSWORD_CHANGE_REQUIRED = "PASSWORD_CHANGE_REQUIRED"  # nosec B105 - error code  # noqa: S105
+    WEAK_PASSWORD = "WEAK_PASSWORD"  # nosec B105 - error code  # noqa: S105, not a secret  # noqa: S105
 
 
 class AuthenticationError(Exception):
