@@ -4,10 +4,12 @@ import org.alwaystogether.core.network.dto.FriendLocationDto
 import org.alwaystogether.core.network.dto.FriendshipDto
 import org.alwaystogether.core.network.dto.FriendshipRequest
 import org.alwaystogether.core.network.dto.FriendshipsResponse
+import org.alwaystogether.core.network.dto.FriendsLocationsResponse
 import org.alwaystogether.core.network.dto.LocationShareDto
 import org.alwaystogether.core.network.dto.LocationUpdateRequest
 import org.alwaystogether.core.network.dto.LoginRequest
 import org.alwaystogether.core.network.dto.LoginResponse
+import org.alwaystogether.core.network.dto.RegisterRequest
 import org.alwaystogether.core.network.dto.RespondRequest
 import org.alwaystogether.core.network.dto.ShareRequest
 import org.alwaystogether.core.network.dto.SharesResponse
@@ -23,6 +25,9 @@ import retrofit2.http.Path
 interface AuthApi {
     @POST("auth/login")
     suspend fun login(@Body body: LoginRequest): LoginResponse
+
+    @POST("auth/register")
+    suspend fun register(@Body body: RegisterRequest): LoginResponse
 
     @POST("auth/logout")
     suspend fun logout()

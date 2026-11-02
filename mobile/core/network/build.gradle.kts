@@ -16,8 +16,8 @@ dependencies {
     api(project(":core:domain"))
 
     api(libs.retrofit)
-    api(libs.retrofit.kotlinx.serialization)
     api(libs.okhttp)
+    api(libs.okhttp.logging)
     api(libs.kotlinx.serialization.json)
     api(libs.kotlinx.coroutines.android)
 

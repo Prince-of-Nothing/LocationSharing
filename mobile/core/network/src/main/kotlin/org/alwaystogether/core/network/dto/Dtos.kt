@@ -13,6 +13,13 @@ data class LoginRequest(
 )
 
 @Serializable
+data class RegisterRequest(
+    val email: String,
+    val password: String,
+    @SerialName("full_name") val fullName: String = "",
+)
+
+@Serializable
 data class UserDto(
     val id: Long,
     val email: String,

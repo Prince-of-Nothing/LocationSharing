@@ -1,4 +1,4 @@
-plugins {
+﻿plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
@@ -17,7 +17,7 @@ android {
 
         // Debug builds talk to the local docker compose stack. The Android
         // emulator reaches the host machine via 10.0.2.2, not localhost.
-        buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8000/api/v1/\"")
+        buildConfigField("String", "API_BASE_URL", "\"https://pinpoint-go-api.onrender.com/api/v1/\"")
     }
 
     buildTypes {
@@ -48,6 +48,7 @@ dependencies {
     implementation(project(":core:domain"))
     implementation(project(":core:data"))
     implementation(project(":core:map"))
+    implementation(project(":core:network"))
     implementation(project(":feature:auth"))
     implementation(project(":feature:map"))
     implementation(project(":feature:friends"))

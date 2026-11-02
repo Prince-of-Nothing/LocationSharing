@@ -1,15 +1,15 @@
-package org.alwaystogether.core.map
+﻿package org.alwaystogether.core.map
 
 import android.content.Context
+import kotlinx.coroutines.suspendCancellableCoroutine
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.offline.OfflineManager
 import org.maplibre.android.offline.OfflineRegion
 import org.maplibre.android.offline.OfflineRegionDefinition
+import org.maplibre.android.offline.OfflineRegionError
 import org.maplibre.android.offline.OfflineRegionStatus
 import org.maplibre.android.offline.OfflineTilePyramidRegionDefinition
-import org.maplibre.android.geometry.LatLngBounds
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -22,7 +22,7 @@ import kotlin.coroutines.resumeWithException
  *
  * Data source licensing note (see THIRD_PARTY_NOTICES.md): downloaded tiles
  * inherit the tile provider's terms. With the default OpenFreeMap source the
- * data is OSM ODbL — attribution must remain visible in the UI, which the
+ * data is OSM ODbL â€” attribution must remain visible in the UI, which the
  * map view enforces.
  */
 class OfflineMapManager(private val context: Context) {
@@ -33,7 +33,7 @@ class OfflineMapManager(private val context: Context) {
     data class DownloadProgress(
         val completedTileCount: Long,
         val requiredTileCount: Long,
-        val bytesRemaining: Long,
+        val completedBytes: Long,
     ) {
         val fraction: Float
             get() = if (requiredTileCount == 0L) 0f
@@ -81,28 +81,52 @@ class OfflineMapManager(private val context: Context) {
             name.toByteArray(Charsets.UTF_8),
             object : OfflineManager.CreateOfflineRegionCallback {
                 override fun onCreate(offlineRegion: OfflineRegion) {
-                    offlineRegion.setObserver { status: OfflineRegionStatus ->
-                        onProgress(
-                            DownloadProgress(
-                                completedTileCount = status.completedResourceCount,
-                                requiredTileCount = status.requiredResourceCount,
-                                bytesRemaining = status.remainingTileBytes,
-                            ),
-                        )
-                        if (status.isComplete) {
-                            offlineRegion.setDownloadState(OfflineRegion.STATE_INACTIVE)
-                            if (cont.isActive) cont.resume(Unit)
-                        }
-                    }
+                    offlineRegion.setObserver(
+                        object : OfflineRegion.OfflineRegionObserver {
+                            override fun onStatusChanged(status: OfflineRegionStatus) {
+                                onProgress(
+                                    DownloadProgress(
+                                        completedTileCount = status.completedTileCount,
+                                        requiredTileCount = status.requiredResourceCount,
+                                        completedBytes = status.completedResourceSize,
+                                    ),
+                                )
+                                if (status.isComplete) {
+                                    offlineRegion.setDownloadState(OfflineRegion.STATE_INACTIVE)
+                                    if (cont.isActive) cont.resume(Unit)
+                                }
+                            }
+
+                            override fun onError(error: OfflineRegionError) {
+                                if (cont.isActive) {
+                                    cont.resumeWithException(
+                                        OfflineMapException(
+                                            "offline region download failed: ${error.message}",
+                                        ),
+                                    )
+                                }
+                            }
+
+                            override fun mapboxTileCountLimitExceeded(limit: Long) {
+                                if (cont.isActive) {
+                                    cont.resumeWithException(
+                                        OfflineMapException(
+                                            "tile count limit exceeded ($limit tiles)",
+                                        ),
+                                    )
+                                }
+                            }
+                        },
+                    )
                     // Download over any network (the user asked for it
                     // explicitly; tiles are small vector tiles).
                     offlineRegion.setDownloadState(OfflineRegion.STATE_ACTIVE)
                 }
 
-                override fun onError(error: OfflineManager.Error) {
+                override fun onError(error: String) {
                     if (cont.isActive) {
                         cont.resumeWithException(
-                            OfflineMapException("offline region create failed: ${error.message}"),
+                            OfflineMapException("offline region create failed: $error"),
                         )
                     }
                 }
@@ -114,22 +138,47 @@ class OfflineMapManager(private val context: Context) {
     suspend fun listRegions(): List<OfflineRegionInfo> =
         suspendCancellableCoroutine { cont ->
             offlineManager.listOfflineRegions(object : OfflineManager.ListOfflineRegionsCallback {
-                override fun onList(offlineRegions: Array<OfflineRegion>) {
-                    val infos = offlineRegions.map { region ->
-                        OfflineRegionInfo(
-                            id = region.id,
-                            name = String(region.metadata, Charsets.UTF_8),
-                            downloadedBytes = region.status.completedResourceSize,
-                            complete = region.status.isComplete,
-                        )
+                override fun onList(offlineRegions: Array<OfflineRegion>?) {
+                    // Each region's size/completeness requires an async
+                    // getStatus() call; resolve them in order, then resume.
+                    val regions = offlineRegions ?: emptyArray()
+                    val infos = mutableListOf<OfflineRegionInfo>()
+                    fun next(index: Int) {
+                        if (index >= regions.size) {
+                            if (cont.isActive) cont.resume(infos)
+                            return
+                        }
+                        val region = regions[index]
+                        region.getStatus(object : OfflineRegion.OfflineRegionStatusCallback {
+                            override fun onStatus(status: OfflineRegionStatus?) {
+                                infos += OfflineRegionInfo(
+                                    id = region.id,
+                                    name = String(region.metadata, Charsets.UTF_8),
+                                    downloadedBytes = status?.completedResourceSize ?: 0L,
+                                    complete = status?.isComplete == true,
+                                )
+                                next(index + 1)
+                            }
+
+                            override fun onError(error: String?) {
+                                // Region unreadable: report what we know.
+                                infos += OfflineRegionInfo(
+                                    id = region.id,
+                                    name = String(region.metadata, Charsets.UTF_8),
+                                    downloadedBytes = 0L,
+                                    complete = false,
+                                )
+                                next(index + 1)
+                            }
+                        })
                     }
-                    if (cont.isActive) cont.resume(infos)
+                    next(0)
                 }
 
-                override fun onError(error: OfflineManager.Error) {
+                override fun onError(error: String) {
                     if (cont.isActive) {
                         cont.resumeWithException(
-                            OfflineMapException("list offline regions failed: ${error.message}"),
+                            OfflineMapException("list offline regions failed: $error"),
                         )
                     }
                 }
@@ -139,8 +188,8 @@ class OfflineMapManager(private val context: Context) {
     /** Deletes a stored region and frees its tile storage. */
     suspend fun deleteRegion(regionId: Long): Unit = suspendCancellableCoroutine { cont ->
         offlineManager.listOfflineRegions(object : OfflineManager.ListOfflineRegionsCallback {
-            override fun onList(offlineRegions: Array<OfflineRegion>) {
-                val region = offlineRegions.firstOrNull { it.id == regionId }
+            override fun onList(offlineRegions: Array<OfflineRegion>?) {
+                val region = offlineRegions?.firstOrNull { it.id == regionId }
                 if (region == null) {
                     if (cont.isActive) cont.resume(Unit)
                     return
@@ -150,29 +199,24 @@ class OfflineMapManager(private val context: Context) {
                         if (cont.isActive) cont.resume(Unit)
                     }
 
-                    override fun onError(error: OfflineRegion.OfflineRegionError) {
+                    override fun onError(error: String) {
                         if (cont.isActive) {
                             cont.resumeWithException(
-                                OfflineMapException("delete failed: ${error.message}"),
+                                OfflineMapException("delete failed: $error"),
                             )
                         }
                     }
                 })
             }
 
-            override fun onError(error: OfflineManager.Error) {
+            override fun onError(error: String) {
                 if (cont.isActive) {
                     cont.resumeWithException(
-                        OfflineMapException("list for delete failed: ${error.message}"),
+                        OfflineMapException("list for delete failed: $error"),
                     )
                 }
             }
         })
-    }
-
-    /** Releases the shared OfflineManager (call from Application teardown). */
-    fun destroy() {
-        offlineManager.destroy()
     }
 }
 

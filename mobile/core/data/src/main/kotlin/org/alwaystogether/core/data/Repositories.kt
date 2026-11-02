@@ -18,6 +18,8 @@ import org.alwaystogether.core.network.dto.FriendLocationDto
 import org.alwaystogether.core.network.dto.FriendshipDto
 import org.alwaystogether.core.network.dto.LocationShareDto
 import org.alwaystogether.core.network.dto.LoginRequest
+import org.alwaystogether.core.network.dto.LoginResponse
+import org.alwaystogether.core.network.dto.RegisterRequest
 
 /**
  * Repository implementations: network DTOs -> domain models.
@@ -33,6 +35,23 @@ class AuthRepositoryImpl(
         val response = ApiClient.run {
             api.login(LoginRequest(email = email.trim(), password = password))
         }
+        return persist(response)
+    }
+
+    override suspend fun register(
+        email: String,
+        password: String,
+        fullName: String,
+    ): AuthTokens {
+        val response = ApiClient.run {
+            api.register(
+                RegisterRequest(email = email.trim(), password = password, fullName = fullName),
+            )
+        }
+        return persist(response)
+    }
+
+    private suspend fun persist(response: LoginResponse): AuthTokens {
         val tokens = AuthTokens(
             accessToken = response.accessToken,
             tokenType = response.tokenType,
@@ -40,7 +59,7 @@ class AuthRepositoryImpl(
             csrfToken = response.csrfToken,
             user = response.user.toDomain(),
         )
-        session.login(tokens) // encrypted persistence + in-memory cache
+        session.save(tokens) // encrypted persistence + in-memory cache
         return tokens
     }
 

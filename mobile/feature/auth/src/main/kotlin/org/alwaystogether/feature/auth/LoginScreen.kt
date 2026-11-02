@@ -40,7 +40,7 @@ fun LoginScreen(
         state = state,
         onEmailChange = viewModel::onEmailChange,
         onPasswordChange = viewModel::onPasswordChange,
-        onSubmit = viewModel::login,
+        onSubmit = viewModel::signInOrSignUp,
     )
 }
 
@@ -59,7 +59,7 @@ fun LoginContent(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            text = "Always Together",
+            text = "Pinpoint",
             style = MaterialTheme.typography.headlineMedium,
         )
         Text(
@@ -115,7 +115,7 @@ fun LoginContent(
                     strokeWidth = 2.dp,
                 )
             }
-            Text(if (state.loading) "Signing in…" else "Sign in")
+            Text(if (state.loading) "Signing in…" else "Sign in / Create account")
         }
     }
 }

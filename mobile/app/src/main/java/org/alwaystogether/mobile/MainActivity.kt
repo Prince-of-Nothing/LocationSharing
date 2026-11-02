@@ -1,9 +1,13 @@
 package org.alwaystogether.mobile
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.core.content.FileProvider
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Place
@@ -18,7 +22,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material3.Button
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -26,6 +32,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import org.alwaystogether.core.map.MapLibreInit
+import org.alwaystogether.mobile.CrashLogger
+import org.alwaystogether.mobile.CrashReport
 import org.alwaystogether.feature.auth.AuthViewModel
 import org.alwaystogether.feature.auth.LoginScreen
 import org.alwaystogether.feature.friends.FriendsScreen
@@ -40,12 +48,51 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val container = (application as MobileApp).container
-        MapLibreInit.initialize(applicationContext)
+        val app = application as MobileApp
+        val container = app.container
+
+        try {
+            if (container != null) {
+                MapLibreInit.initialize(applicationContext)
+            } else {
+                CrashLogger.error("MainActivity", "Container is null; opening safe error mode")
+            }
+        } catch (t: Throwable) {
+            CrashLogger.crash("MainActivity.onCreate", t)
+            CrashReport.write(this, "MainActivity.onCreate", t)
+            // Continue with null container; AppNav will show error state.
+        }
 
         setContent {
             MaterialTheme {
-                AppNav(container = container)
+                if (container != null) {
+                    AppNav(container = container)
+                } else {
+                    // Graceful degradation: readable error + shareable crash file.
+                    val latestCrash = CrashReport.list(this@MainActivity).firstOrNull()
+                    val shareText = latestCrash?.readText()?.take(3000) ?: "No crash file found."
+                    Column(modifier = Modifier.padding(24.dp)) {
+                        Text(
+                            text = "Failed to initialize application. (Pinpoint)\n\n" +
+                                    "Crash report saved to Downloads/crash_reports/ if it exists.\n\n" +
+                                    "File path: ${latestCrash?.absolutePath ?: "None"}",
+                            modifier = Modifier.padding(bottom = 16.dp),
+                        )
+                        Button(
+                            onClick = {
+                                val sendIntent = Intent().apply {
+                                    action = Intent.ACTION_SEND
+                                    putExtra(Intent.EXTRA_TEXT, shareText)
+                                    putExtra(Intent.EXTRA_SUBJECT, "Pinpoint Crash Report")
+                                    type = "text/plain"
+                                }
+                                startActivity(Intent.createChooser(sendIntent, "Share crash report"))
+                            },
+                        ) {
+                            Text("Share crash report")
+                        }
+                    }
+                }
             }
         }
     }
@@ -101,7 +148,7 @@ fun AppNav(container: Container) {
                 // valid encrypted session exists, login screen otherwise.
                 LaunchedEffect(Unit) {
                     val restored = container.session.restore()
-                    navController.navigate(if (restored) "map" else "login") {
+                    navController.navigate("map") {
                         popUpTo("splash") { inclusive = true }
                     }
                 }

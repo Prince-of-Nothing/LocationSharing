@@ -28,7 +28,7 @@ private val Context.sessionDataStore by preferencesDataStore(name = "session")
  *  - The plaintext token exists in memory only ([memAccess]/[memCsrf]) and is
  *    handed to the network layer via providers; it is never logged.
  *
- * Lifecycle: [login] saves + caches; [restore] is called once at app start to
+ * Lifecycle: [save] saves + caches; [restore] is called once at app start to
  * rehydrate the cache; [clear] wipes both memory and disk (logout).
  */
 class SessionStore(private val context: Context) : SessionRepository {
@@ -40,7 +40,7 @@ class SessionStore(private val context: Context) : SessionRepository {
     private val ds = context.sessionDataStore
 
     /** Called right after a successful login. */
-    suspend fun login(tokens: AuthTokens) {
+    override suspend fun save(tokens: AuthTokens) {
         memAccess = tokens.accessToken
         memCsrf = tokens.csrfToken
         memUserId = tokens.user.id

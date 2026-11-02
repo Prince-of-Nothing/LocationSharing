@@ -19,6 +19,8 @@ class ApiException(
 /** Authentication + current-user operations. */
 interface AuthRepository {
     suspend fun login(email: String, password: String): AuthTokens
+    /** Combined sign-in/sign-up: creates the account when it does not exist yet. */
+    suspend fun register(email: String, password: String, fullName: String = ""): AuthTokens
     suspend fun logout()
     suspend fun me(): User
     /** True when a session token is stored locally (fast pre-login gate). */

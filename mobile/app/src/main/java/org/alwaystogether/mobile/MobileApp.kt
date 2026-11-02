@@ -1,22 +1,27 @@
-package org.alwaystogether.mobile
+﻿package org.alwaystogether.mobile
 
 import android.app.Application
+import org.alwaystogether.core.map.MapLibreInit
+import org.alwaystogether.mobile.CrashLogger
+import org.alwaystogether.mobile.CrashReport
 import org.alwaystogether.mobile.di.Container
 
-/**
- * Application entry point and manual-DI composition root.
- *
- * No Hilt/Kapt: the container is constructed explicitly so every dependency
- * is visible in one file and swappable per build flavor or test. Modules stay
- * free of DI frameworks and only ever see interfaces from :core:domain.
- */
 class MobileApp : Application() {
 
-    lateinit var container: Container
+    var container: Container? = null
         private set
 
     override fun onCreate() {
         super.onCreate()
-        container = Container(this)
+        try {
+            CrashLogger.info("MobileApp", "init MapLibre")
+            MapLibreInit.initialize(applicationContext)
+            CrashLogger.info("MobileApp", "creating Container")
+            container = Container(this)
+            CrashLogger.info("MobileApp", "Container ready")
+        } catch (t: Throwable) {
+            CrashLogger.crash("MobileApp.onCreate", t)
+            CrashReport.write(this, "MobileApp.onCreate", t)
+        }
     }
 }

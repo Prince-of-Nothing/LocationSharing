@@ -3,14 +3,12 @@ package org.alwaystogether.core.network
 import java.util.concurrent.TimeUnit
 import kotlinx.serialization.json.Json
 import okhttp3.Interceptor
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Response
 import okhttp3.logging.HttpLoggingInterceptor
 import org.alwaystogether.core.network.dto.ErrorEnvelope
-import org.alwaystogether.retrofit2.kotlinx.serialization.converter.asConverterFactory
-import retrofit2.Retrofit
 import retrofit2.HttpException
+import retrofit2.Retrofit
 
 /**
  * Retrofit/OkHttp wiring. The ONLY place that knows HTTP details.
@@ -64,7 +62,7 @@ class ApiClient(baseUrl: String) {
     private val retrofit = Retrofit.Builder()
         .baseUrl(baseUrl)
         .client(http)
-        .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+        .addConverterFactory(JsonConverterFactory(json))
         .build()
 
     val authApi: AuthApi = retrofit.create(AuthApi::class.java)

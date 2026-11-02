@@ -42,7 +42,7 @@ fun MapView(
     config: MapConfig = MapConfig.DEFAULT,
     center: MapLatLng? = null,
     zoom: Double = 14.0,
-    onMapReady: ((org.maplibre.android.maps.MaplibreMap) -> Unit)? = null,
+    onMapReady: ((org.maplibre.android.maps.MapLibreMap) -> Unit)? = null,
 ) {
     // The MapView is created and initialized exactly once; later recompositions
     // only adjust the camera. MapLibre's lifecycle methods (onCreate/onResume)
@@ -80,7 +80,7 @@ fun MapView.onHostPause() = onPause()
 fun MapView.onHostDestroy() = onDestroy()
 
 /** Moves the camera (used by "center on me" / friend markers). */
-fun org.maplibre.android.maps.MaplibreMap.moveCamera(to: MapLatLng, zoom: Double) {
+fun org.maplibre.android.maps.MapLibreMap.moveCamera(to: MapLatLng, zoom: Double) {
     val update = CameraUpdateFactory.newLatLngZoom(LatLng(to.latitude, to.longitude), zoom)
     animateCamera(update, 400)
 }
