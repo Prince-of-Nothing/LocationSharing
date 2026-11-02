@@ -3,6 +3,7 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -191,13 +192,23 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create server-side session.
+	// Create server-side session + JWT and write the login response.
+	a.issueSession(w, r, user)
+}
+
+// issueSession creates the server-side session, sets the session/CSRF cookies
+// and writes the standard login response for user. Shared by login and
+// register so both paths issue identical credentials.
+func (a *App) issueSession(w http.ResponseWriter, r *http.Request, user *models.User) {
+	s := config.Get()
+
 	sessionToken := security.GenerateSessionToken()
+	now := time.Now().UTC()
 	expiresAt := now.Add(time.Duration(s.SessionMaxAgeSeconds) * time.Second)
 	sess := &models.Session{
 		SessionToken: sessionToken,
 		UserID:       user.ID,
-		IPAddress:    clientIP,
+		IPAddress:    ClientIP(r),
 		UserAgent:    r.Header.Get("User-Agent"),
 		ExpiresAt:    expiresAt,
 	}
@@ -206,7 +217,6 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// JWT access token.
 	accessToken, err := security.CreateAccessToken(map[string]string{
 		"sub":   strconv.FormatInt(user.ID, 10),
 		"email": user.Email,
@@ -228,6 +238,94 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		CSRFToken:   sess.CSRFToken,
 		User:        toUserResponse(user),
 	})
+}
+
+// ---- Register (public self-registration for combined sign-in/sign-up) ----
+
+type registerRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	FullName string `json:"full_name,omitempty"`
+}
+
+func validateRegister(body *registerRequest) error {
+	v := newValidation()
+	if !validEmail(body.Email) {
+		v.add("email", "value is not a valid email address")
+	}
+	if len(body.Email) > 255 {
+		v.add("email", "ensure this value has at most 255 characters")
+	}
+	if len(body.Password) < 8 {
+		v.add("password", "ensure this value has at least 8 characters")
+	}
+	if len(body.Password) > 128 {
+		v.add("password", "ensure this value has at most 128 characters")
+	}
+	if len(strings.TrimSpace(body.FullName)) > 100 {
+		v.add("full_name", "ensure this value has at most 100 characters")
+	}
+	if len(v.Fields) > 0 {
+		return v.err()
+	}
+	return nil
+}
+
+// POST /api/v1/auth/register — public self-registration. The mobile client's
+// combined sign-in/sign-up flow calls this after a failed login so a new
+// account can be created with the same email/password form. The account is an
+// active resident; administrators keep provisioning via POST /api/v1/users.
+func (a *App) handleRegister(w http.ResponseWriter, r *http.Request) {
+	var body registerRequest
+	if err := decodeJSON(r, &body); err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	if err := validateRegister(&body); err != nil {
+		WriteError(w, r, err)
+		return
+	}
+
+	clientIP := ClientIP(r)
+	if !a.RateLimiter.Allow(registerRateLimitKey(clientIP)) {
+		WriteError(w, r, errf(http.StatusTooManyRequests, "RATE_LIMITED",
+			"Too many attempts. Please try again later."))
+		return
+	}
+
+	hash, err := security.GetPasswordHash(body.Password)
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+
+	name := strings.TrimSpace(body.FullName)
+	if name == "" {
+		// Default display name from the email local part.
+		name = strings.SplitN(security.NormalizeEmail(body.Email), "@", 2)[0]
+	}
+
+	user := &models.User{
+		Email:        strings.TrimSpace(body.Email),
+		PasswordHash: hash,
+		FullName:     name,
+		Role:         models.RoleResident,
+		IsActive:     true,
+	}
+	if err := a.Store.CreateUser(user); err != nil {
+		if strings.Contains(err.Error(), "already registered") {
+			WriteError(w, r, errf(http.StatusConflict, "EMAIL_EXISTS",
+				"An account with this email already exists."))
+			return
+		}
+		WriteError(w, r, err)
+		return
+	}
+
+	// Log the registration like login for audit purposes.
+	log.Printf("register: new account %s", security.NormalizeEmail(body.Email))
+
+	a.issueSession(w, r, user)
 }
 
 // isLockedOut reports whether an account should be rejected due to lockout,

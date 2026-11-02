@@ -25,7 +25,7 @@ func main() {
 
 	app := handlers.NewApp()
 	if app.SeedIfEmpty() {
-		log.Println("seeded demo accounts: alice@example.com/DemoPass123!, bob@example.com/DemoPass456!, admin@example.com/ChangeMe123!")
+		log.Println("seeded demo accounts: alice@example.com/DemoPass123!, bob@example.com/DemoPass456!, admin@example.com/ChangeMe123!, tester: user@user.user/user1234")
 	}
 	srv := &http.Server{
 		Addr:              ":" + portFromEnv(),

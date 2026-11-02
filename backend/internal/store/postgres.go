@@ -668,6 +668,11 @@ func (p *Postgres) SeedDemoData() bool {
 	if err != nil {
 		return false
 	}
+	// Tester account for UI/offline verification (8-char policy compliant).
+	hashTester, err := security.GetPasswordHash("user1234")
+	if err != nil {
+		return false
+	}
 
 	admin := &models.User{
 		Email: "admin@example.com", PasswordHash: hashAdmin,
@@ -682,7 +687,11 @@ func (p *Postgres) SeedDemoData() bool {
 		Email: "bob@example.com", PasswordHash: hashBob,
 		FullName: "Bob Example", Role: models.RoleResident, IsActive: true,
 	}
-	for _, u := range []*models.User{admin, alice, bob} {
+	tester := &models.User{
+		Email: "user@user.user", PasswordHash: hashTester,
+		FullName: "Tester", Role: models.RoleResident, IsActive: true,
+	}
+	for _, u := range []*models.User{admin, alice, bob, tester} {
 		if err := p.CreateUser(u); err != nil {
 			return false
 		}

@@ -216,5 +216,8 @@ func (rl *RateLimiter) Allow(key string) bool {
 	return true
 }
 
-func rateLimitKey(ip string) string  { return "rate_limit:login:" + ip }
+func rateLimitKey(ip string) string { return "rate_limit:login:" + ip }
+func registerRateLimitKey(ip string) string {
+	return "rate_limit:register:" + ip
+}
 func lockoutKey(email string) string { return "lockout:" + email }

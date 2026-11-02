@@ -480,3 +480,69 @@ func TestSessionCookieAuthAndCSRFProtection(t *testing.T) {
 			rec.Code, rec.Body.String())
 	}
 }
+
+// ---- Public registration (combined sign-in/sign-up flow) ----
+
+func TestRegisterCreatesActiveAccount(t *testing.T) {
+	app := NewApp()
+	rec := doJSON(t, app, http.MethodPost, "/api/v1/auth/register", "",
+		map[string]string{
+			"email":     "new@example.com",
+			"password":  "Str0ngPass!",
+			"full_name": "New User",
+		})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("register: status %d body %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "access_token") {
+		t.Fatalf("register response missing access token: %s", rec.Body.String())
+	}
+	// The freshly registered account can log in with the same credentials.
+	token := login(t, app, "new@example.com", "Str0ngPass!")
+	me := doJSON(t, app, http.MethodGet, "/api/v1/auth/me", token, nil)
+	if me.Code != http.StatusOK {
+		t.Fatalf("me after register: status %d body %s", me.Code, me.Body.String())
+	}
+}
+
+func TestRegisterDuplicateEmailConflict(t *testing.T) {
+	app := NewApp()
+	first := doJSON(t, app, http.MethodPost, "/api/v1/auth/register", "",
+		map[string]string{"email": "dupe@example.com", "password": "FirstPass1"})
+	if first.Code != http.StatusOK {
+		t.Fatalf("first register: status %d body %s", first.Code, first.Body.String())
+	}
+
+	second := doJSON(t, app, http.MethodPost, "/api/v1/auth/register", "",
+		map[string]string{"email": "dupe@example.com", "password": "AttackerPass9"})
+	if second.Code != http.StatusConflict ||
+		!strings.Contains(second.Body.String(), "EMAIL_EXISTS") {
+		t.Fatalf("duplicate register: expected 409 EMAIL_EXISTS, got %d %s",
+			second.Code, second.Body.String())
+	}
+
+	// Fail closed: a duplicate registration must not take over the account.
+	if l := doJSON(t, app, http.MethodPost, "/api/v1/auth/login", "",
+		map[string]string{"email": "dupe@example.com", "password": "AttackerPass9"}); l.Code != http.StatusUnauthorized {
+		t.Fatalf("duplicate register took over account: login status %d", l.Code)
+	}
+	// The original password must still work.
+	login(t, app, "dupe@example.com", "FirstPass1")
+}
+
+func TestRegisterRejectsWeakPasswordFailClosed(t *testing.T) {
+	app := NewApp()
+	rec := doJSON(t, app, http.MethodPost, "/api/v1/auth/register", "",
+		map[string]string{"email": "weak@example.com", "password": "short"})
+	if rec.Code != http.StatusUnprocessableEntity ||
+		!strings.Contains(rec.Body.String(), "VALIDATION_FAILED") {
+		t.Fatalf("weak password: expected 422 VALIDATION_FAILED, got %d %s", rec.Code, rec.Body.String())
+	}
+	// Fail closed: no account may exist after a rejected registration, so a
+	// valid-strength login attempt must still fail with 401.
+	if l := doJSON(t, app, http.MethodPost, "/api/v1/auth/login", "",
+		map[string]string{"email": "weak@example.com", "password": "Str0ngPass!"}); l.Code != http.StatusUnauthorized {
+		t.Fatalf("rejected registration created an account: login status %d %s",
+			l.Code, l.Body.String())
+	}
+}

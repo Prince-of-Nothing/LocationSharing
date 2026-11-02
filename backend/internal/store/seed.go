@@ -31,6 +31,12 @@ func (s *Store) SeedDemoData() bool {
 	if err != nil {
 		return false
 	}
+	// Tester account for UI/offline verification. The server enforces the
+	// 8-character password policy, so the tester password meets it.
+	hashTester, err := security.GetPasswordHash("user1234")
+	if err != nil {
+		return false
+	}
 
 	admin := &models.User{
 		Email: "admin@example.com", PasswordHash: hashAdmin,
@@ -45,7 +51,11 @@ func (s *Store) SeedDemoData() bool {
 		Email: "bob@example.com", PasswordHash: hashBob,
 		FullName: "Bob Example", Role: models.RoleResident, IsActive: true,
 	}
-	for _, u := range []*models.User{admin, alice, bob} {
+	tester := &models.User{
+		Email: "user@user.user", PasswordHash: hashTester,
+		FullName: "Tester", Role: models.RoleResident, IsActive: true,
+	}
+	for _, u := range []*models.User{admin, alice, bob, tester} {
 		if err := s.CreateUser(u); err != nil {
 			return false
 		}

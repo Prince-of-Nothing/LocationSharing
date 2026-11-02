@@ -91,6 +91,7 @@ func (a *App) Router() http.Handler {
 	// /api/v1/auth
 	r.Route("/api/v1/auth", func(r chi.Router) {
 		r.Post("/login", a.handleLogin)
+		r.Post("/register", a.handleRegister)
 		r.Post("/logout", a.handleLogout)
 		r.With(a.requireAuth).Post("/password/change", a.handleChangePassword)
 		r.With(a.requireAuth).Post("/password/force-change", a.handleForceChangePassword)
