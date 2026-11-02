@@ -251,6 +251,33 @@ If using Vercel for a separate frontend:
 
 **Recommended**: use Vercel only for the **static web client** (`web/public/`); keep APIs on Render (long-running server). This avoids the serverless refactor entirely.
 
+#### Vercel deploy path (prepared and credential-tested)
+
+`web/public/vercel.json` ships the `/api/v1/*`, `/ws/*` and `/health`
+rewrites to the Render Go API plus the CSP header — the client uses the
+relative `API_BASE = "/api/v1"`, so it works unchanged behind the proxy.
+
+```powershell
+# REST-based deploy, no CLI login required (token stays in env, never committed)
+$env:VERCEL_TOKEN="<token from vercel.com/account/tokens>"
+node scripts/deploy-vercel.mjs
+# → creates project `pinpoint-web`, uploads web/public, polls until READY
+```
+
+Credential scope notes (verified 2026-11-02):
+
+- A read-only `vck_…` key can GET `/v2/user`, `/v9/projects` and
+  `/v6/deployments` (all 200) but receives **403** on project creation and
+  on production *and* preview deployment creation — deploying requires an
+  account PAT with *Create Deployment* permission.
+- Supabase `https://skyvzxxquupylpczhznw.supabase.co` + `sb_secret_…`
+  verified: `GET /rest/v1/` → 200 (Postgres 14.18), `GET /auth/v1/health`
+  → 200 (GoTrue v2.197.0). The Management API (`api.supabase.com`)
+  rejects secret keys with 401 — it needs an `sbp_` personal access token;
+  the Postgres password itself comes from Dashboard → Settings → Database
+  (use the **Session pooler** URI, port 6543, because the free-tier direct
+  endpoint is IPv6-only and unreachable from Render).
+
 ### D. Mobile (`mobile/app/build.gradle.kts`)
 
 Point at Render service URL:
