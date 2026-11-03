@@ -7,8 +7,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/always-together/backend/internal/models"
-	"github.com/always-together/backend/internal/security"
+	"github.com/prince-of-nothing/pinpoint/backend/internal/models"
+	"github.com/prince-of-nothing/pinpoint/backend/internal/security"
 )
 
 type userCreateRequest struct {

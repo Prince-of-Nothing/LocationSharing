@@ -1,4 +1,4 @@
-# Contributing to Always Together
+# Contributing to Pinpoint
 
 Thanks for your interest! This is a thesis project with strict security and documentation
 requirements, so contribution rules are tighter than a typical hobby repo.

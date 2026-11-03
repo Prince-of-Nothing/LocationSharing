@@ -1,4 +1,4 @@
-// Command server starts the Always Together API HTTP server.
+// Command server starts the Pinpoint API HTTP server.
 //
 // Usage:
 //
@@ -16,8 +16,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/always-together/backend/internal/config"
-	"github.com/always-together/backend/internal/handlers"
+	"github.com/prince-of-nothing/pinpoint/backend/internal/config"
+	"github.com/prince-of-nothing/pinpoint/backend/internal/handlers"
 )
 
 func main() {

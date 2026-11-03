@@ -1,4 +1,4 @@
-# Render Blueprint for Pinpoint / Always Together
+# Render Blueprint for Pinpoint
 # Deploys: Go API (primary), Python API (optional), Web Client, Postgres, Redis
 # Usage: render.yaml + dashboard env vars (DATABASE_URL from Supabase, SESSION_SECRET)
 
@@ -93,6 +93,6 @@ databases:
   #   name: pinpoint-db
   #   plan: free
   #   region: oregon
-  #   databaseName: always_together
+  #   databaseName: pinpoint
   #   user: pinpoint
   #   ipAllowList: []  # private by default

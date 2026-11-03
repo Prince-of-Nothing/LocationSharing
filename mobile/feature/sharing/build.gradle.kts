@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "org.alwaystogether.feature.sharing"
+    namespace = "org.pinpoint.feature.sharing"
     compileSdk = 35
 
     defaultConfig { minSdk = 26 }

@@ -1,12 +1,12 @@
 # MVP Presentation Speech
 
-Speech for the Canva deck "Always Together — MVP presentation" (11 slides).
+Speech for the Canva deck "Pinpoint — MVP presentation" (11 slides).
 The same text is in the deck's speaker notes. Slide visuals are in
 [`docs/assets/presentation/`](../assets/presentation/).
 
 ## Slides 1–4 — Introduction (~235 words)
 
-Good afternoon — I'm Andrei, and my project is Always Together: privacy-first location sharing.
+Good afternoon — I'm Andrei, and my project is Pinpoint: privacy-first location sharing.
 
 Before the solution, let's look at the problem (slide 2). Location sharing is great for safety — you can see that a friend got home, or that your kid is on the way. The catch is how most apps treat friendship. Once someone is your friend, they can see where you are, all the time, until you remember to turn it off. That's the first problem: friend equals full access.
 
@@ -38,7 +38,7 @@ Slide 8 brings it together. These are the six security controls we committed to:
 
 Let me show it running (slide 9 plays the recorded demo video). This is a real recording of two browsers against the running server: Maria on the left, Alex on the right. They are friends, but Maria sees nothing of Alex until he shares — exact, for one hour. Now Maria sees him live, with accuracy and battery. When Alex moves, her map follows. Jordan missed his check-in, and Alex taps "I'm OK". When Alex stops sharing, he disappears from Maria's map immediately. Then we attack our own API: reading someone else's share returns 404, making yourself admin is rejected, a replayed token is refused and kills the session, logout ends access at once, and brute force hits the rate limit.
 
-The video (`docs/assets/presentation/always-together-demo.mp4`, 1:35) is built by `e2e/demo-video/`; talk over it and let it play. If there is time, run the live demo from the [MVP Demo Script](./mvp-demo-script.md) instead.
+The video (`docs/assets/presentation/pinpoint-demo.mp4`, 1:35) is built by `e2e/demo-video/`; talk over it and let it play. If there is time, run the live demo from the [MVP Demo Script](./mvp-demo-script.md) instead.
 
 Finally, what's next (slide 10). In October, an Android app with real background location. In November, push notifications for check-ins and multi-factor login. In December, abuse reporting and privacy tools like account deletion and data export. After that — trails and search, but only once the safety core is solid.
 

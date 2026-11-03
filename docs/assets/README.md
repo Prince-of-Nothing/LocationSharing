@@ -11,7 +11,7 @@ This directory contains visual assets referenced throughout the documentation.
 ## Adding Assets
 
 ### From Figma
-1. Open the [Always Together Figma file](https://www.figma.com/design/BqFYN5OtLLti55TAtB8xPX/Untitled)
+1. Open the [Pinpoint Figma file](https://www.figma.com/design/BqFYN5OtLLti55TAtB8xPX/Untitled)
 2. Select the frame or component you want to export
 3. In the right sidebar, click "Export"
 4. Choose PNG or SVG format (SVG preferred for diagrams, PNG for UI screens)

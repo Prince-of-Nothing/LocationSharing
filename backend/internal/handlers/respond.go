@@ -1,4 +1,4 @@
-// Package handlers implements the HTTP layer of the Always Together API:
+// Package handlers implements the HTTP layer of the Pinpoint API:
 // routing, request validation, JSON error responses, CORS and authentication
 // middleware.
 package handlers
@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/always-together/backend/internal/config"
+	"github.com/prince-of-nothing/pinpoint/backend/internal/config"
 )
 
 // Version is the API version reported by /health and /.

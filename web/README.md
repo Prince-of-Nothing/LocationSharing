@@ -1,6 +1,6 @@
-# Always Together — Web Client
+# Pinpoint — Web Client
 
-Browser client for the Always Together API (Go stack; the Python stack has a
+Browser client for the Pinpoint API (Go stack; the Python stack has a
 separate Leaflet-based client under `backend/web/`). Privacy-first: **zero
 third-party JavaScript, zero trackers**, modular ES modules with **no build
 step**, offline app shell, OSM-licensed tiles from a policy-compliant source

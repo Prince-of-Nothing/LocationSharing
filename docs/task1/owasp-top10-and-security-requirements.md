@@ -2,7 +2,7 @@
 
 **Course:** Introduction to Secure Development Practices
 **Deliverable:** OWASP Top 10 summary + impact analysis for our application, and ≥5 security requirements
-**Application:** Pinpoint (formerly *Always Together*) — a privacy-first location-sharing app (Go + FastAPI backends, Android client, PWA web client)
+**Application:** Pinpoint — a privacy-first location-sharing app (Go + FastAPI backends, Android client, PWA web client)
 **Due:** 4 November 2026 · **Prepared:** 2 November 2026
 
 ---

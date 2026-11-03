@@ -11,8 +11,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 
-	"github.com/always-together/backend/internal/config"
-	"github.com/always-together/backend/internal/store"
+	"github.com/prince-of-nothing/pinpoint/backend/internal/config"
+	"github.com/prince-of-nothing/pinpoint/backend/internal/store"
 )
 
 // App bundles the dependencies shared by all HTTP handlers.

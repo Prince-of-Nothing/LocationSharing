@@ -1,4 +1,4 @@
-# Project Description — Always Together
+# Project Description — Pinpoint
 
 ## In one sentence
 A location-sharing system where **friendship ≠ permission**: every share of your location is

@@ -2,7 +2,7 @@
  * Builds the presentation demo video from the recordings made by record.js.
  *
  *   sh backend/scripts/demo_security.sh > e2e/demo-video/out/security-output.txt
- *   node e2e/demo-video/compose.js          # -> out/always-together-demo.mp4
+ *   node e2e/demo-video/compose.js          # -> out/pinpoint-demo.mp4
  *
  * Renders (with Playwright) a title card, one caption bar per step and an
  * animated terminal that replays the real security-script output, then
@@ -67,7 +67,7 @@ const TITLE_HTML = `<html><head><style>${FONTS}
   h1 { font-family: 'DM Serif Display', serif; font-weight: 400; font-size: 150px; line-height: 1.1; }
   .s { margin-top: 26px; font-size: 30px; letter-spacing: .14em; text-transform: uppercase; }
   .m { margin-top: 70px; font-size: 26px; color: #6B7280; }
-</style></head><body><h1>Live demo</h1><div class="s">Always Together</div>
+</style></head><body><h1>Live demo</h1><div class="s">Pinpoint</div>
   <div class="m">Two real browser sessions against the running API · Maria receives, Alex shares</div></body></html>`;
 
 function terminalHtml(lines) {
@@ -188,6 +188,6 @@ function ff(args) {
   // Concatenate (same codec settings, so stream copy is safe)
   const list = path.join(OUT, "parts.txt");
   fs.writeFileSync(list, ["part1.mp4", "part2.mp4", "part3.mp4"].map((p) => `file '${path.join(OUT, p)}'`).join("\n"));
-  ff(["-f", "concat", "-safe", "0", "-i", list, "-c", "copy", "-movflags", "+faststart", path.join(OUT, "always-together-demo.mp4")]);
-  console.log("Wrote", path.join(OUT, "always-together-demo.mp4"));
+  ff(["-f", "concat", "-safe", "0", "-i", list, "-c", "copy", "-movflags", "+faststart", path.join(OUT, "pinpoint-demo.mp4")]);
+  console.log("Wrote", path.join(OUT, "pinpoint-demo.mp4"));
 })().catch((e) => { console.error(e); process.exit(1); });

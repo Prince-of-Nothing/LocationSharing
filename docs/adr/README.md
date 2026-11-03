@@ -27,7 +27,7 @@ Examples: backend framework, real-time transport (WebSockets vs. MQTT), authenti
 | # | Title | Status |
 |---|-------|--------|
 | 0001 | [Record Architecture Decisions](./record-architecture-decisions.md) | Accepted |
-| 0002 | [Adopt Always Together Product Direction](./adopt-always-together-product-direction.md) | Accepted |
+| 0002 | [Adopt Pinpoint Product Direction](./0002-adopt-pinpoint-product-direction.md) | Accepted |
 | 0003 | [Password Authentication with Session-Bound JWTs and Rotating Refresh Tokens](./password-auth-with-rotating-refresh-tokens.md) | Accepted |
 | 0004 | [Web Client for the MVP Demonstration; Flutter Deferred](./web-client-for-mvp-demonstration.md) | Accepted |
 | 0005 | [Store Only the Latest Location; Derive States on Read](./store-latest-location-only.md) | Accepted |

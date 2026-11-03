@@ -84,7 +84,7 @@ class TokenService:
             "iat": now,
             "nbf": now,
             "exp": now + ttl,
-            "iss": "always-together-api",
+            "iss": "pinpoint-api",
         }
         return jwt.encode(payload, self._secret, algorithm=self._algorithm)
 
@@ -103,7 +103,7 @@ class TokenService:
                 self._secret,
                 algorithms=[self._algorithm],  # explicit allowlist
                 options={"require": ["exp", "iat", "sub", "sid", "ver", "type", "jti"]},
-                issuer="always-together-api",
+                issuer="pinpoint-api",
             )
         except jwt.PyJWTError as exc:
             logger.info("Rejected token: %s", type(exc).__name__)

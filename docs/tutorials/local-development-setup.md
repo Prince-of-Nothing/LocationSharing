@@ -1,6 +1,6 @@
 # Local Development Setup
 
-This tutorial gets the Always Together MVP running on your machine, first
+This tutorial gets the Pinpoint MVP running on your machine, first
 with Docker (fastest), then natively for development and testing.
 
 ## Prerequisites

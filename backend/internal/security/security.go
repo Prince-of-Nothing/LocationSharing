@@ -15,7 +15,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/always-together/backend/internal/config"
+	"github.com/prince-of-nothing/pinpoint/backend/internal/config"
 )
 
 const specialChars = "!@#$%^&*()_+-=[]{}|;:,.<>?"

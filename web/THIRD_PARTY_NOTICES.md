@@ -1,4 +1,4 @@
-# Third-Party Notices & Licensing — Always Together Web Client
+# Third-Party Notices & Licensing — Pinpoint Web Client
 
 Companion to [mobile/THIRD_PARTY_NOTICES.md](../mobile/THIRD_PARTY_NOTICES.md)
 (same OSM obligations; SDK tables differ per platform).

@@ -17,7 +17,7 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_DB: always_together
+          POSTGRES_DB: pinpoint
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
         ports: ["5432:5432"]
@@ -43,7 +43,7 @@ jobs:
         run: pip-audit -r requirements.txt
       - name: Migrations apply cleanly on PostgreSQL
         env:
-          DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/always_together
+          DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/pinpoint
         run: |
           alembic upgrade head
           alembic check
@@ -60,7 +60,7 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_DB: always_together
+          POSTGRES_DB: pinpoint
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
         ports: ["5432:5432"]
@@ -81,7 +81,7 @@ jobs:
         env:
           # Drives the store conformance suite against real PostgreSQL
           # (board T01); memory-driver tests always run.
-          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/always_together?sslmode=disable
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pinpoint?sslmode=disable
         run: go test ./...
 
   web:

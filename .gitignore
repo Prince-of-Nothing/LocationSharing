@@ -45,3 +45,6 @@ Thumbs.db
 
 # Go build output
 backend/server
+
+# Android build artifacts (APKs are CI artifacts, never committed)
+*.apk

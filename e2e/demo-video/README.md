@@ -24,7 +24,7 @@ Records the presentation demo video from the real web client and API.
 
    ```bash
    node e2e/demo-video/record.js
-   node e2e/demo-video/compose.js     # -> e2e/demo-video/out/always-together-demo.mp4
+   node e2e/demo-video/compose.js     # -> e2e/demo-video/out/pinpoint-demo.mp4
    ```
 
 The recording is two real browser sessions side by side: Maria (receives,

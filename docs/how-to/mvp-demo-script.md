@@ -1,6 +1,6 @@
 # MVP Demo Script
 
-A 15-minute demonstration of the Always Together MVP for Task 9: architecture,
+A 15-minute demonstration of the Pinpoint MVP for Task 9: architecture,
 main functionality and implemented security measures. Setup is in
 [How to Deploy for University Demonstration](./deploy-for-demonstration.md).
 
@@ -13,7 +13,7 @@ Also open a terminal in the repository.
 
 ## 0. Opening (1 min)
 
-> "Always Together lets trusted friends share their location for safety,
+> "Pinpoint lets trusted friends share their location for safety,
 > without friendship implying location access. Every share is one-way,
 > chosen precision, time-limited and revocable. Recipients always see how
 > fresh the data is."
@@ -111,7 +111,7 @@ abuse handling, privacy rights and an ASVS review.
 
 ## Presentation slide outline
 
-1. Title: Always Together, a privacy-first safety map
+1. Title: Pinpoint, a privacy-first safety map
 2. Problem: location sharing without consent enables stalking; stale data misleads
 3. Scope: MVP requirements REQ-01..09 and what was deferred (and why)
 4. Architecture: modular monolith diagram; data minimisation decisions

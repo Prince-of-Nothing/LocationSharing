@@ -4,7 +4,7 @@
 **Last Updated:** September 2024  
 **Purpose:** Evidence-based justification for architectural decisions before code is written
 
-This document consolidates academic research, industry standards, and technical validations to ensure the Always Together app is built on proven foundations rather than assumptions. Since implementation has not started, this research directly informs the upcoming development sprints.
+This document consolidates academic research, industry standards, and technical validations to ensure the Pinpoint app is built on proven foundations rather than assumptions. Since implementation has not started, this research directly informs the upcoming development sprints.
 
 ---
 
@@ -99,7 +99,7 @@ This document consolidates academic research, industry standards, and technical 
 - Parental access to collected data
 - Data retention limits
 
-**Assessment:** Always Together currently targets 13+ demographic. Under-13 support would require:
+**Assessment:** Pinpoint currently targets 13+ demographic. Under-13 support would require:
 1. Parental consent flow (email + credit card verification or video call)
 2. Separate data processing pipeline
 3. Enhanced deletion mechanisms
@@ -302,7 +302,7 @@ SELECT cron.schedule(
 
 ### 7.1 Location Sharing Apps Comparison
 
-| Feature | Always Together | Google Maps | Life360 | Apple Find My |
+| Feature | Pinpoint | Google Maps | Life360 | Apple Find My |
 |---------|----------------|-------------|---------|---------------|
 | **Privacy Model** | Ephemeral, consent-based | Persistent until revoked | Persistent, family-focused | Persistent, Apple ecosystem |
 | **Data Retention** | None (server-side) | 24h history | Unlimited | Unlimited |

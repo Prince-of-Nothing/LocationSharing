@@ -24,7 +24,7 @@ curl -sk -X POST https://localhost:8443/api/v1/auth/register \
   -d '{"username":"proxytest","email":"p@example.com","password":"correct horse battery staple"}'
 
 Q() { docker compose exec -T -e PGPASSWORD=local-dev-runtime db \
-      psql -h localhost -U app_runtime -d always_together -tAc "$1"; }
+      psql -h localhost -U app_runtime -d pinpoint -tAc "$1"; }
 Q 'select count(*) from users'
 Q 'select ip_address from audit_events order by id desc limit 1'
 Q "update audit_events set outcome='x'"

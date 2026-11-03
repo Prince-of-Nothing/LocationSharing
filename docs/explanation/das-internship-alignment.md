@@ -2,14 +2,14 @@
 
 ## Purpose
 
-This note maps the Always Together project to the Development of Secure
+This note maps the Pinpoint project to the Development of Secure
 Applications (DAS) internship expectations. It is a planning and evidence
 guide, **not** a replacement for the official Internship Report, PBL Report,
 Log Book, weekly activity reports, attendance sheet, or ELSE templates.
 
 ## Project definition
 
-Always Together is a privacy-first safety map. The September MVP helps a
+Pinpoint is a privacy-first safety map. The September MVP helps a
 user share their current location with selected trusted friends, complete
 check-ins, see stale-device state, and navigate using an OpenStreetMap-based
 map or an external navigation app.

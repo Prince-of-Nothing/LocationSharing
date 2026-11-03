@@ -7,7 +7,7 @@ catalogue. Corresponds to [§5.2 Component Breakdown](../building-block-view.md)
 
 ```mermaid
 C4Component
-    title Always Together — API Service internals
+    title Pinpoint — API Service internals
 
     Container_Ext(client, "Mobile Client / Web Companion", "Bearer JWT or session cookie + CSRF")
 

@@ -3,8 +3,8 @@ package store
 import (
 	"time"
 
-	"github.com/always-together/backend/internal/models"
-	"github.com/always-together/backend/internal/security"
+	"github.com/prince-of-nothing/pinpoint/backend/internal/models"
+	"github.com/prince-of-nothing/pinpoint/backend/internal/security"
 )
 
 // SeedDemoData populates the store with an administrator and two accepted

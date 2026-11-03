@@ -1,6 +1,6 @@
 # Research Notes and References
 
-This document catalogs external sources, standards, regulations, and academic research consulted during the design of Always Together. It is organized by topic area to support validation of architectural decisions and compliance claims.
+This document catalogs external sources, standards, regulations, and academic research consulted during the design of Pinpoint. It is organized by topic area to support validation of architectural decisions and compliance claims.
 
 ---
 

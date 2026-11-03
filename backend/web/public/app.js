@@ -1,7 +1,7 @@
 "use strict";
 
 // ---------------------------------------------------------------------------
-// Always Together — web client (vanilla JS SPA)
+// Pinpoint — web client (vanilla JS SPA)
 // Talks to the Go API through the nginx same-origin proxy (/api/v1/...).
 // Auth: session cookie + double-submit CSRF token (X-CSRF-Token header).
 // ---------------------------------------------------------------------------

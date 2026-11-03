@@ -1,6 +1,6 @@
-# Always Together — Android App
+# Pinpoint — Android App
 
-Kotlin/Jetpack Compose client for the Always Together API. Privacy-first:
+Kotlin/Jetpack Compose client for the Pinpoint API. Privacy-first:
 **0 trackers**, server-side-consented location sharing, offline maps, and
 offline navigation hand-off. Licensing obligations (OSM/ODbL etc.) are in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

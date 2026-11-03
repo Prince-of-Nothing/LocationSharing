@@ -1,4 +1,4 @@
-# Third-Party Notices & Licensing — Always Together Mobile
+# Third-Party Notices & Licensing — Pinpoint Mobile
 
 This document lists every third-party component the mobile app depends on,
 its license, and the obligations we fulfill. **Goal: ship 0 trackers and
@@ -11,7 +11,7 @@ attribution SDKs — not Firebase, not Google Play Services, not Mapbox, not
 Sentry, not Countly, not Bugsnag. Nothing in the dependency tree phones
 home except:
 
-1. **Our own API** (`api.always-together.example` / local dev stack) — the
+1. **Our own API** (`api.pinpoint.example` / local dev stack) — the
    user's account data lives only there.
 2. **The configured tile server** (default: OpenFreeMap) — map tile
    requests only; no user identifiers are attached by us, and MapLibre

@@ -1,6 +1,6 @@
-# Always Together Backend (Go)
+# Pinpoint Backend (Go)
 
-HTTP API for the Always Together product. The Go service is maintained
+HTTP API for the Pinpoint product. The Go service is maintained
 alongside the Python/FastAPI implementation in `app/`.
 
 ## Stack

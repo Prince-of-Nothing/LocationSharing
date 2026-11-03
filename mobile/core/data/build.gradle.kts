@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "org.alwaystogether.core.data"
+    namespace = "org.pinpoint.core.data"
     compileSdk = 35
 
     defaultConfig { minSdk = 26 }

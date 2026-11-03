@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Always Together — web client configuration.
+// Pinpoint — web client configuration.
 //
 // Tile source policy (see THIRD_PARTY_NOTICES.md):
 // The default is the Wikimedia Foundation tile endpoint, which explicitly

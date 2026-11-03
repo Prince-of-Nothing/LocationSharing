@@ -8,11 +8,11 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    image: always-together/backend:latest
+    image: pinpoint/backend:latest
     restart: unless-stopped
     environment:
       PORT: "8000"
-      APP_NAME: "Always Together API"
+      APP_NAME: "Pinpoint API"
       DEBUG: "false"
       COOKIE_INSECURE: "true"
       SEED_DEMO_DATA: "true"
@@ -32,7 +32,7 @@ services:
   web:
     build:
       context: ./web
-    image: always-together/web:latest
+    image: pinpoint/web:latest
     restart: unless-stopped
     depends_on:
       - backend
@@ -43,15 +43,15 @@ services:
     image: postgres:16-alpine
     profiles: ["python", "https"]
     environment:
-      POSTGRES_DB: always_together
-      POSTGRES_USER: always_together
+      POSTGRES_DB: pinpoint
+      POSTGRES_USER: pinpoint
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-dev-only}
       APP_DB_PASSWORD: ${APP_DB_PASSWORD:-local-dev-runtime}
     volumes:
       - db-data:/var/lib/postgresql/data
       - ./docker/postgres/init-roles.sh:/docker-entrypoint-initdb.d/10-init-roles.sh:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U always_together -d always_together"]
+      test: ["CMD-SHELL", "pg_isready -U pinpoint -d pinpoint"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -70,7 +70,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.python
-    image: always-together/python-api:latest
+    image: pinpoint/python-api:latest
     profiles: ["python", "https"]
     depends_on:
       db:
@@ -79,8 +79,8 @@ services:
         condition: service_healthy
     environment:
       ENVIRONMENT: development
-      DATABASE_URL: postgresql+psycopg://app_runtime:${APP_DB_PASSWORD:-local-dev-runtime}@db:5432/always_together
-      MIGRATION_DATABASE_URL: postgresql+psycopg://always_together:${POSTGRES_PASSWORD:-local-dev-only}@db:5432/always_together
+      DATABASE_URL: postgresql+psycopg://app_runtime:${APP_DB_PASSWORD:-local-dev-runtime}@db:5432/pinpoint
+      MIGRATION_DATABASE_URL: postgresql+psycopg://pinpoint:${POSTGRES_PASSWORD:-local-dev-only}@db:5432/pinpoint
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: ${SECRET_KEY:-local-dev-only-secret-change-me-for-anything-public}
       COOKIE_SECURE: "false"

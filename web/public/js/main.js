@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Always Together — web client entry point.
+// Pinpoint — web client entry point.
 // Modular vanilla ES modules: no build step, no npm, zero third-party JS
 // (0-tracker stance; see THIRD_PARTY_NOTICES.md).
 // ---------------------------------------------------------------------------

@@ -12,7 +12,7 @@ requires it. See [Technology Stack and Infrastructure](../reference/technology-s
 ## 4.2 Frozen MVP Technology Stack
 
 Recorded as a decision, not a hidden assumption — see
-[ADR-0002](../adr/0002-adopt-always-together-product-direction.md):
+[ADR-0002](../adr/0002-adopt-pinpoint-product-direction.md):
 
 - **Mobile client:** Flutter + native location modules (Android/iOS platform
   channels for background permissions, battery-aware sampling, geofencing,

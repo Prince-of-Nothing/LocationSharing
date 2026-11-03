@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Always Together — service worker (offline app shell).
+// Pinpoint — service worker (offline app shell).
 //
 // Privacy stance: this worker caches ONLY the static app shell (HTML/CSS/JS).
 // API responses — especially anything containing locations — are NEVER put
@@ -9,7 +9,7 @@
 // Bump SW_VERSION in js/config.js when static assets change.
 // ---------------------------------------------------------------------------
 
-const VERSION = "always-together-shell";
+const VERSION = "pinpoint-shell";
 const SHELL = [
   "./",
   "./index.html",

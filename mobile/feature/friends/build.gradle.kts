@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "org.alwaystogether.feature.friends"
+    namespace = "org.pinpoint.feature.friends"
     compileSdk = 35
 
     defaultConfig { minSdk = 26 }

@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/always-together/backend/internal/models"
-	"github.com/always-together/backend/internal/security"
+	"github.com/prince-of-nothing/pinpoint/backend/internal/models"
+	"github.com/prince-of-nothing/pinpoint/backend/internal/security"
 )
 
 func newTestAdmin(t *testing.T) (*App, string) {
@@ -95,7 +95,7 @@ func TestHealthAndRoot(t *testing.T) {
 		t.Fatalf("health: %d %s", rec.Code, rec.Body.String())
 	}
 	rec = doJSON(t, app, http.MethodGet, "/", "", nil)
-	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "Always Together API") {
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "Pinpoint API") {
 		t.Fatalf("root: %d %s", rec.Code, rec.Body.String())
 	}
 }

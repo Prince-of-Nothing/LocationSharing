@@ -94,16 +94,16 @@ sudo chown -R $USER:$USER pinpoint
 
 ```bash
 # Create DB and user
-sudo -u postgres psql -c "CREATE DATABASE always_together;"
+sudo -u postgres psql -c "CREATE DATABASE pinpoint;"
 sudo -u postgres psql -c "CREATE USER pinpoint WITH ENCRYPTED PASSWORD 'PinpointPass123';"
-sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE always_together TO pinpoint;"
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE pinpoint TO pinpoint;"
 ```
 
 ### C. Environment (`.env` file, never committed)
 
 Create `/opt/pinpoint/.env` (or `export` in systemd service file):
 ```bash
-DATABASE_URL=postgresql://pinpoint:PinpointPass123@localhost:5432/always_together
+DATABASE_URL=postgresql://pinpoint:PinpointPass123@localhost:5432/pinpoint
 REDIS_URL=redis://localhost:6379/0
 SESSION_SECRET=$(openssl rand -base64 32)
 DB_DRIVER=postgres
@@ -309,7 +309,7 @@ implementation(project(":core:network"))
 - Mobile `CSP` (`img-src`) allow-list includes tile host; `connect-src` includes Render API and WebSocket endpoints.
 - Server-side enforcement only: auth/session/token enforced by Go + Python APIs, not mobile.
 - `Security.md` (`docs/SECURITY.md`) describes server-side enforcement, fail-closed design, regression test requirement.
-- `CrashLogger` (`AlwaysTogether` → `Pinpoint`) logs locally to `Downloads/crash_reports/`; share button uses `ACTION_SEND` with file text.
+- `CrashLogger` (`Pinpoint` tag) logs locally to `Downloads/crash_reports/`; share button uses `ACTION_SEND` with file text.
 - `MobileApp` catches initialization errors gracefully (no crash); error screen shown if container fails; `CrashReport.write()` saves file.
 - `OfflineMapManager` observer signatures verified against 11.5.1 AAR (`Array<OfflineRegion>?`, `OfflineRegionStatus?`, `String?`); `destroy()` removed (no such API); `bytesRemaining` → `completedBytes`.
 - `JsonConverterFactory` (hand-rolled) replaces jakewharton `retrofit2-kotlinx-serialization-converter` 1.0.0 (internal `Factory`/`Serializer`).
@@ -377,4 +377,4 @@ cat render.yaml
 - **Web client CSP** (`nginx.conf`, `render.yaml`): `img-src 'self' data: https://maps.wikimedia.org`; `connect-src` includes Render API; `base-uri 'self'`; `frame-ancestors 'none'`.
 - **Mobile build output** (`mobile/app/build/`): `outputs/apk/debug/app-debug.apk` (51.1 MB); output from `gradlew.bat :app:assembleDebug --console=plain --no-daemon`; `EXIT:0` verified; build time ~20s with `javac` / Kotlin compiler.
 - **ADB output path** (`C:\Users\Unknown\Documents\Pinpoint\app-debug.apk`): copied from `mobile/app/build/outputs/apk/debug/app-debug.apk` via `Copy-Item`; file size 51.1 MB; timestamp matches latest build.
-- **Crash testing note**: `CrashLogger` + `CrashReport` added; `MobileApp` catches `Throwable`; `MainActivity` shows error screen with share button; `CrashReport` creates `Downloads/crash_reports/crash_YYYY-MM-DD_HH-mm-ss.txt`; `CrashLogger` logs to `AlwaysTogether` / `Pinpoint` tag; no Firebase SDK.
+- **Crash testing note**: `CrashLogger` + `CrashReport` added; `MobileApp` catches `Throwable`; `MainActivity` shows error screen with share button; `CrashReport` creates `Downloads/crash_reports/crash_YYYY-MM-DD_HH-mm-ss.txt`; `CrashLogger` logs to `Pinpoint` tag; no Firebase SDK.

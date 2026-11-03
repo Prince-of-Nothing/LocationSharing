@@ -2,7 +2,7 @@
 
 ## 1.1 Purpose
 
-Always Together helps people stay connected in the real world through location sharing, navigation, messaging, group discovery, creative prompts, and optional community experiments. It is a privacy-first safety map: the September MVP helps a user share their current location with selected trusted friends, complete check-ins, see stale-device state, and navigate using an OpenStreetMap-based map or an external navigation app.
+Pinpoint helps people stay connected in the real world through location sharing, navigation, messaging, group discovery, creative prompts, and optional community experiments. It is a privacy-first safety map: the September MVP helps a user share their current location with selected trusted friends, complete check-ins, see stale-device state, and navigate using an OpenStreetMap-based map or an external navigation app.
 
 ## 1.2 Product Rule
 

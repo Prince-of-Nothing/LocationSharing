@@ -1,4 +1,4 @@
-// Package store provides the persistence layer for the Always Together API.
+// Package store provides the persistence layer for the Pinpoint API.
 // It is a thread-safe in-memory implementation of all entity tables
 // (users, sessions, friendships, location shares, login attempts).
 //
@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/always-together/backend/internal/models"
-	"github.com/always-together/backend/internal/security"
+	"github.com/prince-of-nothing/pinpoint/backend/internal/models"
+	"github.com/prince-of-nothing/pinpoint/backend/internal/security"
 )
 
 // ErrNotFound is returned when an entity does not exist.

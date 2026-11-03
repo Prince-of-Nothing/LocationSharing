@@ -9,7 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/always-together/backend/internal/models"
+	"github.com/prince-of-nothing/pinpoint/backend/internal/models"
 )
 
 type locationShareCreate struct {

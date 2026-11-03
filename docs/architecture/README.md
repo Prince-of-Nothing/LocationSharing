@@ -1,6 +1,6 @@
 # Architecture Documentation
 
-This directory contains the **arc42-structured** architecture documentation for **Always Together**. Each file corresponds to a standard arc42 section. Diagrams follow the C4 model and are stored in [`diagrams/`](./diagrams).
+This directory contains the **arc42-structured** architecture documentation for **Pinpoint**. Each file corresponds to a standard arc42 section. Diagrams follow the C4 model and are stored in [`diagrams/`](./diagrams).
 
 ## arc42 Sections
 

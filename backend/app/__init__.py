@@ -1,5 +1,5 @@
 """
-Always Together API - Backend Application
+Pinpoint API - Backend Application
 A privacy-first location sharing application with directional authorization.
 """
 

@@ -7,8 +7,8 @@
 > authentication differs in the MVP.
 
 **Version:** `api/v1`  
-**Base URL:** `https://api.always-together.local/api/v1`  
-**WebSocket URL:** `wss://api.always-together.local/ws`  
+**Base URL:** `https://api.pinpoint.local/api/v1`  
+**WebSocket URL:** `wss://api.pinpoint.local/ws`  
 
 All HTTP responses use JSON. Error responses follow Problem Details format (RFC 7807).
 
@@ -522,7 +522,7 @@ GET /map/navigation/deep-link?recipient=usr_abc123&destination=40.7580,-73.9855
 
 Connect to WebSocket endpoint:
 ```
-wss://api.always-together.local/ws?token=<access_token>
+wss://api.pinpoint.local/ws?token=<access_token>
 ```
 
 ### Server → Client Events

@@ -26,7 +26,7 @@ COMMON_PASSWORDS = frozenset(
     iloveyou letmein welcome welcome1 welcome123 admin admin123 administrator
     monkey dragon football baseball sunshine princess shadow superman michael
     trustno1 abc123 abcd1234 changeme changeme123 secret secret123 login
-    alwaystogether always_together locationsharing
+    pinpoint locationsharing
     """.split()
 )
 

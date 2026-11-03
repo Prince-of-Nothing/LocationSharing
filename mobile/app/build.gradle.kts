@@ -5,11 +5,11 @@
 }
 
 android {
-    namespace = "org.alwaystogether.mobile"
+    namespace = "org.pinpoint.mobile"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "org.alwaystogether.mobile"
+        applicationId = "org.pinpoint.mobile"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
@@ -26,7 +26,7 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             // Production API URL is injected at build time; never committed.
-            buildConfigField("String", "API_BASE_URL", "\"https://api.always-together.example/api/v1/\"")
+            buildConfigField("String", "API_BASE_URL", "\"https://api.pinpoint.example/api/v1/\"")
         }
     }
 

@@ -4,7 +4,7 @@ Every comparable real-time location product researched (OwnTracks, Traccar, OsmA
 Mastodon) treats privacy and data handling as a **standalone, explicit, user-facing
 document** rather than a line item in internal design notes, because location data
 is sensitive and users/regulators need to find this information directly. This
-document is that page for Always Together.
+document is that page for Pinpoint.
 
 ## Core principles
 

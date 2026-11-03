@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "org.alwaystogether.core.map"
+    namespace = "org.pinpoint.core.map"
     compileSdk = 35
 
     defaultConfig { minSdk = 26 }

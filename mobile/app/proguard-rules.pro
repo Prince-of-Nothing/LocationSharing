@@ -3,11 +3,11 @@
 # kotlinx.serialization: keep serializers for @Serializable DTOs.
 -keepattributes *Annotation*, InnerClasses
 -dontnote kotlinx.serialization.**
--keepclassmembers class org.alwaystogether.core.network.dto.** {
+-keepclassmembers class org.pinpoint.core.network.dto.** {
     *** Companion;
     kotlinx.serialization.KSerializer serializer(...);
 }
--keepclasseswithmembers class org.alwaystogether.core.network.dto.** {
+-keepclasseswithmembers class org.pinpoint.core.network.dto.** {
     kotlinx.serialization.KSerializer serializer(...);
 }
 

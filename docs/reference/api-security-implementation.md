@@ -65,8 +65,8 @@ This document provides detailed security implementation guidance for all API end
 ```json
 {
   "sub": "usr_7f8d9e2a1b3c4d5e",
-  "iss": "https://api.always-together.local",
-  "aud": "always-together-mobile",
+  "iss": "https://api.pinpoint.local",
+  "aud": "pinpoint-mobile",
   "exp": 1699900800,
   "iat": 1699900000,
   "scope": "profile:read location:write checkin:write",
@@ -647,7 +647,7 @@ def validate_username(username):
         raise BadRequestException("Username must start with a letter and contain only letters, numbers, and underscores")
     
     # Check reserved usernames
-    reserved = ['admin', 'moderator', 'support', 'always_together', 'system']
+    reserved = ['admin', 'moderator', 'support', 'pinpoint', 'system']
     if username.lower() in reserved:
         raise BadRequestException("This username is reserved")
     

@@ -1,7 +1,7 @@
 # October Progress and Project Status
 
 **Course:** Introduction to Secure Development Practices — Task 1 companion document
-**Application:** Pinpoint (formerly *Always Together*) — privacy-first location-sharing app
+**Application:** Pinpoint — privacy-first location-sharing app
 **Period covered:** 1 October – 2 November 2026 · **Prepared:** 2 November 2026
 
 ---

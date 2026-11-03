@@ -1,4 +1,4 @@
-# Implementation Plan and Status: Always Together MVP
+# Implementation Plan and Status: Pinpoint MVP
 
 This page tracks the internship tasks against what is actually in the
 repository. It replaces the earlier 8-week plan, which assumed OIDC/PKCE and a

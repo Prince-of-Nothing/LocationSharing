@@ -1,4 +1,4 @@
-module github.com/always-together/backend
+module github.com/prince-of-nothing/pinpoint/backend
 
 go 1.25.0
 

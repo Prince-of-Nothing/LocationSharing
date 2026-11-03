@@ -1,5 +1,5 @@
 /*
- * Always Together web client.
+ * Pinpoint web client.
  *
  * Security notes:
  * - The access token lives only in memory. The refresh token is an HttpOnly

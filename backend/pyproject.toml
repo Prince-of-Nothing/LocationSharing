@@ -1,7 +1,7 @@
 [project]
-name = "always-together-backend"
+name = "pinpoint-backend"
 version = "0.2.0"
-description = "Privacy-first location sharing API (Always Together MVP)"
+description = "Privacy-first location sharing API (Pinpoint MVP)"
 requires-python = ">=3.11"
 
 [tool.pytest.ini_options]

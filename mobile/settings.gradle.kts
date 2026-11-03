@@ -14,7 +14,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "always-together-mobile"
+rootProject.name = "pinpoint-mobile"
 
 // Clean Architecture module layout (board T04, extended with :core:domain
 // for a pure-Kotlin, JVM-testable application layer).

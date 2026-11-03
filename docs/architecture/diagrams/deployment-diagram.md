@@ -8,7 +8,7 @@ documented here; the production topology reflects the frozen MVP stack in
 
 ```mermaid
 C4Deployment
-    title Always Together — Deployment (development / MVP demonstration)
+    title Pinpoint — Deployment (development / MVP demonstration)
 
     Deployment_Node(dev, "Developer machine", "Windows/macOS/Linux") {
         Container(uvicorn, "API Service", "uvicorn + FastAPI", "app/main.py; SQLite for quick local runs, PostgreSQL via Docker")

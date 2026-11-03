@@ -1,6 +1,6 @@
 {
-  "name": "Always Together",
-  "short_name": "AlwaysTogether",
+  "name": "Pinpoint",
+  "short_name": "Pinpoint",
   "description": "Privacy-first location sharing with explicit, revocable consent.",
   "start_url": ".",
   "display": "standalone",

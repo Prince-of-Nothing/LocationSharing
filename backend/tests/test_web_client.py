@@ -8,7 +8,7 @@ WEB = Path(__file__).resolve().parent.parent / "web"
 def test_index_served_with_csp(client):
     response = client.get("/")
     assert response.status_code == 200
-    assert "Always Together" in response.text
+    assert "Pinpoint" in response.text
     csp = response.headers["content-security-policy"]
     assert "script-src 'self'" in csp and "unsafe-inline" not in csp and "unsafe-eval" not in csp
     assert "frame-ancestors 'none'" in csp

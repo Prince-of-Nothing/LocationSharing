@@ -1,4 +1,4 @@
-# Always Together
+# Pinpoint
 
 **A privacy-first location-sharing platform for trusted friends.**
 
@@ -49,4 +49,4 @@ Full stack: `docker compose up --build` → http://localhost:8080
 
 ## License
 
-MIT © 2025 Always Together
+MIT © 2025 Pinpoint

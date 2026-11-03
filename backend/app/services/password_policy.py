@@ -35,9 +35,6 @@ COMMON_PASSWORDS = frozenset(
         "baseball",
         "sunshine",
         "princess",
-        "alwaysTogether",
-        "alwaystogether",
-        "together",
         "pinpoint",
     }
 )

@@ -115,7 +115,7 @@ func load() *Settings {
 
 	return &Settings{
 		DatabaseURL: envStr("DATABASE_URL",
-			"postgresql://postgres:postgres@localhost:5432/always_together"),
+			"postgresql://postgres:postgres@localhost:5432/pinpoint"),
 		DBDriver:    envStr("DB_DRIVER", "memory"),
 		RedisURL:    envStr("REDIS_URL", "redis://localhost:6379/0"),
 
@@ -140,7 +140,7 @@ func load() *Settings {
 		CookieInsecure: envBool("COOKIE_INSECURE", false),
 		SeedDemo:       envBool("SEED_DEMO_DATA", false),
 
-		AppName: envStr("APP_NAME", "Always Together API"),
+		AppName: envStr("APP_NAME", "Pinpoint API"),
 		Debug:   envBool("DEBUG", true),
 	}
 }

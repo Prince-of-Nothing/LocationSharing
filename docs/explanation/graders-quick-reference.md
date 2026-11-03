@@ -1,6 +1,6 @@
 # Grader's Quick Reference
 
-This document provides university evaluators with a quick reference for assessing the Always Together project. Use this alongside the [Development Roadmap and Evidence](../explanation/development-roadmap-and-evidence.md) for comprehensive evaluation.
+This document provides university evaluators with a quick reference for assessing the Pinpoint project. Use this alongside the [Development Roadmap and Evidence](../explanation/development-roadmap-and-evidence.md) for comprehensive evaluation.
 
 ## Assessment Criteria Mapping
 
@@ -117,7 +117,7 @@ curl http://localhost:8000/api/v1/health
 
 ### Minute 12-15: Audit Trail
 ```bash
-docker-compose exec postgres psql -U postgres -d always_together \
+docker-compose exec postgres psql -U postgres -d pinpoint \
   -c "SELECT event_type, user_id, timestamp FROM audit_logs ORDER BY timestamp DESC LIMIT 10;"
 ```
 Show privacy-preserving access logs demonstrating:

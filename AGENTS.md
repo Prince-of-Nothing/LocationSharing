@@ -44,7 +44,7 @@ gradle :app:assembleDebug          # debug APK; points at http://10.0.2.2:8000/a
 gradle :core:domain:test :core:network:test   # pure-JVM module tests
 ```
 
-CI (`.github/workflows/ci.yml`) runs all of the above plus migrations against a Postgres 16 service; `DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/always_together`. The `backend-go` job sets `TEST_DATABASE_URL` so the store conformance suite (T01) runs against real Postgres.
+CI (`.github/workflows/ci.yml`) runs all of the above plus migrations against a Postgres 16 service; `DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/pinpoint`. The `backend-go` job sets `TEST_DATABASE_URL` so the store conformance suite (T01) runs against real Postgres.
 
 ## Gotchas
 

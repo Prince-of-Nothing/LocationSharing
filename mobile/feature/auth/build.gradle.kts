@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "org.alwaystogether.feature.auth"
+    namespace = "org.pinpoint.feature.auth"
     compileSdk = 35
 
     defaultConfig { minSdk = 26 }

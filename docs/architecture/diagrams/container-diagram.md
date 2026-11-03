@@ -1,18 +1,18 @@
 # Container View (C4 Level 2)
 
-Deployable/runnable units of Always Together. Corresponds to
+Deployable/runnable units of Pinpoint. Corresponds to
 [§5 Building Block View](../building-block-view.md). The API service and its
 data stores are implemented; the realtime gateway, workers, and mobile client
 are the next increments.
 
 ```mermaid
 C4Container
-    title Always Together — Container View
+    title Pinpoint — Container View
 
     Person(user, "Resident user")
     Person(operator, "Operator / Moderator")
 
-    System_Boundary(app, "Always Together")
+    System_Boundary(app, "Pinpoint")
         Container(mobile, "Mobile Client", "Flutter", "Profiles, map, consent controls, check-ins; stores tokens in Keychain/Keystore")
         Container(api, "API Service", "FastAPI (Python)", "Authentication, directional authorization, rate limits, RFC 7807 errors — SEE component view")
         Container(realtime, "Realtime Gateway", "WebSocket (planned)", "Location/session push to clients (deferred with MVP)")

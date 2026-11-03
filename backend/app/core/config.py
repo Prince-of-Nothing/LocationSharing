@@ -20,12 +20,12 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
 
     # Application
-    app_name: str = "Always Together API"
+    app_name: str = "Pinpoint API"
     environment: Literal["development", "test", "production"] = "development"
     debug: bool = False
 
     # Database / Redis
-    database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/always_together"
+    database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/pinpoint"
     # Optional separate owner account for schema migrations; the API itself
     # should connect with a role that can only read/write rows (least privilege)
     migration_database_url: str | None = None
@@ -34,8 +34,8 @@ class Settings(BaseSettings):
     # Tokens
     secret_key: str = DEV_SECRET_KEY
     jwt_algorithm: Literal["HS256", "HS384", "HS512"] = "HS256"
-    jwt_issuer: str = "always-together-api"
-    jwt_audience: str = "always-together-clients"
+    jwt_issuer: str = "pinpoint-api"
+    jwt_audience: str = "pinpoint-clients"
     access_token_expire_minutes: int = Field(default=15, ge=1, le=60)
 
     # Sessions (a refresh token never outlives its session)

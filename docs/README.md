@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document summarizes the progress of the Always Together / Pinpoint project during October 2025 and confirms deployment readiness.
+This document summarizes the progress of the Pinpoint project during October 2025 and confirms deployment readiness.
 
 ## Completed Milestones
 

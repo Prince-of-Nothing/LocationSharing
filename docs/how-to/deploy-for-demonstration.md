@@ -52,7 +52,7 @@ docker compose exec redis redis-cli flushall      # clears rate-limit counters
 
 The same image runs on any container host with managed PostgreSQL and Redis.
 
-1. Build and push: `docker build -t <registry>/always-together-api:latest backend && docker push …`
+1. Build and push: `docker build -t <registry>/pinpoint-api:latest backend && docker push …`
 2. Create PostgreSQL. Run `docker/postgres/init-roles.sh` once (as the owner,
    with `APP_DB_PASSWORD` set) to create the restricted `app_runtime` role.
 3. Set environment variables on the service:
@@ -61,7 +61,7 @@ The same image runs on any container host with managed PostgreSQL and Redis.
    |---|---|
    | `ENVIRONMENT` | `production` |
    | `SECRET_KEY` | 48+ random characters from a secrets manager |
-   | `DATABASE_URL` | `postgresql+psycopg://app_runtime:…@host/always_together` |
+   | `DATABASE_URL` | `postgresql+psycopg://app_runtime:…@host/pinpoint` |
    | `MIGRATION_DATABASE_URL` | owner connection string (used only by `alembic upgrade head`) |
    | `REDIS_URL` | managed Redis URL |
    | `FORWARDED_ALLOW_IPS` | the load balancer's address range |

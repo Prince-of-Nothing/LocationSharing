@@ -1,16 +1,16 @@
 # System Context (C4 Level 1)
 
-The system context of **Always Together** — a consent-based location-sharing
+The system context of **Pinpoint** — a consent-based location-sharing
 safety app. Corresponds to [§3 Context and Scope](../context-and-scope.md).
 
 ```mermaid
 C4Context
-    title Always Together — System Context
+    title Pinpoint — System Context
 
     Person(user, "Resident user", "Shares location with trusted friends, completes check-ins, views friends on the map")
     Person(operator, "Operator / Moderator", "Handles reports and incidents via RBAC-restricted access")
 
-    System(app, "Always Together", "Consent-based location sharing: mobile client + API backend with directional authorization")
+    System(app, "Pinpoint", "Consent-based location sharing: mobile client + API backend with directional authorization")
 
     System_Ext(push, "Push Notification Service", "FCM / APNs — friend requests, check-in reminders")
     System_Ext(maps, "Map Provider", "OpenStreetMap tiles and geocoding")
