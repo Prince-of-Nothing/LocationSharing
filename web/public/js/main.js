@@ -307,6 +307,14 @@ function wireUp() {
     } finally { btn.disabled = false; }
   });
 
+  document.querySelectorAll(".fill-demo").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      $("#login-email").value = btn.dataset.email;
+      $("#login-password").value = btn.dataset.pass;
+      $("#login-error").classList.add("hidden");
+    });
+  });
+
   $("#logout-btn").addEventListener("click", async () => {
     await logout();
     show("auth");

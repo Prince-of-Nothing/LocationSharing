@@ -26,6 +26,9 @@ input:focus, select:focus { outline: 2px solid var(--primary); }
 .btn.full { width: 100%; margin-top: 1rem; }
 .demo-hint { margin-top: 1.2rem; color: var(--muted); font-size: .85rem; }
 .demo-hint code { background: #0b1220; padding: .1rem .3rem; border-radius: 4px; }
+.demo-list { list-style: none; padding: 0; margin-top: .6rem; display: flex; flex-direction: column; gap: .4rem; }
+.demo-list li { display: flex; align-items: center; gap: .6rem; }
+.demo-list code { font-size: 0.8rem; }
 
 .topbar { display: flex; align-items: center; gap: 1rem; padding: .7rem 1.2rem; background: var(--card); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; flex-wrap: wrap; }
 .topbar nav { display: flex; gap: .4rem; flex: 1; }

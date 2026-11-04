@@ -30,4 +30,4 @@ export const freshness = {
 };
 
 // Service worker cache version — bump when any static asset changes.
-export const SW_VERSION = "v3";
+export const SW_VERSION = "v4";

@@ -28,12 +28,13 @@
         <button type="submit" class="btn primary full" id="login-btn">Sign in</button>
         <p id="login-error" class="error hidden"></p>
       </form>
-      <details class="demo-hint">
-        <summary>Demo accounts</summary>
-        <ul>
-          <li><code>alice@example.com</code> / <code>DemoPass123!</code></li>
-          <li><code>bob@example.com</code> / <code>DemoPass456!</code></li>
-          <li><code>admin@example.com</code> / <code>ChangeMe123!</code></li>
+      <details class="demo-hint" open>
+        <summary>Demo accounts (click to auto-fill)</summary>
+        <ul class="demo-list">
+          <li><button type="button" class="btn small fill-demo" data-email="alice@example.com" data-pass="DemoPass123!">Fill Alice</button> <code>alice@example.com</code></li>
+          <li><button type="button" class="btn small fill-demo" data-email="bob@example.com" data-pass="DemoPass456!">Fill Bob</button> <code>bob@example.com</code></li>
+          <li><button type="button" class="btn small fill-demo" data-email="user@user.user" data-pass="user1234">Fill Tester</button> <code>user@user.user</code></li>
+          <li><button type="button" class="btn small fill-demo" data-email="admin@example.com" data-pass="ChangeMe123!">Fill Admin</button> <code>admin@example.com</code></li>
         </ul>
       </details>
     </div>
