@@ -5,12 +5,15 @@
 // ---------------------------------------------------------------------------
 import { api, state } from "./api.js";
 import { login, logout, restoreSession } from "./session.js";
-import { renderMap } from "./map.js";
+import { renderMap, setMyPosition, flyTo } from "./map.js";
 import { $, esc, toast, show, switchTab, mkBtn, watchOnlineStatus } from "./ui.js";
 import { SW_VERSION } from "./config.js";
 
 // ---- map tab ---------------------------------------------------------------
-async function loadFriendLocations() {
+let liveInterval = null;
+let liveEnabled = true;
+
+async function loadFriendLocations(silent = false) {
   try {
     const locs = await api("/locations/friends");
     renderMap(locs);
@@ -18,8 +21,60 @@ async function loadFriendLocations() {
       ? `${locs.length} friend location(s) visible to you (consent-based).`
       : "No friends are sharing their location with you yet.";
   } catch (e) {
-    $("#map-status").textContent = e.message;
+    if (!silent) $("#map-status").textContent = e.message;
   }
+}
+
+async function locateMe() {
+  if (!navigator.geolocation) {
+    toast("Geolocation is not supported by your browser.", true);
+    return;
+  }
+  toast("Acquiring GPS location...");
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const { latitude, longitude, accuracy } = pos.coords;
+      $("#loc-lat").value = latitude.toFixed(6);
+      $("#loc-lon").value = longitude.toFixed(6);
+      setMyPosition(latitude, longitude, accuracy);
+      flyTo(latitude, longitude, 13);
+      toast(`GPS acquired (±${Math.round(accuracy)}m)`);
+    },
+    (err) => {
+      toast(`GPS error: ${err.message}`, true);
+    },
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
+}
+
+function setupLiveUpdates() {
+  const toggleBtn = $("#live-toggle");
+  if (!toggleBtn) return;
+  toggleBtn.addEventListener("click", () => {
+    liveEnabled = !liveEnabled;
+    if (liveEnabled) {
+      toggleBtn.textContent = "🟢 Live: 15s";
+      toggleBtn.classList.remove("paused");
+      startLiveInterval();
+      toast("Live updates resumed (every 15s).");
+    } else {
+      toggleBtn.textContent = "⏸️ Live: Off";
+      toggleBtn.classList.add("paused");
+      clearInterval(liveInterval);
+      toast("Live updates paused.");
+    }
+  });
+  startLiveInterval();
+}
+
+function startLiveInterval() {
+  clearInterval(liveInterval);
+  liveInterval = setInterval(() => {
+    const mapTab = $("#tab-map");
+    if (liveEnabled && mapTab && !mapTab.classList.contains("hidden")) {
+      loadFriendLocations(true);
+    }
+  }, 15000);
 }
 
 async function publishLocation() {
@@ -30,6 +85,8 @@ async function publishLocation() {
       const pos = await new Promise((res, rej) =>
         navigator.geolocation.getCurrentPosition(res, rej, { timeout: 8000 }));
       lat = pos.coords.latitude; lon = pos.coords.longitude;
+      $("#loc-lat").value = lat.toFixed(6);
+      $("#loc-lon").value = lon.toFixed(6);
     } catch (_) { toast("Enter valid lat/lon manually.", true); return; }
   }
   try {
@@ -37,6 +94,7 @@ async function publishLocation() {
       method: "POST",
       body: { latitude: lat, longitude: lon, accuracy: 10 },
     });
+    setMyPosition(lat, lon, 10);
     toast(`Location shared (${r.shares_updated} active share(s)).`);
     loadFriendLocations();
   } catch (e) { toast(e.message, true); }
@@ -254,8 +312,11 @@ function wireUp() {
     show("auth");
   });
   $("#change-pw-btn").addEventListener("click", () => openPasswordDialog(false));
-  $("#refresh-map").addEventListener("click", loadFriendLocations);
+  $("#refresh-map").addEventListener("click", () => loadFriendLocations(false));
   $("#publish-loc").addEventListener("click", publishLocation);
+  const locateBtn = $("#locate-me-btn");
+  if (locateBtn) locateBtn.addEventListener("click", locateMe);
+  setupLiveUpdates();
   $("#friend-request-form").addEventListener("submit", (e) => {
     e.preventDefault();
     sendFriendRequest($("#friend-email").value.trim());

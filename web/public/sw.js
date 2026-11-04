@@ -9,7 +9,7 @@
 // Bump SW_VERSION in js/config.js when static assets change.
 // ---------------------------------------------------------------------------
 
-const VERSION = "pinpoint-shell-v2";
+const VERSION = "pinpoint-shell-v3";
 const SHELL = [
   "./",
   "./index.html",
