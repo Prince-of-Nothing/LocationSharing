@@ -48,3 +48,12 @@ backend/server
 
 # Android build artifacts (APKs are CI artifacts, never committed)
 *.apk
+
+# Rust build output and local check logs
+/target/
+/.cargo/
+check_out.txt
+test_out.txt
+clippy_out.txt
+release_out.txt
+audit_out.txt

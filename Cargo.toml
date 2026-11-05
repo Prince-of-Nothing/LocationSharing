@@ -1,0 +1,23 @@
+[package]
+name = "pinpoint-desktop"
+version = "0.1.0"
+edition = "2021"
+description = "Privacy-first desktop client for Pinpoint"
+publish = false
+
+[dependencies]
+eframe = { version = "0.30", default-features = true, features = ["glow"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"
+tracing-subscriber = "0.3"
+url = "2.5"
+image = { version = "0.25", default-features = false, features = ["png"] }
+which = "6.0"
+reqwest = { version = "0.12", features = ["json"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1.0", default-features = false, features = ["rt-multi-thread", "time"] }
+
+[dev-dependencies]
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
