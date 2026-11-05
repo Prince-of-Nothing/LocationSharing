@@ -1,4 +1,4 @@
-//! HTTP client for the Pinpoint API.
+﻿//! HTTP client for the Pinpoint API.
 //!
 //! Contract notes, verified against `backend/internal/handlers`:
 //!
@@ -9,7 +9,7 @@
 //!   `{access_token, csrf_token, user}` and set both cookies.
 //! * Errors use the `{error: {code, message, fields}}` envelope.
 //! * Plain HTTP is accepted only for loopback development URLs; anything
-//!   else must be HTTPS (fail closed — see ADR-0005).
+//!   else must be HTTPS (fail closed â€” see ADR-0006).
 
 use crate::models::{FriendLocation, Friendship, LocationShare, LoginResponse, User};
 use std::sync::{Arc, Mutex};
@@ -497,7 +497,7 @@ mod tests {
     }
 
     // Fail closed: non-loopback plain HTTP is the exact regression this
-    // policy exists to prevent (ADR-0005).
+    // policy exists to prevent (ADR-0006).
     #[test]
     fn rejects_plaintext_http_to_non_loopback_hosts() {
         for url in [

@@ -1,4 +1,4 @@
-//! Main entry point for Pinpoint Desktop.
+﻿//! Main entry point for Pinpoint Desktop.
 
 #[cfg(not(target_arch = "wasm32"))]
 use std::sync::Arc;
@@ -38,7 +38,7 @@ fn main() {
 
     tracing_subscriber::fmt::init();
 
-    // Fail closed on transports outside the policy (ADR-0005): plain HTTP
+    // Fail closed on transports outside the policy (ADR-0006): plain HTTP
     // is only accepted for loopback development URLs.
     let api_client = match pinpoint_desktop::api::ApiClient::new(backend_url) {
         Ok(client) => Arc::new(client),
