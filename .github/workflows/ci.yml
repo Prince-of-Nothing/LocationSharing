@@ -128,3 +128,39 @@ jobs:
           name: app-debug-apk
           path: mobile/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+  rust:
+    # Rust desktop client (root crate): format, lints, locked build,
+    # unit + API-contract tests, and a dependency audit. This job is the
+    # exit evidence for the November stabilization window described in
+    # docs/task1/november-project-progress-and-plan.md.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install system dependencies (egui/winit link, reqwest TLS)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libssl-dev libxcb-render0-dev libxcb-shape0-dev \
+            libxcb-xfixes0-dev libxkbcommon-dev libxkbcommon-x11-dev \
+            libgl1-mesa-dev
+      - name: Cache cargo registry and build output
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Format check
+        run: cargo fmt --all -- --check
+      - name: Clippy (deny warnings)
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Build (locked)
+        run: cargo build --locked
+      - name: Tests (locked) — unit + API contract
+        run: cargo test --locked
+      - name: Dependency vulnerability audit (cargo-audit)
+        uses: rustsec/audit-check@v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
