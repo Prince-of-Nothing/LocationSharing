@@ -10,6 +10,7 @@ Two backend implementations of the same API, per the root `README.md`:
   - `web/public/js/` is modular vanilla ES modules (no npm/bundler — keep it that way; every new file goes in the `sw.js` SHELL list and gets `node --input-type=module --check` in CI). Tile source is one line in `js/config.js`; never `tile.openstreetmap.org` (OSMF policy) and keep the ODbL attribution visible. CSP in `web/nginx.conf` must allow-list the tile host in `img-src`. Licensing: `web/THIRD_PARTY_NOTICES.md`.
   - `backend/web/` (Python stack) is a separate Leaflet-based client with its own tests (`backend/tests/test_web_client.py`, incl. a tile-policy regression test) — mirror tile/compliance changes there deliberately.
 - Android app: `mobile/` — Kotlin/Jetpack Compose, Clean Architecture modules (`app` composition root + `core:{domain,network,data,map}` + `feature:{auth,map,friends,sharing}`), MapLibre maps, 0 trackers. See `mobile/README.md`.
+- **Rust desktop client** (root crate `pinpoint-desktop`): Rust is the long-term primary direction; migration tracked in `docs/task1/november-project-progress-and-plan.md`. eframe/egui UI + `reqwest` client matching the Go/Python API contract — session cookie auth with `X-CSRF-Token` double-submit on unsafe methods, and plain HTTP allowed **only** for loopback URLs (fail closed, ADR-0006). `tests/contract.rs` pins the wire contract; the `rust` CI job runs fmt/clippy/build/test/audit.
 - Docs in `docs/` (arc42 + Diátaxis + ADRs); full-stack demo via `docker compose`.
 
 Contribution rules live in root `CONTRIBUTING.md` (Go) and `docs/CONTRIBUTING.md` (docs): small PRs, Conventional Commits, docs in the same PR, security changes need a regression test *and* a fail-closed test.
@@ -42,6 +43,14 @@ Android (from `mobile/`; needs JDK 17 + Android SDK 35. CI's `mobile` job compil
 ```bash
 gradle :app:assembleDebug          # debug APK; points at http://10.0.2.2:8000/api/v1/
 gradle :core:domain:test :core:network:test   # pure-JVM module tests
+```
+
+Rust (from repo root; the `rust` CI job runs the same four gates):
+
+```bash
+cargo fmt --all -- --check                 # formatting
+cargo clippy --all-targets -- -D warnings  # lints, warnings are errors
+cargo build --locked && cargo test --locked # build + unit/contract tests
 ```
 
 CI (`.github/workflows/ci.yml`) runs all of the above plus migrations against a Postgres 16 service; `DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/pinpoint`. The `backend-go` job sets `TEST_DATABASE_URL` so the store conformance suite (T01) runs against real Postgres.

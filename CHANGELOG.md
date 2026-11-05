@@ -6,6 +6,13 @@ Semantic Versioning. This is a pre-1.0 (thesis MVP) project.
 
 ## [Unreleased]
 ### Added
+- Rust desktop client (`pinpoint-desktop`, root crate): eframe/egui UI with
+  stateful login/register/logout/password-change, `reqwest` API client bound to
+  the server contract (session cookie + `X-CSRF-Token` double-submit), transport
+  policy requiring HTTPS off-loopback (ADR-0006), and unit + API-contract tests
+  (`tests/contract.rs`) covering fail-closed login/logout and CSRF placement
+- CI `rust` job: `cargo fmt --check`, `clippy -D warnings`, locked build/test,
+  and a `cargo-audit` dependency vulnerability audit
 - Kotlin/Jetpack Compose Android app scaffold (`mobile/`) — planned next
 - `weba` admin console and `webk` kiosk check-in clients — planned
 - Project governance docs: CONTRIBUTING, CODE_OF_CONDUCT, docs/{PROJECT, ROADMAP,

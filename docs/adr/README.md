@@ -31,6 +31,7 @@ Examples: backend framework, real-time transport (WebSockets vs. MQTT), authenti
 | 0003 | [Password Authentication with Session-Bound JWTs and Rotating Refresh Tokens](./password-auth-with-rotating-refresh-tokens.md) | Accepted |
 | 0004 | [Web Client for the MVP Demonstration; Flutter Deferred](./web-client-for-mvp-demonstration.md) | Accepted |
 | 0005 | [Store Only the Latest Location; Derive States on Read](./store-latest-location-only.md) | Accepted |
+| 0006 | [Rust Desktop Client Transport Policy and Session Contract](./0006-rust-client-transport-and-session-contract.md) | Accepted |
 
 See [`architecture/architecture-decisions-link.md`](../architecture/architecture-decisions-link.md) for the complete list.
 
