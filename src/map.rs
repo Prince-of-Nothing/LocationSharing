@@ -48,6 +48,7 @@ pub fn render_map(ui: &mut Ui, state: &mut AppData) {
             map_rect,
             4.0_f32,
             egui::Stroke::new(1.0_f32, Color32::from_rgb(51, 65, 85)),
+            egui::StrokeKind::Inside,
         );
 
         // Draw pins for each location

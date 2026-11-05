@@ -19,7 +19,10 @@ Semantic Versioning. This is a pre-1.0 (thesis MVP) project.
   ARCHITECTURE, SECURITY, PRIVACY, TESTING, DEPLOYMENT, GLOSSARY}, LICENSE template
 
 ### Changed
-- _(open)_ —
+- Rust desktop client: bumped `eframe` 0.30 → 0.32, moving the Linux
+  accessibility stack off `quick-xml 0.30.0` (RUSTSEC-2026-0194,
+  RUSTSEC-2026-0195, both high) to `0.41.0`; `cargo audit` now exits 0 with
+  0 vulnerabilities (5 unmaintained warnings only)
 
 ## [0.3.0] - 2026-10-13
 ### Added
