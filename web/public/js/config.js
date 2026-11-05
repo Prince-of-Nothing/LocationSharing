@@ -17,9 +17,9 @@ export const API_BASE = "/api/v1";
 export const tiles = {
   // {z}/{x}/{y} are substituted client-side. No API key: the endpoint must
   // stay keyless on purpose — keys imply accounts and third-party signup.
-  url: "https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png",
+  url: "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
   // ODbL attribution — must always be visible on the map (legal obligation).
-  attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors, <a href="https://wmflabs.org" target="_blank" rel="noopener">Wikimedia maps</a>',
+  attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors, <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>',
   maxZoom: 19,
 };
 
@@ -30,4 +30,4 @@ export const freshness = {
 };
 
 // Service worker cache version — bump when any static asset changes.
-export const SW_VERSION = "v1";
+export const SW_VERSION = "v2";
