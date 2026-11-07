@@ -13,6 +13,10 @@ Semantic Versioning. This is a pre-1.0 (thesis MVP) project.
   (`tests/contract.rs`) covering fail-closed login/logout and CSRF placement
 - CI `rust` job: `cargo fmt --check`, `clippy -D warnings`, locked build/test,
   and a `cargo-audit` dependency vulnerability audit
+- CI `release` job (`windows-latest`): builds the `--release` binary, packages it
+  into `pinpoint-desktop.zip`, and uploads it as a GitHub Actions artifact
+- `docs/DEPLOYMENT.md` §4 Rust Desktop Deployment: build, run flags, ADR-0006
+  transport policy, verified distributable artifact path, and demo credentials
 - Kotlin/Jetpack Compose Android app scaffold (`mobile/`) — planned next
 - `weba` admin console and `webk` kiosk check-in clients — planned
 - Project governance docs: CONTRIBUTING, CODE_OF_CONDUCT, docs/{PROJECT, ROADMAP,

@@ -171,3 +171,29 @@ jobs:
         uses: rustsec/audit-check@v2.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust stable
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Build release binary
+        run: cargo build --release --locked
+      - name: Package artifact
+        shell: pwsh
+        run: |
+          $zipPath = "pinpoint-desktop.zip"
+          $exePath = "target\x86_64-pc-windows-msvc/release/pinpoint-desktop.exe"
+          Compress-Archive -Path $exePath -DestinationPath $zipPath -Force
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pinpoint-desktop
+          path: pinpoint-desktop.zip

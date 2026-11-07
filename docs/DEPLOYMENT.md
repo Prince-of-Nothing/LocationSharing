@@ -345,6 +345,52 @@ cat render.yaml
 
 ---
 
+## 4. Rust Desktop Deployment
+
+The Pinpoint desktop client is built as a native Windows executable using the Rust toolchain. It runs on Windows (or via Wine on Linux/macOS) and communicates with the backend via HTTPS when deployed off-loopback, or plain HTTP only for `localhost` development.
+
+### Build
+
+```bash
+# From the repository root (requires Rust 1.99+ and the Windows target)
+cargo build --release --locked
+```
+
+The binary is produced at:
+
+```
+target\x86_64-pc-windows-msvc\release\pinpoint-desktop.exe
+```
+
+### Run
+
+| Flag | Description |
+|------|-------------|
+| `--backend <url>` | Server API base URL. Must be HTTPS for any non-loopback host (per ADR-0006). `http://localhost:8000` is allowed for local development. |
+| `--screenshot <path>` | After 120 frames the client captures a PNG screenshot at the given path (headless smoke test). |
+| `--help` | Show usage. |
+
+### Transport Policy (ADR-0006)
+
+- **Loopback**: `http://localhost:8000` and `http://127.0.0.1:8000` are accepted without TLS. This matches the Go API's development mode.
+- **Off-loopback**: Any host other than `localhost` or `127.0.0.1` **must** use HTTPS. The client validates the scheme and rejects plain HTTP with an error: `refusing plain HTTP to non-loopback backend "<url>": use HTTPS outside local development`.
+- **Fail-closed**: If the backend returns an authentication or session error, the client exits with a non-zero status, ensuring the session cannot be left in an inconsistent state.
+
+### Verified Distributable Artifact
+
+The CI release job (see below) builds the `--release` binary and packages it into `pinpoint-desktop.zip`. The zip is uploaded as a GitHub Actions artifact and can be downloaded from the workflow run. The exact path of the executable inside the zip is `pinpoint-desktop.exe`.
+
+### Demo Credentials (local only)
+
+- `alice@example.com` / `DemoPass123!`
+- `bob@example.com` / `DemoPass456!`
+- `admin@example.com` / `ChangeMe123!`
+- `user@user.user` / `user1234` (8-character minimum)
+
+These credentials seed the Go API (`go run ./cmd/server`) with demo data when `SEED_DEMO_DATA=true` is set.
+
+---
+
 ## Quick status (current state)
 
 - **Go conformance** (`9f35f127`): `nowUTC()` microsecond; email lowercase; `NullFloat64`; shared scanner — committed locally.
