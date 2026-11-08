@@ -30,13 +30,19 @@ NO ACTION referential integrity (no cascades across ownership borders).
 
 ## Write ownership (who may INSERT/UPDATE/DELETE)
 
-- `pinpoint_users`: Auth only (wipe-rewrite); users service upserts single
-  rows via direct SQL (see `state.rs::sql_*`).
+- `pinpoint_users`: Auth only (per-row upsert + delete-missing); users
+  service upserts single rows via direct SQL (see `state.rs::sql_*`).
 - `pinpoint_friendships`: Users service only.
 - `pinpoint_shares`, `pinpoint_locations`, `pinpoint_checkins`,
   `pinpoint_emergencies`: Locations service only.
 - `pinpoint_counters`: routed per service (own columns only).
 - `pinpoint_state`: combined binary only (`ServiceKind::All`), rollback.
+
+`persist()` writes each owned table per-row (upsert + delete-missing)
+inside one transaction serialized across replicas of the same service
+by `pg_advisory_xact_lock(ServiceKind::lock_key())`. Different
+services (different keys) persist concurrently; same-service replicas
+take turns — no table is ever wipe-rewritten.
 
 ## Convergence
 

@@ -45,8 +45,10 @@ state ownership unchanged.
 - **Modular database:** 8 normalized tables with per-service ownership enforced
   in code (`ServiceKind` in `state.rs`): Auth owns users/counters, Users owns
   users+friendships, Locations owns shares/locations/check-ins/emergencies,
-  Map owns nothing. `persist()` writes ONLY owned tables — services cannot
-  clobber each other (fixed the multi-service wipe race 2026-11-08).
+  Map owns nothing. `persist()` upserts per-row + deletes only the missing
+  keys inside one transaction serialized by `pg_advisory_xact_lock` (no
+  wipe-rewrite; replicas of the same service take turns, different
+  services run concurrently).
   Roles + per-table grants staged in `db/init/01-roles.sh` / `db/02-grants.sql`.
 - Migration path: JSONB snapshot (`pinpoint_state`) stays as rollback; normalized
   load is authoritative once present.

@@ -45,12 +45,14 @@ docker compose run --rm --no-deps -p 8001:8001 auth
   `pinpoint-backups/pinpoint-*.sql`. Zero-loss HA (streaming replica +
   Patroni/Stolon, or a managed Postgres with automated failover) is the
   production step.
-- **Concurrent writers** — replicas converge via the DB every 5s, but
-  `persist()` is wipe-rewrite per owned table: two replicas of the *same*
-  service can clobber each other if both mutate in the same window.
-  At demo scale (low write rate, demo clock) this is rare; the
-  production fix is row-level upserts + per-service leader election,
-  not more replicas.
+- **Concurrent writers** — replicas converge via the DB every 5s, and
+  `persist()` now upserts per-row inside a transaction serialized across
+  same-service replicas by `pg_advisory_xact_lock`. A row written by
+  another replica between snapshots can still be deleted on the next
+  delete-missing pass if absent from this snapshot (window ≤ one tick,
+  repaired by `refresh_from_db()`); at demo scale this never bites. The
+  remaining production fix is row-level single-writer APIs, not more
+  replicas.
 - **Gateway** is a single nginx container (auto-restarts). Client cache
   per replica means one tile miss after a map failover.
 - **`container_name` conflicts** (the old `docker compose up` errors)
