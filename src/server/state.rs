@@ -34,7 +34,7 @@ pub enum ServiceKind {
 impl ServiceKind {
     /// `pinpoint_users` is owned EXCLUSIVELY by Auth (credentials + profile
     /// columns). The users service touches user rows via direct SQL only,
-    /// never the wipe-rewrite — see `state.rs::sql_*` helpers.
+    /// never the persist rewrite — see `state.rs::sql_*` helpers.
     pub fn owns_users(self) -> bool {
         matches!(self, Self::All | Self::Auth)
     }
@@ -55,6 +55,22 @@ impl ServiceKind {
     }
     pub fn owns_snapshot(self) -> bool {
         matches!(self, Self::All)
+    }
+
+    /// Stable advisory-lock key per service, serializing the persist tick
+    /// across replicas of the same service (`pg_advisory_xact_lock` inside
+    /// the per-tick transaction in `persist()`). Distinct keys let
+    /// auth/users/locations persist concurrently without blocking each
+    /// other; replicas of the same service take turns. `MapOnly` never
+    /// persists, so its key is unused but still distinct for safety.
+    pub fn lock_key(self) -> i64 {
+        match self {
+            Self::All => 1,
+            Self::Auth => 2,
+            Self::Users => 3,
+            Self::Locations => 4,
+            Self::MapOnly => 5,
+        }
     }
 }
 
@@ -311,21 +327,21 @@ impl AppState {
     }
 
     /// Persist owned tables to Postgres (no-op without DB).
-    /// A service only rewrites tables it owns, so parallel services never
+    ///
+    /// Modularity: each owned table is written per-row (upsert +
+    /// delete-missing) inside one transaction serialized across replicas
+    /// of the same service by `pg_advisory_xact_lock(owner.lock_key())`.
+    /// A service only writes tables it owns, so parallel services never
     /// clobber each other's rows. Reads (load) are shared by all.
     /// The legacy JSONB snapshot is written only by `ServiceKind::All`.
+    ///
+    /// Order matters for the FK graph: upserts run parents-first
+    /// (users → friendships → shares → locations → check-ins →
+    /// emergencies), deletes run children-first. Unlike the old
+    /// wipe-rewrite, a row written by another replica between ticks is
+    /// preserved unless this snapshot legitimately removed it.
     pub async fn persist(&self) {
         let Some(pool) = &self.pg else { return };
-        // Rollback snapshot (combined binary only).
-        if self.owner.owns_snapshot() {
-            let data = serde_json::to_value(&*self.store.lock().unwrap()).unwrap_or_default();
-            let _ = sqlx::query(
-                "INSERT INTO pinpoint_state(id, data) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data",
-            )
-            .bind(data)
-            .execute(pool)
-            .await;
-        }
         // Snapshot the in-memory store once (lock released before I/O).
         let store = {
             let guard = self.store.lock().unwrap();
@@ -343,90 +359,130 @@ impl AppState {
                 next_emergency_id: guard.next_emergency_id,
             }
         };
-        if self.owner.owns_emergencies() {
-            let _ = sqlx::query("DELETE FROM pinpoint_emergencies")
-                .execute(pool)
-                .await;
+        let mut tx = match pool.begin().await {
+            Ok(tx) => tx,
+            Err(_) => return,
+        };
+        // Replicas of the same service serialize their tick; different
+        // services (different keys) proceed concurrently.
+        let _ = sqlx::query("SELECT pg_advisory_xact_lock($1)")
+            .bind(self.owner.lock_key())
+            .execute(&mut *tx)
+            .await;
+        // Rollback snapshot (combined binary only).
+        if self.owner.owns_snapshot() {
+            let data = serde_json::to_value(&store).unwrap_or_default();
+            let _ = sqlx::query(
+                "INSERT INTO pinpoint_state(id, data) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data",
+            )
+            .bind(data)
+            .execute(&mut *tx)
+            .await;
         }
-        if self.owner.owns_checkins() {
-            let _ = sqlx::query("DELETE FROM pinpoint_checkins")
-                .execute(pool)
-                .await;
-        }
-        if self.owner.owns_locations() {
-            let _ = sqlx::query("DELETE FROM pinpoint_locations")
-                .execute(pool)
-                .await;
-        }
-        if self.owner.owns_shares() {
-            let _ = sqlx::query("DELETE FROM pinpoint_shares")
-                .execute(pool)
-                .await;
-        }
-        if self.owner.owns_friendships() {
-            let _ = sqlx::query("DELETE FROM pinpoint_friendships")
-                .execute(pool)
-                .await;
-        }
-        if self.owner.owns_users() {
-            let _ = sqlx::query("DELETE FROM pinpoint_users")
-                .execute(pool)
-                .await;
-        }
+        // --- Upserts (parents-first) ---
         if self.owner.owns_users() {
             for u in &store.users {
-                let _ = sqlx::query("INSERT INTO pinpoint_users (id, email, full_name, role, is_active, must_change_password, password_hash, totp_secret, mfa_enabled, mfa_last_step) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)")
+                let _ = sqlx::query("INSERT INTO pinpoint_users (id, email, full_name, role, is_active, must_change_password, password_hash, totp_secret, mfa_enabled, mfa_last_step) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, full_name = EXCLUDED.full_name, role = EXCLUDED.role, is_active = EXCLUDED.is_active, must_change_password = EXCLUDED.must_change_password, password_hash = EXCLUDED.password_hash, totp_secret = EXCLUDED.totp_secret, mfa_enabled = EXCLUDED.mfa_enabled, mfa_last_step = EXCLUDED.mfa_last_step")
                     .bind(u.id).bind(&u.email).bind(&u.full_name).bind(&u.role).bind(u.is_active).bind(u.must_change_password).bind(&u.password_hash).bind(&u.totp_secret).bind(u.mfa_enabled).bind(u.mfa_last_step as i64)
-                    .execute(pool).await;
+                    .execute(&mut *tx).await;
             }
         }
         if self.owner.owns_friendships() {
             for f in &store.friendships {
-                let _ = sqlx::query("INSERT INTO pinpoint_friendships (id, requester_id, receiver_id, requester_name, receiver_name, status, created_at, responded_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)")
+                let _ = sqlx::query("INSERT INTO pinpoint_friendships (id, requester_id, receiver_id, requester_name, receiver_name, status, created_at, responded_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (id) DO UPDATE SET requester_id = EXCLUDED.requester_id, receiver_id = EXCLUDED.receiver_id, requester_name = EXCLUDED.requester_name, receiver_name = EXCLUDED.receiver_name, status = EXCLUDED.status, created_at = EXCLUDED.created_at, responded_at = EXCLUDED.responded_at")
                     .bind(f.id).bind(f.requester_id).bind(f.receiver_id).bind(&f.requester_name).bind(&f.receiver_name).bind(&f.status).bind(&f.created_at).bind(&f.responded_at)
-                    .execute(pool).await;
+                    .execute(&mut *tx).await;
             }
         }
         if self.owner.owns_shares() {
             for s in &store.shares {
-                let _ = sqlx::query("INSERT INTO pinpoint_shares (id, friendship_id, owner_id, direction, precision_level, is_active, last_location_update_at, expires_at, label) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)")
+                let _ = sqlx::query("INSERT INTO pinpoint_shares (id, friendship_id, owner_id, direction, precision_level, is_active, last_location_update_at, expires_at, label) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (id) DO UPDATE SET friendship_id = EXCLUDED.friendship_id, owner_id = EXCLUDED.owner_id, direction = EXCLUDED.direction, precision_level = EXCLUDED.precision_level, is_active = EXCLUDED.is_active, last_location_update_at = EXCLUDED.last_location_update_at, expires_at = EXCLUDED.expires_at, label = EXCLUDED.label")
                     .bind(s.id).bind(s.friendship_id).bind(s.owner_id).bind(&s.direction).bind(&s.precision_level).bind(s.is_active).bind(&s.last_location_update_at).bind(&s.expires_at).bind(&s.label)
-                    .execute(pool).await;
+                    .execute(&mut *tx).await;
             }
         }
         if self.owner.owns_locations() {
             for l in &store.locations {
-                let _ = sqlx::query("INSERT INTO pinpoint_locations (user_id, user_name, latitude, longitude, precision_level, updated_at, accuracy) VALUES ($1,$2,$3,$4,$5,$6,$7)")
+                let _ = sqlx::query("INSERT INTO pinpoint_locations (user_id, user_name, latitude, longitude, precision_level, updated_at, accuracy) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (user_id) DO UPDATE SET user_name = EXCLUDED.user_name, latitude = EXCLUDED.latitude, longitude = EXCLUDED.longitude, precision_level = EXCLUDED.precision_level, updated_at = EXCLUDED.updated_at, accuracy = EXCLUDED.accuracy")
                     .bind(l.user_id).bind(&l.user_name).bind(l.latitude).bind(l.longitude).bind(&l.precision_level).bind(&l.updated_at).bind(l.accuracy)
-                    .execute(pool).await;
+                    .execute(&mut *tx).await;
             }
         }
         if self.owner.owns_checkins() {
             for c in &store.check_ins {
-                let _ = sqlx::query("INSERT INTO pinpoint_checkins (id, user_id, user_name, latitude, longitude, note, kind, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)")
+                let _ = sqlx::query("INSERT INTO pinpoint_checkins (id, user_id, user_name, latitude, longitude, note, kind, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (id) DO UPDATE SET user_id = EXCLUDED.user_id, user_name = EXCLUDED.user_name, latitude = EXCLUDED.latitude, longitude = EXCLUDED.longitude, note = EXCLUDED.note, kind = EXCLUDED.kind, created_at = EXCLUDED.created_at")
                     .bind(c.id).bind(c.user_id).bind(&c.user_name).bind(c.latitude).bind(c.longitude).bind(&c.note).bind(&c.kind).bind(&c.created_at)
-                    .execute(pool).await;
+                    .execute(&mut *tx).await;
             }
         }
         if self.owner.owns_emergencies() {
             for e in &store.emergencies {
-                let _ = sqlx::query("INSERT INTO pinpoint_emergencies (id, user_id, user_name, latitude, longitude, created_at, resolved) VALUES ($1,$2,$3,$4,$5,$6,$7)")
+                let _ = sqlx::query("INSERT INTO pinpoint_emergencies (id, user_id, user_name, latitude, longitude, created_at, resolved) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (id) DO UPDATE SET user_id = EXCLUDED.user_id, user_name = EXCLUDED.user_name, latitude = EXCLUDED.latitude, longitude = EXCLUDED.longitude, created_at = EXCLUDED.created_at, resolved = EXCLUDED.resolved")
                     .bind(e.id).bind(e.user_id).bind(&e.user_name).bind(e.latitude).bind(e.longitude).bind(&e.created_at).bind(e.resolved)
-                    .execute(pool).await;
+                    .execute(&mut *tx).await;
             }
+        }
+        // --- Delete rows removed from this snapshot (children-first) ---
+        // `<> ALL($1)` with an empty list deletes all rows (legitimate: the
+        // owner removed every row); with a non-empty list only the missing
+        // keys go away. Rows written by another replica after our snapshot
+        // would also be removed if absent here — the advisory lock keeps
+        // that window to one tick and `refresh_from_db()` re-converges us.
+        if self.owner.owns_emergencies() {
+            let ids: Vec<i64> = store.emergencies.iter().map(|e| e.id).collect();
+            let _ = sqlx::query("DELETE FROM pinpoint_emergencies WHERE id <> ALL($1::bigint[])")
+                .bind(&ids)
+                .execute(&mut *tx)
+                .await;
+        }
+        if self.owner.owns_checkins() {
+            let ids: Vec<i64> = store.check_ins.iter().map(|c| c.id).collect();
+            let _ = sqlx::query("DELETE FROM pinpoint_checkins WHERE id <> ALL($1::bigint[])")
+                .bind(&ids)
+                .execute(&mut *tx)
+                .await;
+        }
+        if self.owner.owns_locations() {
+            let ids: Vec<i64> = store.locations.iter().map(|l| l.user_id).collect();
+            let _ =
+                sqlx::query("DELETE FROM pinpoint_locations WHERE user_id <> ALL($1::bigint[])")
+                    .bind(&ids)
+                    .execute(&mut *tx)
+                    .await;
+        }
+        if self.owner.owns_shares() {
+            let ids: Vec<i64> = store.shares.iter().map(|s| s.id).collect();
+            let _ = sqlx::query("DELETE FROM pinpoint_shares WHERE id <> ALL($1::bigint[])")
+                .bind(&ids)
+                .execute(&mut *tx)
+                .await;
+        }
+        if self.owner.owns_friendships() {
+            let ids: Vec<i64> = store.friendships.iter().map(|f| f.id).collect();
+            let _ = sqlx::query("DELETE FROM pinpoint_friendships WHERE id <> ALL($1::bigint[])")
+                .bind(&ids)
+                .execute(&mut *tx)
+                .await;
+        }
+        if self.owner.owns_users() {
+            let ids: Vec<i64> = store.users.iter().map(|u| u.id).collect();
+            let _ = sqlx::query("DELETE FROM pinpoint_users WHERE id <> ALL($1::bigint[])")
+                .bind(&ids)
+                .execute(&mut *tx)
+                .await;
         }
         // Counter columns are owned by the same services as their tables;
         // update only owned columns so writers don't overwrite each other.
         if self.owner.owns_users() {
             let _ = sqlx::query("UPDATE pinpoint_counters SET next_user_id=$1 WHERE id=1")
                 .bind(store.next_user_id)
-                .execute(pool)
+                .execute(&mut *tx)
                 .await;
         }
         if self.owner.owns_friendships() {
             let _ = sqlx::query("UPDATE pinpoint_counters SET next_friendship_id=$1 WHERE id=1")
                 .bind(store.next_friendship_id)
-                .execute(pool)
+                .execute(&mut *tx)
                 .await;
         }
         if self.owner.owns_shares() {
@@ -434,13 +490,14 @@ impl AppState {
                 .bind(store.next_share_id)
                 .bind(store.next_check_in_id)
                 .bind(store.next_emergency_id)
-                .execute(pool)
+                .execute(&mut *tx)
                 .await;
         }
+        let _ = tx.commit().await;
     }
 
     /// Direct user insert for the users service (Auth owns `pinpoint_users`
-    /// for wipe-rewrites, so the users service must upsert single rows —
+    /// for persist upserts, so the users service must upsert single rows —
     /// never delete+rewrite — to avoid clobbering credentials written by Auth).
     /// Returns the assigned id. Falls back to the in-memory counter when the
     /// DB is unreachable (demo mode: in-memory store is authoritative).
@@ -660,5 +717,53 @@ impl Store {
 
     pub fn find_user_by_id(&self, id: i64) -> Option<&User> {
         self.users.iter().find(|u| u.id == id)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ServiceKind;
+
+    #[test]
+    fn ownership_matrix_is_exclusive() {
+        // Auth owns users only.
+        assert!(ServiceKind::Auth.owns_users());
+        assert!(!ServiceKind::Auth.owns_friendships());
+        assert!(!ServiceKind::Auth.owns_shares());
+        // Users owns friendships only (user rows go via direct SQL).
+        assert!(ServiceKind::Users.owns_friendships());
+        assert!(!ServiceKind::Users.owns_users());
+        assert!(!ServiceKind::Users.owns_locations());
+        // Locations owns its four tables only.
+        assert!(ServiceKind::Locations.owns_shares());
+        assert!(ServiceKind::Locations.owns_locations());
+        assert!(ServiceKind::Locations.owns_checkins());
+        assert!(ServiceKind::Locations.owns_emergencies());
+        assert!(!ServiceKind::Locations.owns_users());
+        // Map owns nothing.
+        assert!(!ServiceKind::MapOnly.owns_users());
+        assert!(!ServiceKind::MapOnly.owns_friendships());
+        assert!(!ServiceKind::MapOnly.owns_locations());
+        // Combined binary owns everything + the rollback snapshot.
+        assert!(ServiceKind::All.owns_users());
+        assert!(ServiceKind::All.owns_snapshot());
+        assert!(!ServiceKind::Auth.owns_snapshot());
+    }
+
+    #[test]
+    fn lock_keys_are_distinct_per_service() {
+        let kinds = [
+            ServiceKind::All,
+            ServiceKind::Auth,
+            ServiceKind::Users,
+            ServiceKind::Locations,
+            ServiceKind::MapOnly,
+        ];
+        let keys: Vec<i64> = kinds.iter().map(|k| k.lock_key()).collect();
+        let mut deduped = keys.clone();
+        deduped.sort_unstable();
+        deduped.dedup();
+        assert_eq!(deduped.len(), keys.len(), "lock keys must be distinct");
+        assert!(keys.iter().all(|k| *k > 0));
     }
 }
