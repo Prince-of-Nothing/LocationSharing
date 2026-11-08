@@ -1,0 +1,530 @@
+//! OpenStreetMap services in pure Rust — the multiplatform replacement for the
+//! archived web (`js/geocode.js` / `js/routing.js` / `js/places.js`) and
+//! Kotlin (`OsmServices.kt`) clients. Same URLs, same policies, same privacy
+//! envelope — now one implementation for every platform:
+//!
+//! * Nominatim search / reverse (https://nominatim.openstreetmap.org)
+//!   — max 1 req/s, user-typed queries only.
+//! * OSRM routing driving/foot/bike (https://router.project-osrm.org)
+//!   — demo only; production self-hosts OSRM over OSM extracts.
+//! * Overpass POI browse (https://overpass-api.de) — one query per tap.
+//!
+//! Data is © OpenStreetMap contributors (ODbL), reference:
+//! https://wiki.openstreetmap.org/wiki/Main_Page
+//! Friend/shared locations are NEVER sent to any of these services.
+
+use serde::Deserialize;
+use std::time::{Duration, Instant};
+
+pub const NOMINATIM_BASE: &str = "https://nominatim.openstreetmap.org";
+pub const OSRM_BASE: &str = "https://router.project-osrm.org";
+pub const OVERPASS_BASE: &str = "https://overpass-api.de/api/interpreter";
+
+const USER_AGENT: &str = "PinpointRust/0.1.0 (privacy-first OSM client)";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SearchPlace {
+    pub display_name: String,
+    pub short_name: String,
+    pub latitude: f64,
+    pub longitude: f64,
+    pub category: String,
+    pub place_type: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TravelMode {
+    Driving,
+    Foot,
+    Bike,
+}
+
+impl TravelMode {
+    pub fn profile(self) -> &'static str {
+        match self {
+            Self::Driving => "driving",
+            Self::Foot => "foot",
+            Self::Bike => "bike",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RouteStep {
+    pub text: String,
+    pub distance_m: Option<f64>,
+    pub duration_s: Option<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Route {
+    pub points: Vec<(f64, f64)>,
+    pub distance_m: f64,
+    pub duration_s: f64,
+    pub steps: Vec<RouteStep>,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Poi {
+    pub osm_id: i64,
+    pub name: String,
+    pub latitude: f64,
+    pub longitude: f64,
+    pub category: String,
+    pub icon: String,
+    pub phone: String,
+    pub website: String,
+    pub opening_hours: String,
+    pub cuisine: String,
+}
+
+// Nominatim DTOs (only the fields we use; unknown keys ignored).
+#[derive(Debug, Deserialize)]
+struct NominatimItem {
+    #[serde(default)]
+    display_name: String,
+    #[serde(default)]
+    lat: String,
+    #[serde(default)]
+    lon: String,
+    #[serde(rename = "class", default)]
+    class_: String,
+    #[serde(rename = "type", default)]
+    type_: String,
+}
+
+impl NominatimItem {
+    fn into_place(self) -> SearchPlace {
+        let short = self
+            .display_name
+            .split(',')
+            .next()
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        SearchPlace {
+            display_name: self.display_name,
+            short_name: if short.is_empty() {
+                "Unnamed place".to_string()
+            } else {
+                short
+            },
+            latitude: self.lat.parse().unwrap_or(0.0),
+            longitude: self.lon.parse().unwrap_or(0.0),
+            category: self.class_,
+            place_type: self.type_,
+        }
+    }
+}
+
+// OSRM DTOs.
+#[derive(Debug, Deserialize)]
+struct OsrmResponse {
+    #[serde(default)]
+    code: String,
+    #[serde(default)]
+    routes: Vec<OsrmRoute>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OsrmRoute {
+    #[serde(default)]
+    distance: f64,
+    #[serde(default)]
+    duration: f64,
+    #[serde(default)]
+    geometry: String,
+    #[serde(default)]
+    legs: Vec<OsrmLeg>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OsrmLeg {
+    #[serde(default)]
+    summary: String,
+    #[serde(default)]
+    steps: Vec<OsrmStep>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OsrmStep {
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    distance: Option<f64>,
+    #[serde(default)]
+    duration: Option<f64>,
+    #[serde(default)]
+    maneuver: Option<OsrmManeuver>,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)] // Deserialized from OSRM API; modifier/exit are part of the contract but not read yet.
+struct OsrmManeuver {
+    #[serde(rename = "type", default)]
+    type_: String,
+    #[serde(default)]
+    modifier: Option<String>,
+    #[serde(default)]
+    exit: Option<i64>,
+}
+
+// Overpass DTOs.
+#[derive(Debug, Deserialize)]
+struct OverpassResponse {
+    #[serde(default)]
+    elements: Vec<OverpassElement>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OverpassElement {
+    #[serde(default)]
+    id: i64,
+    #[serde(default)]
+    lat: Option<f64>,
+    #[serde(default)]
+    lon: Option<f64>,
+    #[serde(default)]
+    tags: std::collections::HashMap<String, String>,
+}
+
+// ---------------------------------------------------------------------------
+// Client
+// ---------------------------------------------------------------------------
+
+/// Thin OSM client. `reqwest::Client` is already in `Cargo.toml`, so this
+/// adds zero dependencies while matching the archived web/Kotlin behaviour.
+pub struct OsmClient {
+    http: reqwest::Client,
+    last_search: std::sync::Mutex<Option<Instant>>,
+}
+
+impl OsmClient {
+    pub fn new() -> anyhow::Result<Self> {
+        Ok(Self {
+            http: reqwest::Client::builder()
+                .timeout(Duration::from_secs(15))
+                .user_agent(USER_AGENT)
+                .build()?,
+            last_search: std::sync::Mutex::new(None),
+        })
+    }
+
+    async fn throttle(&self) {
+        let wait = {
+            let guard = self.last_search.lock().unwrap();
+            match *guard {
+                Some(last) => {
+                    let elapsed = last.elapsed();
+                    if elapsed < Duration::from_secs(1) {
+                        Some(Duration::from_secs(1) - elapsed)
+                    } else {
+                        None
+                    }
+                }
+                None => None,
+            }
+        };
+        if let Some(d) = wait {
+            tokio::time::sleep(d).await;
+        }
+        *self.last_search.lock().unwrap() = Some(Instant::now());
+    }
+
+    /// Nominatim search (≥3 chars, debounced by the UI).
+    pub async fn search(&self, query: &str) -> anyhow::Result<Vec<SearchPlace>> {
+        let q = query.trim();
+        if q.chars().count() < 3 {
+            anyhow::bail!("Type at least 3 characters to search.");
+        }
+        self.throttle().await;
+        let url = format!(
+            "{NOMINATIM_BASE}/search?q={}&format=jsonv2&limit=8&addressdetails=1",
+            urlencoding(q)
+        );
+        let items: Vec<NominatimItem> = self.http.get(&url).send().await?.json().await?;
+        Ok(items
+            .into_iter()
+            .map(|i| i.into_place())
+            .filter(|p| p.latitude != 0.0 || p.longitude != 0.0)
+            .collect())
+    }
+
+    /// Reverse geocode (tap location).
+    pub async fn reverse(&self, latitude: f64, longitude: f64) -> anyhow::Result<SearchPlace> {
+        self.throttle().await;
+        let url = format!(
+            "{NOMINATIM_BASE}/reverse?lat={latitude}&lon={longitude}&format=jsonv2&zoom=16"
+        );
+        let item: NominatimItem = self.http.get(&url).send().await?.json().await?;
+        Ok(item.into_place())
+    }
+
+    /// OSRM route (driving/foot/bike).
+    pub async fn route(
+        &self,
+        from: (f64, f64),
+        to: (f64, f64),
+        mode: TravelMode,
+    ) -> anyhow::Result<Route> {
+        // Coords are lon,lat;lon,lat (OSRM convention).
+        let url = format!(
+            "{OSRM_BASE}/route/v1/{}/{:.6},{:.6};{:.6},{:.6}?overview=full&geometries=polyline&steps=true",
+            mode.profile(),
+            from.1,
+            from.0,
+            to.1,
+            to.0,
+        );
+        let resp: OsrmResponse = self.http.get(&url).send().await?.json().await?;
+        if resp.code != "Ok" || resp.routes.is_empty() {
+            anyhow::bail!("No route found between these points.");
+        }
+        let r = resp.routes.into_iter().next().unwrap();
+        let points = decode_polyline(&r.geometry);
+        let summary = r
+            .legs
+            .first()
+            .map(|l| l.summary.clone())
+            .unwrap_or_default();
+        let steps: Vec<RouteStep> = r
+            .legs
+            .into_iter()
+            .flat_map(|leg| leg.steps)
+            .map(|s| RouteStep {
+                text: step_text(&s),
+                distance_m: s.distance,
+                duration_s: s.duration,
+            })
+            .collect();
+        Ok(Route {
+            points,
+            distance_m: r.distance,
+            duration_s: r.duration,
+            steps,
+            summary,
+        })
+    }
+
+    /// Overpass POI around a centre (one query per call).
+    pub async fn pois(
+        &self,
+        latitude: f64,
+        longitude: f64,
+        category: &str,
+    ) -> anyhow::Result<Vec<Poi>> {
+        let fragment =
+            poi_fragment(category).ok_or_else(|| anyhow::anyhow!("Unknown POI category"))?;
+        let (icon, _) = poi_icon(category);
+        let query = format!(
+            "[out:json][timeout:25];({});out center 60;",
+            fragment
+                .replace("{r}", "1500")
+                .replace("{lat}", &format!("{latitude:.6}"))
+                .replace("{lon}", &format!("{longitude:.6}"))
+        );
+        let resp: OverpassResponse = self
+            .http
+            .post(OVERPASS_BASE)
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .body(format!("data={}", urlencoding(&query)))
+            .send()
+            .await?
+            .json()
+            .await?;
+        Ok(resp
+            .elements
+            .into_iter()
+            .filter_map(|e| match (e.lat, e.lon) {
+                (Some(lat), Some(lon)) => {
+                    let name = e
+                        .tags
+                        .get("name")
+                        .or_else(|| e.tags.get("brand"))
+                        .or_else(|| e.tags.get("operator"))
+                        .cloned()
+                        .unwrap_or_else(|| "(unnamed)".to_string());
+                    Some(Poi {
+                        osm_id: e.id,
+                        name,
+                        latitude: lat,
+                        longitude: lon,
+                        category: category.to_string(),
+                        icon: icon.to_string(),
+                        phone: e.tags.get("phone").cloned().unwrap_or_default(),
+                        website: e.tags.get("website").cloned().unwrap_or_default(),
+                        opening_hours: e.tags.get("opening_hours").cloned().unwrap_or_default(),
+                        cuisine: e.tags.get("cuisine").cloned().unwrap_or_default(),
+                    })
+                }
+                _ => None,
+            })
+            .collect())
+    }
+}
+
+impl Default for OsmClient {
+    fn default() -> Self {
+        Self::new().expect("OsmClient default requires a reqwest client")
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+fn urlencoding(s: &str) -> String {
+    // Minimal percent-encoding (unreserved + space as %20). Keeps us
+    // dependency-free; production could pull `url`'s form_urlencoded.
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char)
+            }
+            b' ' => out.push_str("%20"),
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
+}
+
+/// Google polyline decode (OSRM `overview=full&geometries=polyline`).
+pub fn decode_polyline(encoded: &str) -> Vec<(f64, f64)> {
+    let mut points = Vec::new();
+    let mut idx = 0usize;
+    let mut lat: i32 = 0;
+    let mut lng: i32 = 0;
+    let bytes = encoded.as_bytes();
+    while idx < bytes.len() {
+        let (delta, _) = decode_delta(bytes, &mut idx);
+        lat += delta;
+        let (delta2, _) = decode_delta(bytes, &mut idx);
+        lng += delta2;
+        points.push((lat as f64 / 1e5, lng as f64 / 1e5));
+    }
+    points
+}
+
+fn decode_delta(bytes: &[u8], idx: &mut usize) -> (i32, usize) {
+    let mut shift = 0;
+    let mut result: i32 = 0;
+    let mut byte: u8;
+    loop {
+        byte = bytes[*idx] - 63;
+        *idx += 1;
+        result |= ((byte & 0x1f) as i32) << shift;
+        shift += 5;
+        if byte < 0x20 {
+            break;
+        }
+    }
+    let delta = if result & 1 != 0 {
+        !(result >> 1)
+    } else {
+        result >> 1
+    };
+    (delta, shift)
+}
+
+fn step_text(step: &OsrmStep) -> String {
+    let t = step
+        .maneuver
+        .as_ref()
+        .map(|m| m.type_.as_str())
+        .unwrap_or("continue");
+    let verb = match t {
+        "depart" => "Depart",
+        "arrive" => "Arrive",
+        "turn" => "Turn",
+        "merge" => "Merge",
+        "onramp" => "Take the ramp",
+        "offramp" => "Exit",
+        "fork" => "Keep",
+        "roundabout" | "rotary" | "roundaboutturn" => "At the roundabout, take",
+        _ => "Continue",
+    };
+    let name = if step.name.is_empty() {
+        String::new()
+    } else {
+        format!(" onto {}", step.name)
+    };
+    format!("{verb}{name}")
+}
+
+pub fn poi_fragment(id: &str) -> Option<&'static str> {
+    match id {
+        "food" => Some(
+            r#"node["amenity"="restaurant"](around:{r},{lat},{lon});node["amenity"="cafe"](around:{r},{lat},{lon});"#,
+        ),
+        "fuel" => Some(r#"node["amenity"="fuel"](around:{r},{lat},{lon});"#),
+        "pharmacy" => Some(r#"node["amenity"="pharmacy"](around:{r},{lat},{lon});"#),
+        "hospital" => Some(r#"node["amenity"="hospital"](around:{r},{lat},{lon});"#),
+        "hotel" => Some(
+            r#"node["tourism"="hotel"](around:{r},{lat},{lon});node["tourism"="hostel"](around:{r},{lat},{lon});"#,
+        ),
+        "tourism" => Some(
+            r#"node["tourism"="museum"](around:{r},{lat},{lon});node["tourism"="attraction"](around:{r},{lat},{lon});"#,
+        ),
+        "water" => Some(
+            r#"node["amenity"="drinking_water"](around:{r},{lat},{lon});node["amenity"="toilets"](around:{r},{lat},{lon});"#,
+        ),
+        "parking" => Some(r#"node["amenity"="parking"](around:{r},{lat},{lon});"#),
+        "park" => Some(r#"node["leisure"="park"](around:{r},{lat},{lon});"#),
+        _ => None,
+    }
+}
+
+pub fn poi_icon(id: &str) -> (&'static str, &'static str) {
+    match id {
+        "food" => ("🍽️", "Food"),
+        "fuel" => ("⛽", "Fuel"),
+        "pharmacy" => ("💊", "Pharmacy"),
+        "hospital" => ("🏥", "Health"),
+        "hotel" => ("🏨", "Stay"),
+        "tourism" => ("🏛️", "Sights"),
+        "water" => ("💧", "Water"),
+        "parking" => ("🅿️", "Parking"),
+        "park" => ("🌳", "Parks"),
+        _ => ("•", "Place"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{decode_polyline, poi_fragment, urlencoding};
+
+    #[test]
+    fn polyline_decodes_known_vector() {
+        // "_p~iF~ps|U_ulLnnqC_mqNvxq@" → (38.5, -120.2), (40.7, -120.95), (43.252, -126.453)
+        let pts = decode_polyline("_p~iF~ps|U_ulLnnqC_mqNvxq@");
+        assert_eq!(pts.len(), 3);
+        assert!((pts[0].0 - 38.5).abs() < 1e-4);
+        assert!((pts[0].1 + 120.2).abs() < 1e-4);
+    }
+
+    #[test]
+    fn empty_polyline_is_empty() {
+        assert!(decode_polyline("").is_empty());
+    }
+
+    #[test]
+    fn poi_fragments_all_known() {
+        for id in [
+            "food", "fuel", "pharmacy", "hospital", "hotel", "tourism", "water", "parking", "park",
+        ] {
+            assert!(poi_fragment(id).is_some(), "{id} must have a fragment");
+        }
+        assert!(poi_fragment("nope").is_none());
+    }
+
+    #[test]
+    fn urlencoding_handles_spaces() {
+        assert_eq!(urlencoding("Chisinau cafe"), "Chisinau%20cafe");
+    }
+}

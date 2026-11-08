@@ -1,4 +1,4 @@
-﻿//! HTTP client for the Pinpoint API.
+//! HTTP client for the Pinpoint API.
 //!
 //! Contract notes, verified against `backend/internal/handlers`:
 //!
@@ -11,7 +11,9 @@
 //! * Plain HTTP is accepted only for loopback development URLs; anything
 //!   else must be HTTPS (fail closed â€” see ADR-0006).
 
-use crate::models::{FriendLocation, Friendship, LocationShare, LoginResponse, User};
+use crate::models::{
+    CheckIn, EmergencyAlert, FriendLocation, Friendship, LocationShare, LoginResponse, User,
+};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use url::Url;
@@ -246,6 +248,49 @@ impl ApiClient {
         Ok(())
     }
 
+    /// MFA: start enrolment; returns (secret, otpauth_uri).
+    pub async fn mfa_enroll(&self) -> anyhow::Result<(String, String)> {
+        let response = self
+            .request(reqwest::Method::POST, "/api/v1/auth/mfa/enroll", None)
+            .await?;
+        let response = Self::check(response, "MFA enrolment failed").await?;
+        let body: serde_json::Value = response.json().await?;
+        Ok((
+            body["secret"].as_str().unwrap_or("").to_string(),
+            body["otpauth_uri"].as_str().unwrap_or("").to_string(),
+        ))
+    }
+
+    /// MFA: verify a 6-digit code; enables MFA server-side.
+    pub async fn mfa_verify(&self, code: &str) -> anyhow::Result<()> {
+        let response = self
+            .request(
+                reqwest::Method::POST,
+                "/api/v1/auth/mfa/verify",
+                Some(serde_json::json!({ "code": code })),
+            )
+            .await?;
+        Self::check(response, "MFA verification failed").await?;
+        Ok(())
+    }
+
+    pub async fn mfa_status(&self) -> anyhow::Result<bool> {
+        let response = self
+            .request(reqwest::Method::GET, "/api/v1/auth/mfa/status", None)
+            .await?;
+        let response = Self::check(response, "MFA status failed").await?;
+        let body: serde_json::Value = response.json().await?;
+        Ok(body["mfa_enabled"].as_bool().unwrap_or(false))
+    }
+
+    pub async fn mfa_disable(&self) -> anyhow::Result<()> {
+        let response = self
+            .request(reqwest::Method::DELETE, "/api/v1/auth/mfa", None)
+            .await?;
+        Self::check(response, "MFA disable failed").await?;
+        Ok(())
+    }
+
     /// `POST /api/v1/auth/password/change` (revokes all sessions server-side,
     /// so local state is dropped) or `/password/force-change` when the server
     /// forced the rotation (`current_password` omitted).
@@ -403,6 +448,174 @@ impl ApiClient {
         Self::check(response, "Failed to publish location").await?;
         Ok(())
     }
+
+    pub async fn get_my_location(&self) -> anyhow::Result<FriendLocation> {
+        let response = self
+            .request(reqwest::Method::GET, "/api/v1/locations/me", None)
+            .await?;
+        let response = Self::check(response, "Failed to fetch my location").await?;
+        Ok(response.json().await?)
+    }
+
+    pub async fn delete_share(&self, share_id: i64) -> anyhow::Result<()> {
+        let response = self
+            .request(
+                reqwest::Method::DELETE,
+                &format!("/api/v1/locations/shares/{share_id}"),
+                None,
+            )
+            .await?;
+        Self::check(response, "Failed to delete share").await?;
+        Ok(())
+    }
+
+    pub async fn create_share_with_expiry(
+        &self,
+        friendship_id: i64,
+        direction: &str,
+        precision_level: &str,
+        duration_hours: Option<i64>,
+        label: Option<&str>,
+    ) -> anyhow::Result<()> {
+        let mut body = serde_json::json!({
+            "friendship_id": friendship_id,
+            "direction": direction,
+            "precision_level": precision_level,
+        });
+        if let Some(h) = duration_hours {
+            body["duration_hours"] = serde_json::Value::from(h);
+        }
+        if let Some(l) = label {
+            body["label"] = serde_json::Value::String(l.to_string());
+        }
+        let response = self
+            .request(
+                reqwest::Method::POST,
+                "/api/v1/locations/shares",
+                Some(body),
+            )
+            .await?;
+        Self::check(response, "Failed to create location share").await?;
+        Ok(())
+    }
+
+    pub async fn delete_friendship(&self, id: i64) -> anyhow::Result<()> {
+        let response = self
+            .request(
+                reqwest::Method::DELETE,
+                &format!("/api/v1/friendships/{id}"),
+                None,
+            )
+            .await?;
+        Self::check(response, "Failed to remove friendship").await?;
+        Ok(())
+    }
+
+    pub async fn list_users(&self) -> anyhow::Result<Vec<User>> {
+        let response = self
+            .request(reqwest::Method::GET, "/api/v1/users/", None)
+            .await?;
+        let response = Self::check(response, "Failed to fetch users").await?;
+        Ok(response.json().await?)
+    }
+
+    pub async fn search_users(&self, q: &str) -> anyhow::Result<Vec<User>> {
+        let response = self
+            .request(
+                reqwest::Method::GET,
+                &format!("/api/v1/users/search?q={}", urlencoding(q)),
+                None,
+            )
+            .await?;
+        let response = Self::check(response, "Failed to search users").await?;
+        Ok(response.json().await?)
+    }
+
+    pub async fn update_user(&self, id: i64, body: serde_json::Value) -> anyhow::Result<()> {
+        let response = self
+            .request(
+                reqwest::Method::PATCH,
+                &format!("/api/v1/users/{id}"),
+                Some(body),
+            )
+            .await?;
+        Self::check(response, "Failed to update user").await?;
+        Ok(())
+    }
+
+    pub async fn delete_user(&self, id: i64) -> anyhow::Result<()> {
+        let response = self
+            .request(
+                reqwest::Method::DELETE,
+                &format!("/api/v1/users/{id}"),
+                None,
+            )
+            .await?;
+        Self::check(response, "Failed to delete user").await?;
+        Ok(())
+    }
+
+    pub async fn create_check_in(
+        &self,
+        lat: f64,
+        lon: f64,
+        note: &str,
+        kind: &str,
+    ) -> anyhow::Result<()> {
+        let response = self
+            .request(
+                reqwest::Method::POST,
+                "/api/v1/locations/check-ins",
+                Some(serde_json::json!({
+                    "latitude": lat, "longitude": lon, "note": note, "kind": kind
+                })),
+            )
+            .await?;
+        Self::check(response, "Failed to create check-in").await?;
+        Ok(())
+    }
+
+    pub async fn list_check_ins(&self) -> anyhow::Result<Vec<CheckIn>> {
+        let response = self
+            .request(reqwest::Method::GET, "/api/v1/locations/check-ins", None)
+            .await?;
+        let response = Self::check(response, "Failed to fetch check-ins").await?;
+        Ok(response.json().await?)
+    }
+
+    pub async fn trigger_emergency(&self, lat: f64, lon: f64) -> anyhow::Result<()> {
+        let response = self
+            .request(
+                reqwest::Method::POST,
+                "/api/v1/locations/emergency",
+                Some(serde_json::json!({ "latitude": lat, "longitude": lon })),
+            )
+            .await?;
+        Self::check(response, "Failed to trigger emergency").await?;
+        Ok(())
+    }
+
+    pub async fn list_emergencies(&self) -> anyhow::Result<Vec<EmergencyAlert>> {
+        let response = self
+            .request(reqwest::Method::GET, "/api/v1/locations/emergency", None)
+            .await?;
+        let response = Self::check(response, "Failed to fetch emergencies").await?;
+        Ok(response.json().await?)
+    }
+}
+
+fn urlencoding(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char)
+            }
+            b' ' => out.push_str("%20"),
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
 }
 
 /// Renders the API's `{error: {code, message, fields}}` envelope as a

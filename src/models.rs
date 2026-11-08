@@ -2,9 +2,11 @@
 //! (`backend/internal/handlers`: `userResponse`, `loginResponse`,
 //! `friendshipResponse`, `locationShareResponse`, `locationResponse`).
 
+use crate::osm::SearchPlace;
 use serde::{Deserialize, Serialize};
 
 /// Authenticated user as returned in the `user` field of login/register.
+/// `password_hash`/`totp_secret`/`mfa_last_step` are write-only (never serialized).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct User {
     pub id: i64,
@@ -13,6 +15,15 @@ pub struct User {
     pub role: String,
     pub is_active: bool,
     pub must_change_password: bool,
+    #[serde(skip_serializing, default)]
+    pub password_hash: Option<String>,
+    #[serde(skip_serializing, default)]
+    pub totp_secret: Option<String>,
+    #[serde(default)]
+    pub mfa_enabled: bool,
+    /// Last consumed TOTP step (replay protection). Server-only.
+    #[serde(skip_serializing, default)]
+    pub mfa_last_step: u64,
 }
 
 /// Envelope of `POST /api/v1/auth/login` and `POST /api/v1/auth/register`.
@@ -52,6 +63,12 @@ pub struct LocationShare {
     pub is_active: bool,
     #[serde(default)]
     pub last_location_update_at: Option<String>,
+    /// Optional ISO-8601 expiry; expired shares are treated as inactive.
+    #[serde(default)]
+    pub expires_at: Option<String>,
+    /// Optional human label (e.g. "Trip to cabin").
+    #[serde(default)]
+    pub label: Option<String>,
 }
 
 /// A friend's location as visible to the caller, already rounded by the
@@ -66,6 +83,146 @@ pub struct FriendLocation {
     pub updated_at: String,
     #[serde(default)]
     pub accuracy: Option<f64>,
+}
+
+/// A trip / scheduled / manual check-in (latest retained per user + history
+/// list). Check-ins are explicit user actions, never auto-tracked.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CheckIn {
+    pub id: i64,
+    pub user_id: i64,
+    pub user_name: String,
+    pub latitude: f64,
+    pub longitude: f64,
+    #[serde(default)]
+    pub note: String,
+    /// `manual` | `scheduled` | `trip`
+    pub kind: String,
+    pub created_at: String,
+}
+
+/// A panic/emergency alert: activates all shares and publishes the location.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EmergencyAlert {
+    pub id: i64,
+    pub user_id: i64,
+    pub user_name: String,
+    pub latitude: f64,
+    pub longitude: f64,
+    pub created_at: String,
+    #[serde(default)]
+    pub resolved: bool,
+}
+
+/// Local user preferences persisted on-device (never synced).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Settings {
+    /// Auto-refresh interval in seconds (0 = off).
+    #[serde(default = "default_refresh_interval")]
+    pub refresh_interval_secs: u64,
+    /// true = metric (km/m), false = imperial (mi/ft).
+    #[serde(default = "default_metric")]
+    pub metric: bool,
+    /// Default precision for new shares.
+    #[serde(default = "default_precision")]
+    pub default_precision: String,
+}
+
+fn default_refresh_interval() -> u64 {
+    30
+}
+fn default_metric() -> bool {
+    true
+}
+fn default_precision() -> String {
+    "exact".to_string()
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            refresh_interval_secs: default_refresh_interval(),
+            metric: default_metric(),
+            default_precision: default_precision(),
+        }
+    }
+}
+
+/// Great-circle distance in metres (haversine).
+pub fn haversine_m(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
+    const R: f64 = 6_371_000.0;
+    let d_lat = (lat2 - lat1).to_radians();
+    let d_lon = (lon2 - lon1).to_radians();
+    let a = (d_lat / 2.0).sin().powi(2)
+        + lat1.to_radians().cos() * lat2.to_radians().cos() * (d_lon / 2.0).sin().powi(2);
+    2.0 * R * a.sqrt().asin()
+}
+
+/// Initial bearing in degrees (0=N, 90=E).
+pub fn bearing_deg(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
+    let y = (lon2 - lon1).to_radians().sin() * lat2.to_radians().cos();
+    let x = lat1.to_radians().cos() * lat2.to_radians().sin()
+        - lat1.to_radians().sin() * lat2.to_radians().cos() * (lon2 - lon1).to_radians().cos();
+    (y.atan2(x).to_degrees() + 360.0) % 360.0
+}
+
+/// Human-readable distance for the given unit preference.
+pub fn format_distance(metres: f64, metric: bool) -> String {
+    if metric {
+        if metres < 1000.0 {
+            format!("{metres:.0} m")
+        } else if metres < 10_000.0 {
+            format!("{:.2} km", metres / 1000.0)
+        } else {
+            format!("{:.1} km", metres / 1000.0)
+        }
+    } else {
+        let miles = metres / 1609.344;
+        if miles < 0.1 {
+            format!("{:.0} ft", metres * 3.28084)
+        } else {
+            format!("{miles:.2} mi")
+        }
+    }
+}
+
+/// Compass label for a bearing (N, NE, E, …).
+pub fn compass_label(bearing: f64) -> &'static str {
+    match ((bearing + 22.5) / 45.0) as i32 % 8 {
+        0 => "N",
+        1 => "NE",
+        2 => "E",
+        3 => "SE",
+        4 => "S",
+        5 => "SW",
+        6 => "W",
+        _ => "NW",
+    }
+}
+
+/// Freshness classification for a location timestamp (`live|fresh|stale|dead|unknown`).
+/// Thresholds: live <60s, fresh <15min, stale <1h, else dead. Unparsable → unknown (never "live").
+pub fn freshness_state(updated_at: &str, now_unix: i64) -> &'static str {
+    let Some(age) = age_secs(updated_at, now_unix) else {
+        return "unknown";
+    };
+    match age {
+        0..=59 => "live",
+        60..=899 => "fresh",
+        900..=3599 => "stale",
+        _ => "dead",
+    }
+}
+
+/// Age in seconds of an ISO-8601 timestamp vs `now_unix`; None if unparsable/future.
+pub fn age_secs(updated_at: &str, now_unix: i64) -> Option<u64> {
+    let ts = chrono::DateTime::parse_from_rfc3339(updated_at).ok()?;
+    let secs = ts.timestamp();
+    if secs > now_unix {
+        None
+    } else {
+        Some((now_unix - secs) as u64)
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -84,4 +241,79 @@ pub struct AppData {
     pub locations: Vec<FriendLocation>,
     pub state: AppState,
     pub must_change_password: bool,
+    pub search_results: Vec<SearchPlace>,
+    pub search_error: Option<String>,
+    // New feature state (populated by the server where applicable).
+    pub my_location: Option<FriendLocation>,
+    pub check_ins: Vec<CheckIn>,
+    pub emergencies: Vec<EmergencyAlert>,
+    pub users: Vec<User>,
+    pub settings: Settings,
+    pub bookmarks_count: usize,
+    /// Pending MFA enrolment secret (set by enroll, cleared on verify).
+    pub totp_pending_secret: Option<String>,
+    /// Whether the signed-in user's account has MFA enabled (from login/status).
+    pub mfa_enabled: bool,
+}
+
+#[cfg(test)]
+mod geo_tests {
+    use super::{bearing_deg, compass_label, format_distance, haversine_m, LocationShare};
+
+    #[test]
+    fn haversine_known_distance() {
+        // Chicago landmarks: ~1.6 km apart. Zero distance is exact.
+        assert_eq!(haversine_m(41.8902, -87.6323, 41.8902, -87.6323), 0.0);
+        let d = haversine_m(41.8902, -87.6323, 41.8781, -87.6298);
+        assert!(d > 1300.0 && d < 1700.0, "distance was {d}");
+    }
+
+    #[test]
+    fn bearing_and_compass() {
+        // Due north.
+        let b = bearing_deg(41.0, -87.0, 42.0, -87.0);
+        assert!(b < 1.0 || b > 359.0, "bearing was {b}");
+        assert_eq!(compass_label(b), "N");
+        assert_eq!(compass_label(90.0), "E");
+        assert_eq!(compass_label(180.0), "S");
+        assert_eq!(compass_label(270.0), "W");
+    }
+
+    #[test]
+    fn distance_formatting() {
+        assert_eq!(format_distance(500.0, true), "500 m");
+        assert_eq!(format_distance(1609.0, true), "1.61 km");
+        assert_eq!(format_distance(1609.0, false), "1.00 mi");
+    }
+
+    #[test]
+    fn share_expiry_deserializes_with_defaults() {
+        let v = serde_json::json!({
+            "id": 1, "friendship_id": 2, "owner_id": 3,
+            "direction": "mutual", "precision_level": "exact", "is_active": true
+        });
+        let s: LocationShare = serde_json::from_value(v).expect("legacy share JSON");
+        assert!(s.expires_at.is_none());
+        assert!(s.label.is_none());
+    }
+
+    #[test]
+    fn freshness_thresholds() {
+        use super::{age_secs, freshness_state};
+        let now = 1_784_000_000i64; // fixed reference point
+        let iso = chrono::DateTime::from_timestamp(now - 10, 0)
+            .unwrap()
+            .to_rfc3339();
+        assert_eq!(age_secs(&iso, now), Some(10));
+        assert_eq!(freshness_state(&iso, now), "live");
+        let stale = chrono::DateTime::from_timestamp(now - 2000, 0)
+            .unwrap()
+            .to_rfc3339();
+        assert_eq!(freshness_state(&stale, now), "stale");
+        let dead = chrono::DateTime::from_timestamp(now - 7200, 0)
+            .unwrap()
+            .to_rfc3339();
+        assert_eq!(freshness_state(&dead, now), "dead");
+        assert_eq!(freshness_state("not-a-date", now), "unknown");
+    }
 }

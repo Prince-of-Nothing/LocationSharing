@@ -98,18 +98,27 @@ pub fn render_map(ui: &mut Ui, state: &mut AppData) {
             );
         });
 
-        // Map provider buttons
+        // Map provider buttons (OSM data — ODbL; see docs/sdlc/07-openstreetmap-integration.md)
+        // Project reference: https://wiki.openstreetmap.org/wiki/Main_Page
         ui.horizontal(|ui| {
             if ui.button("OpenStreetMap").clicked() {
                 open_map_in_browser(ui.ctx(), &all_locations[0], "osm");
             }
+            if ui.button("Directions (OSM)").clicked() {
+                open_map_in_browser(ui.ctx(), &all_locations[0], "directions");
+            }
+            if ui.button("Organic Maps").clicked() {
+                open_map_in_browser(ui.ctx(), &all_locations[0], "organic");
+            }
             if ui.button("Google Maps").clicked() {
                 open_map_in_browser(ui.ctx(), &all_locations[0], "google");
             }
-            if ui.button("Magic Earth").clicked() {
-                open_map_in_browser(ui.ctx(), &all_locations[0], "magic");
-            }
         });
+        ui.label(
+            RichText::new("Map data © OpenStreetMap contributors (ODbL)")
+                .size(10.0)
+                .color(Color32::from_rgb(148, 163, 184)),
+        );
     });
 
     ui.add_space(10.0);
@@ -118,19 +127,32 @@ pub fn render_map(ui: &mut Ui, state: &mut AppData) {
     draw_location_list(ui, &all_locations);
 }
 
-/// Open a map in the default browser for the given location and provider
+/// Open a map in the default browser for the given location and provider.
+/// All URLs are OSM-data based (ODbL): OSM standard, OSM directions, and
+/// Organic Maps (https://organicmaps.app). Reference:
+/// https://wiki.openstreetmap.org/wiki/Main_Page — Magic Earth
+/// (https://wiki.openstreetmap.org/wiki/Magic_Earth) is an OSM-data
+/// consumer too; we link to OSM-native targets instead of proprietary
+/// deep links so the desktop client stays OSM-only by default.
 fn open_map_in_browser(ctx: &egui::Context, loc: &FriendLocation, provider: &str) {
     let url = match provider {
         "osm" => format!(
             "https://www.openstreetmap.org/#map=10/{:.4}/{:.4}",
             loc.latitude, loc.longitude
         ),
-        "google" => format!(
-            "https://www.google.com/maps/@{:.4},{:.4},.zm",
+        "directions" => format!(
+            "https://www.openstreetmap.org/directions?to={:.4}%2C{:.4}",
             loc.latitude, loc.longitude
         ),
-        "magic" => format!(
-            "https://www.earth.google.com/web/@{:.4},{:.4},.zm",
+        "organic" => {
+            // Organic Maps web export format (OSM data, offline-first).
+            format!(
+                "https://organicmaps.app/?ll={:.4}%2C{:.4}&z=14",
+                loc.latitude, loc.longitude
+            )
+        }
+        "google" => format!(
+            "https://www.google.com/maps/dir/?api=1&destination={:.4},{:.4}",
             loc.latitude, loc.longitude
         ),
         _ => return,
@@ -168,6 +190,41 @@ fn draw_location_list(ui: &mut Ui, locations: &[FriendLocation]) {
                         .size(10.0)
                         .color(precision_color),
                 );
+            });
+            // Distance from first demo point (proxy for "near me" when no GPS).
+            let anchor = (41.8902, -87.6323);
+            let d = crate::models::haversine_m(anchor.0, anchor.1, loc.latitude, loc.longitude);
+            let b = crate::models::bearing_deg(anchor.0, anchor.1, loc.latitude, loc.longitude);
+            // Freshness badge (honest: stale/dead never shown as live).
+            let now = chrono::Utc::now().timestamp();
+            let fresh = crate::models::freshness_state(&loc.updated_at, now);
+            let fresh_color = match fresh {
+                "live" => Color32::from_rgb(52, 211, 153),
+                "fresh" => Color32::from_rgb(250, 204, 21),
+                "stale" => Color32::from_rgb(249, 115, 22),
+                "dead" => Color32::from_rgb(239, 68, 68),
+                _ => Color32::from_rgb(148, 163, 184),
+            };
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(format!(
+                        "{} {} · updated {}",
+                        crate::models::format_distance(d, true),
+                        crate::models::compass_label(b),
+                        loc.updated_at
+                    ))
+                    .size(10.0)
+                    .color(Color32::from_rgb(148, 163, 184)),
+                );
+                ui.colored_label(fresh_color, RichText::new(format!("● {fresh}")).size(10.0));
+                if ui.small_button("★ Save").clicked() {
+                    let store = crate::bookmarks::BookmarkStore::default_location();
+                    store.add(&loc.user_name, loc.latitude, loc.longitude);
+                }
+                if ui.small_button("Address").clicked() {
+                    // Handled by Places screen reverse lookup; here just notice.
+                    ui.ctx().request_repaint();
+                }
             });
             ui.add_space(5.0);
         }

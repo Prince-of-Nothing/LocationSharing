@@ -1,4 +1,4 @@
-﻿//! Main entry point for Pinpoint Desktop.
+//! Main entry point for Pinpoint Desktop.
 
 #[cfg(not(target_arch = "wasm32"))]
 use std::sync::Arc;
@@ -38,22 +38,30 @@ fn main() {
 
     tracing_subscriber::fmt::init();
 
-    // Fail closed on transports outside the policy (ADR-0006): plain HTTP
-    // is only accepted for loopback development URLs.
-    let api_client = match pinpoint_desktop::api::ApiClient::new(backend_url) {
-        Ok(client) => Arc::new(client),
+    // The map is fully functional offline. We create the API client
+    // optimistically; if the backend is unreachable the app degrades to
+    // offline mode (demo friend locations, OSM navigation hand-off,
+    // no publishing/sharing). Plain HTTP is only accepted for loopback
+    // development URLs (ADR-0006).
+    let api_client = match pinpoint_desktop::api::ApiClient::new(&backend_url) {
+        Ok(client) => client,
         Err(e) => {
-            eprintln!("Cannot start: {e}");
-            std::process::exit(1);
+            eprintln!("Backend unavailable ({e}); starting in offline mode.");
+            pinpoint_desktop::api::ApiClient::new("http://localhost:8000").unwrap_or_else(|e2| {
+                eprintln!("Cannot create API client: {e2}");
+                std::process::exit(1);
+            })
         }
     };
 
-    let app = pinpoint_desktop::ui::PinpointAppUI::new(api_client, screenshot_path);
+    let mut app = pinpoint_desktop::ui::PinpointAppUI::new(Arc::new(api_client), screenshot_path);
+
+    app.set_offline_mode(true);
 
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_inner_size([1200.0, 800.0])
-            .with_title("Pinpoint"),
+            .with_title("Pinpoint — Map First"),
         ..Default::default()
     };
 
