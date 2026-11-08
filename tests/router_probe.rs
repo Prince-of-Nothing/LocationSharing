@@ -55,3 +55,28 @@ async fn users_by_id_route_matches() {
         "users by-id route missing"
     );
 }
+
+#[tokio::test]
+async fn health_route_matches_all_services() {
+    // Redundancy: every service replica must serve /health for Docker
+    // healthchecks and gateway failover (docker-compose.yml).
+    for app in [
+        pinpoint_desktop::server::auth_router()
+            .with_state(pinpoint_desktop::server::AppState::new()),
+        pinpoint_desktop::server::users_router()
+            .with_state(pinpoint_desktop::server::AppState::new()),
+        pinpoint_desktop::server::locations_router()
+            .with_state(pinpoint_desktop::server::AppState::new()),
+    ] {
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK, "/health missing");
+    }
+}

@@ -26,6 +26,7 @@ FROM debian:${DEBIAN_VERSION} AS runtime
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates \
+      curl \
       libssl3 \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd -r pinpoint && useradd -r -g pinpoint -d /home/pinpoint -s /sbin/nologin pinpoint
@@ -39,7 +40,7 @@ ENV PINPOINT_DATA_DIR=/home/pinpoint/.pinpoint
 USER pinpoint
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-    CMD cat /proc/self/status | grep -q VmRSS || exit 1
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -fsS "http://127.0.0.1:8000/health" || exit 1
 
 ENTRYPOINT ["/app/pinpoint-server"]

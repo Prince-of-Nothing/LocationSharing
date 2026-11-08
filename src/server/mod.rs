@@ -49,6 +49,7 @@ pub fn router(state: AppState) -> Router {
 /// Stateless: the app state is supplied once by the binary's `with_state`.
 pub fn auth_router() -> Router<AppState> {
     Router::new()
+        .route("/health", get(handlers::health))
         .route("/api/v1/auth/login", post(auth_handlers::login))
         .route("/api/v1/auth/register", post(auth_handlers::register))
         .route("/api/v1/auth/logout", post(auth_handlers::logout))
@@ -72,6 +73,7 @@ pub fn auth_router() -> Router<AppState> {
 /// NOTE: matchit 0.7 (axum 0.7) uses `:param` syntax, NOT `{param}` (that is axum 0.8).
 pub fn users_router() -> Router<AppState> {
     Router::new()
+        .route("/health", get(handlers::health))
         .route(
             "/api/v1/users/",
             get(users_handlers::list_users).post(users_handlers::create_user),
@@ -100,6 +102,7 @@ pub fn users_router() -> Router<AppState> {
 /// Locations + shares service routes. Independently scalable.
 pub fn locations_router() -> Router<AppState> {
     Router::new()
+        .route("/health", get(handlers::health))
         .route(
             "/api/v1/locations/shares",
             get(locations_handlers::list_shares).post(locations_handlers::create_share),

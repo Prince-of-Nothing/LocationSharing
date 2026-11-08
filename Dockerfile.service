@@ -30,6 +30,7 @@ ARG BIN=pinpoint-server
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates \
+      curl \
       libssl3 \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd -r pinpoint && useradd -r -g pinpoint -d /home/pinpoint -s /sbin/nologin pinpoint
@@ -41,7 +42,10 @@ ENV BIND_ADDR=0.0.0.0:8000
 ENV PINPOINT_BIN=${BIN}
 USER pinpoint
 EXPOSE 8000
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-    CMD cat /proc/self/status | grep -q VmRSS || exit 1
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -fsS "http://127.0.0.1:${INTERNAL_PORT:-8000}/health" || exit 1
 # BIN is a build ARG (pinpoint-server|pinpoint-auth|pinpoint-users|pinpoint-locations|pinpoint-map).
+# INTERNAL_PORT is the service port (8001..8004 set in docker-compose.yml).
+# Compose healthcheck overrides this with the same URL; the image-level one
+# keeps `docker run` (no compose) failover-aware too.
 ENTRYPOINT ["sh", "-c", "exec /app/$PINPOINT_BIN"]
