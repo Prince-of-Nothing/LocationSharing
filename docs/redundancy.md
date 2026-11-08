@@ -3,11 +3,13 @@
 ## What "backup" means here
 
 Kill any single `auth` / `users` / `locations` / `map` replica and
-requests keep working through the surviving one. The gateway resolves
-upstreams per-request (Docker DNS `127.0.0.11`) and retries the next
-replica on connection errors / 502–504 (`proxy_next_upstream` in
-`docker/nginx-gateway*.conf`), so a failed replica is invisible to
-clients. Every service also has `restart: unless-stopped` + a Docker
+requests keep working through the surviving one. The gateway is the
+central directory (`GET /registry` lists every service + upstream;
+`docs/service-discovery.md`): it resolves upstreams per-request
+(Docker DNS `127.0.0.11`) and retries the next replica on connection
+errors / 502–504 (`proxy_next_upstream` in `docker/nginx-gateway*.conf`),
+so a failed replica is invisible to clients. Every proxied response
+carries `X-Upstream: <ip>:<port>` proving which replica served it. Every service also has `restart: unless-stopped` + a Docker
 `HEALTHCHECK` (`/health` on each service, `/map/health` on map) and
 Compose `depends_on: service_healthy` for the gateway.
 
