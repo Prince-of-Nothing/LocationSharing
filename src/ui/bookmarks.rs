@@ -1,0 +1,72 @@
+//! Saved places screen
+use super::PinpointAppUI;
+use eframe::egui::{self, RichText};
+
+impl PinpointAppUI {
+    pub fn draw_bookmarks_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        self.draw_main_toolbar(ui);
+        ui.heading("Saved places (on-device only)");
+        ui.add_space(8.0);
+        let store = crate::bookmarks::BookmarkStore::default_location();
+        let list = store.list();
+        self.app.data().lock().unwrap().bookmarks_count = list.len();
+        ui.group(|ui| {
+            ui.label(format!("{} saved", list.len()));
+            for b in &list {
+                ui.horizontal(|ui| {
+                    ui.label(format!(
+                        "{} ({:.4}, {:.4})",
+                        b.name, b.latitude, b.longitude
+                    ));
+                    if ui.button("Remove").clicked() {
+                        store.remove(&b.id);
+                    }
+                });
+            }
+            if list.is_empty() {
+                ui.label("Nothing saved yet — add a place below.");
+            }
+        });
+        ui.add_space(8.0);
+        ui.group(|ui| {
+            ui.label(RichText::new("Add place").size(14.0).strong());
+            ui.add(
+                egui::TextEdit::singleline(&mut self.bookmark_name)
+                    .hint_text("Name")
+                    .desired_width(200.0),
+            );
+            ui.add(
+                egui::TextEdit::singleline(&mut self.bookmark_lat)
+                    .hint_text("Latitude")
+                    .desired_width(120.0),
+            );
+            ui.add(
+                egui::TextEdit::singleline(&mut self.bookmark_lon)
+                    .hint_text("Longitude")
+                    .desired_width(120.0),
+            );
+            if ui.button("Save").clicked() {
+                if let (Ok(lat), Ok(lon)) = (
+                    self.bookmark_lat.trim().parse::<f64>(),
+                    self.bookmark_lon.trim().parse::<f64>(),
+                ) {
+                    let name = if self.bookmark_name.trim().is_empty() {
+                        "Saved place".to_string()
+                    } else {
+                        self.bookmark_name.clone()
+                    };
+                    store.add(&name, lat, lon);
+                    self.bookmark_name.clear();
+                    self.bookmark_lat.clear();
+                    self.bookmark_lon.clear();
+                    self.app
+                        .set_notice(Some("Place saved on-device.".to_string()));
+                } else {
+                    self.app
+                        .set_error(Some("Enter valid latitude/longitude".to_string()));
+                }
+                let _ = ctx;
+            }
+        });
+    }
+}

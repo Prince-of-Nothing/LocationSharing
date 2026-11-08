@@ -3,15 +3,31 @@
 //! All network work is spawned on a dedicated tokio runtime; the UI thread
 //! only ever reads/writes plain state. Failures from the app layer are
 //! surfaced through `PinpointApp::error_message` and shown in the header.
+//!
+//! Per-screen rendering lives in `ui/` submodule files (one per screen);
+//! this file keeps the app shell, pending actions, header/toolbar and the
+//! `eframe::App` dispatcher.
+
+pub(crate) mod admin;
+pub(crate) mod auth;
+pub(crate) mod bookmarks;
+pub(crate) mod emergency;
+pub(crate) mod friends;
+pub(crate) mod map;
+pub(crate) mod places;
+pub(crate) mod profile;
+pub(crate) mod sharing;
+pub(crate) mod trips;
 
 use crate::api::ApiClient;
 use crate::app::{CurrentScreen, PinpointApp};
-use crate::map;
-use eframe::egui::{self, Align, Color32, Direction, RichText};
+use crate::osm::OsmClient;
+use eframe::egui::{self, Align, Color32, Direction};
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 
 #[derive(Clone)]
+#[allow(dead_code)]
 enum PendingAction {
     Login {
         email: String,
@@ -49,6 +65,49 @@ enum PendingAction {
         lon: f64,
         accuracy: f64,
     },
+    SearchPlaces {
+        query: String,
+    },
+    DeleteShare {
+        share_id: i64,
+    },
+    CreateShareEx {
+        friendship_id: i64,
+        direction: String,
+        precision: String,
+        duration_hours: Option<i64>,
+    },
+    DeleteFriendship {
+        id: i64,
+    },
+    CreateCheckIn {
+        lat: f64,
+        lon: f64,
+        note: String,
+        kind: String,
+    },
+    TriggerEmergency {
+        lat: f64,
+        lon: f64,
+    },
+    Route {
+        from: (f64, f64),
+        to: (f64, f64),
+        mode: String,
+    },
+    Poi {
+        lat: f64,
+        lon: f64,
+        category: String,
+    },
+    Reverse {
+        lat: f64,
+        lon: f64,
+    },
+    UpdateProfile {
+        full_name: String,
+    },
+    RefreshAll,
 }
 
 pub struct PinpointAppUI {
@@ -65,11 +124,38 @@ pub struct PinpointAppUI {
     // Sharing screen
     share_direction: String,
     share_precision: String,
+    share_duration: String,
     selected_friendship: Option<i64>,
     // Map screen: persistent publish inputs (a fresh String every frame
     // would swallow typing)
     publish_lat: String,
     publish_lon: String,
+    // Search query input (results live in AppData)
+    search_query: String,
+    // Places screen
+    route_mode: String,
+    route_from_lat: String,
+    route_from_lon: String,
+    poi_category: String,
+    reverse_label: String,
+    #[allow(dead_code)]
+    route_label: String,
+    // Trips / check-ins
+    checkin_lat: String,
+    checkin_lon: String,
+    checkin_note: String,
+    checkin_kind: String,
+    // Bookmarks
+    bookmark_name: String,
+    bookmark_lat: String,
+    bookmark_lon: String,
+    // Profile
+    profile_name: String,
+    // MFA
+    mfa_code: String,
+    // Emergency
+    emergency_lat: String,
+    emergency_lon: String,
     // Password screen
     change_password_current: String,
     change_password_new: String,
@@ -78,9 +164,10 @@ pub struct PinpointAppUI {
 
 impl PinpointAppUI {
     pub fn new(api_client: Arc<ApiClient>, screenshot_path: Option<String>) -> Self {
-        let app = PinpointApp::new(api_client, screenshot_path);
+        let app = Arc::new(PinpointApp::new(api_client, screenshot_path));
+        PinpointApp::start_auto_refresh(Arc::clone(&app));
         Self {
-            app: Arc::new(app),
+            app,
             rt: Runtime::new().expect("Failed to create tokio runtime"),
             login_email: String::new(),
             login_password: String::new(),
@@ -90,13 +177,36 @@ impl PinpointAppUI {
             friends_email: String::new(),
             share_direction: "to_friend".to_string(),
             share_precision: "exact".to_string(),
+            share_duration: String::new(),
             selected_friendship: None,
             publish_lat: String::new(),
             publish_lon: String::new(),
+            search_query: String::new(),
+            route_mode: "foot".to_string(),
+            route_from_lat: String::new(),
+            route_from_lon: String::new(),
+            poi_category: "food".to_string(),
+            reverse_label: String::new(),
+            route_label: String::new(),
+            checkin_lat: String::new(),
+            checkin_lon: String::new(),
+            checkin_note: String::new(),
+            checkin_kind: "manual".to_string(),
+            bookmark_name: String::new(),
+            bookmark_lat: String::new(),
+            bookmark_lon: String::new(),
+            profile_name: String::new(),
+            mfa_code: String::new(),
+            emergency_lat: String::new(),
+            emergency_lon: String::new(),
             change_password_current: String::new(),
             change_password_new: String::new(),
             change_password_confirm: String::new(),
         }
+    }
+
+    pub fn set_offline_mode(&mut self, offline: bool) {
+        self.app.set_offline_mode(offline);
     }
 
     fn spawn_action(&mut self, action: PendingAction, ctx: &egui::Context) {
@@ -145,16 +255,129 @@ impl PinpointAppUI {
                 PendingAction::PublishLocation { lat, lon, accuracy } => {
                     let _ = app.publish_location(lat, lon, accuracy).await;
                 }
+                PendingAction::SearchPlaces { query } => {
+                    let v = crate::security::validation::validate_search_query(&query);
+                    if !v.is_valid() {
+                        app.set_error(Some(v.errors.join("; ")));
+                        return;
+                    }
+                    if !app
+                        .rate_limiter()
+                        .lock()
+                        .unwrap()
+                        .check("nominatim")
+                        .is_allowed()
+                    {
+                        app.set_error(Some("Search rate limited — try again shortly.".to_string()));
+                        return;
+                    }
+                    let client = OsmClient::new().ok();
+                    if let Some(client) = client {
+                        match client.search(&query).await {
+                            Ok(results) => {
+                                app.data().lock().unwrap().search_results = results;
+                            }
+                            Err(e) => {
+                                app.data().lock().unwrap().search_error = Some(e.to_string());
+                            }
+                        }
+                    }
+                }
+                PendingAction::DeleteShare { share_id } => {
+                    let _ = app.delete_share(share_id).await;
+                }
+                PendingAction::CreateShareEx {
+                    friendship_id,
+                    direction,
+                    precision,
+                    duration_hours,
+                } => {
+                    let _ = app
+                        .create_share_with_expiry(
+                            friendship_id,
+                            direction,
+                            precision,
+                            duration_hours,
+                            None,
+                        )
+                        .await;
+                }
+                PendingAction::DeleteFriendship { id } => {
+                    let _ = app.delete_friendship(id).await;
+                }
+                PendingAction::CreateCheckIn {
+                    lat,
+                    lon,
+                    note,
+                    kind,
+                } => {
+                    let _ = app.create_check_in(lat, lon, note, kind).await;
+                }
+                PendingAction::TriggerEmergency { lat, lon } => {
+                    let _ = app.trigger_emergency(lat, lon).await;
+                }
+                PendingAction::Route { from, to, mode } => {
+                    let travel_mode = match mode.as_str() {
+                        "driving" => crate::osm::TravelMode::Driving,
+                        "bike" => crate::osm::TravelMode::Bike,
+                        _ => crate::osm::TravelMode::Foot,
+                    };
+                    if let Ok(client) = OsmClient::new() {
+                        match client.route(from, to, travel_mode).await {
+                            Ok(r) => {
+                                let mins = (r.duration_s / 60.0) as i64;
+                                app.set_notice(Some(format!(
+                                    "Route: {:.2} km, ~{} min. {}",
+                                    r.distance_m / 1000.0,
+                                    mins,
+                                    r.steps.first().map(|s| s.text.clone()).unwrap_or_default()
+                                )));
+                            }
+                            Err(e) => app.set_error(Some(e.to_string())),
+                        }
+                    }
+                }
+                PendingAction::Poi { lat, lon, category } => {
+                    if let Ok(client) = OsmClient::new() {
+                        match client.pois(lat, lon, &category).await {
+                            Ok(pois) => {
+                                app.set_notice(Some(format!(
+                                    "Found {} {} place(s) nearby",
+                                    pois.len(),
+                                    category
+                                )));
+                            }
+                            Err(e) => app.set_error(Some(e.to_string())),
+                        }
+                    }
+                }
+                PendingAction::Reverse { lat, lon } => {
+                    if let Ok(client) = OsmClient::new() {
+                        match client.reverse(lat, lon).await {
+                            Ok(place) => {
+                                app.set_notice(Some(format!("Address: {}", place.display_name)));
+                            }
+                            Err(e) => app.set_error(Some(e.to_string())),
+                        }
+                    }
+                }
+                PendingAction::UpdateProfile { full_name } => {
+                    let _ = app.update_profile(full_name).await;
+                }
+                PendingAction::RefreshAll => {
+                    let _ = app.refresh_all().await;
+                    let _ = app.refresh_my_location().await;
+                    let _ = app.refresh_check_ins().await;
+                    let _ = app.refresh_emergencies().await;
+                    let _ = app.refresh_users().await;
+                }
             }
         });
         ctx.request_repaint();
     }
 
     fn draw_header_bar(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        let signed_in = !matches!(
-            self.app.current_screen(),
-            CurrentScreen::Login | CurrentScreen::Register
-        );
+        let signed_in = self.app.is_signed_in();
 
         ui.horizontal(|ui| {
             ui.with_layout(
@@ -164,11 +387,22 @@ impl PinpointAppUI {
                 },
             );
             ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                if signed_in && ui.button("Sign out").clicked() {
-                    self.spawn_action(PendingAction::Logout, ctx);
+                if signed_in {
+                    if ui.button("Sign out").clicked() {
+                        self.spawn_action(PendingAction::Logout, ctx);
+                    }
+                    if let Some(user) = &self.app.data().lock().unwrap().user {
+                        ui.label(user.email.to_string());
+                    }
+                } else {
+                    if ui.button("Sign in").clicked() {
+                        self.app.set_screen(CurrentScreen::Login);
+                    }
                 }
-                let screen = self.app.current_screen();
-                ui.label(format!("{:?}", screen));
+                ui.add_space(4.0);
+                if self.app.is_offline_mode() {
+                    ui.label("Offline mode");
+                }
                 if self.app.is_loading() {
                     ui.spinner();
                 }
@@ -183,13 +417,56 @@ impl PinpointAppUI {
         ui.add_space(4.0);
     }
 
-    fn draw_login_form(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        ui.vertical_centered(|ui| {
-            ui.heading("Pinpoint");
-            ui.label("Private location sharing for trusted friends");
-            ui.small(format!("Backend: {}", self.app.backend_url()));
-            ui.add_space(20.0);
+    fn draw_main_toolbar(&mut self, ui: &mut egui::Ui) {
+        let screens = [
+            (CurrentScreen::Map, "Map"),
+            (CurrentScreen::Friends, "Friends"),
+            (CurrentScreen::Sharing, "Sharing"),
+            (CurrentScreen::Places, "Places"),
+            (CurrentScreen::Bookmarks, "Saved"),
+            (CurrentScreen::Trips, "Trips"),
+            (CurrentScreen::Emergency, "Emergency"),
+            (CurrentScreen::Profile, "Profile"),
+            (CurrentScreen::Admin, "Admin"),
+            (CurrentScreen::ChangePassword, "Password"),
+        ];
+        ui.horizontal(|ui| {
+            for (screen, label) in screens {
+                if ui
+                    .selectable_label(self.app.current_screen() == screen, label)
+                    .clicked()
+                {
+                    self.app.set_screen(screen);
+                }
+                ui.add_space(4.0);
+            }
+            if ui.button("Refresh").clicked() {
+                let app = self.app.clone();
+                let rt = Arc::new(Runtime::new().expect("tokio"));
+                // Fire-and-forget refresh on a throwaway runtime thread.
+                std::thread::spawn(move || {
+                    rt.block_on(async move {
+                        let _ = app.refresh_all().await;
+                        let _ = app.refresh_my_location().await;
+                        let _ = app.refresh_check_ins().await;
+                        let _ = app.refresh_emergencies().await;
+                    });
+                });
+            }
+        });
+        ui.add_space(12.0);
+    }
 
+    fn draw_sign_in_required(&mut self, ui: &mut egui::Ui, ctx: &egui::Context, feature: &str) {
+        ui.vertical_centered(|ui| {
+            ui.add_space(40.0);
+            ui.heading("Sign in required");
+            ui.add_space(16.0);
+            ui.label(format!(
+                "To use {} features, please sign in first.",
+                feature
+            ));
+            ui.add_space(24.0);
             ui.group(|ui| {
                 ui.label("Sign in");
                 ui.add_space(8.0);
@@ -215,654 +492,13 @@ impl PinpointAppUI {
                     self.spawn_action(PendingAction::Login { email, password }, ctx);
                 }
                 ui.add_space(8.0);
-                if ui.button("Register").clicked() {
-                    self.app.set_screen(CurrentScreen::Register);
-                }
-            });
-        });
-    }
-
-    fn draw_register(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        ui.vertical_centered(|ui| {
-            ui.heading("Create Account");
-            ui.add_space(20.0);
-
-            ui.group(|ui| {
-                ui.label("New to Pinpoint?");
-                ui.add_space(10.0);
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.register_email)
-                        .hint_text("Email")
-                        .desired_width(200.0),
-                );
-                ui.add_space(5.0);
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.register_password)
-                        .password(true)
-                        .hint_text("Password")
-                        .desired_width(200.0),
-                );
-                ui.add_space(5.0);
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.register_full_name)
-                        .hint_text("Full Name")
-                        .desired_width(200.0),
-                );
-                ui.add_space(10.0);
-
-                ui.horizontal(|ui| {
-                    if ui.button("Create Account").clicked()
-                        && !self.register_email.is_empty()
-                        && !self.register_password.is_empty()
-                    {
-                        self.spawn_action(
-                            PendingAction::Register {
-                                email: self.register_email.clone(),
-                                password: self.register_password.clone(),
-                                full_name: self.register_full_name.clone(),
-                            },
-                            ctx,
-                        );
-                    }
-                    ui.add_space(10.0);
-                    if ui.button("Sign in instead").clicked() {
-                        self.app.set_screen(CurrentScreen::Login);
-                    }
-                });
-            });
-        });
-    }
-
-    fn draw_main_toolbar(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            if ui
-                .selectable_label(self.app.current_screen() == CurrentScreen::Map, "Map")
-                .clicked()
-            {
-                self.app.set_screen(CurrentScreen::Map);
-            }
-            ui.add_space(8.0);
-            if ui
-                .selectable_label(
-                    self.app.current_screen() == CurrentScreen::Friends,
-                    "Friends",
-                )
-                .clicked()
-            {
-                self.app.set_screen(CurrentScreen::Friends);
-            }
-            ui.add_space(8.0);
-            if ui
-                .selectable_label(
-                    self.app.current_screen() == CurrentScreen::Sharing,
-                    "Sharing",
-                )
-                .clicked()
-            {
-                self.app.set_screen(CurrentScreen::Sharing);
-            }
-            ui.add_space(8.0);
-            if ui
-                .selectable_label(self.app.current_screen() == CurrentScreen::Admin, "Admin")
-                .clicked()
-            {
-                self.app.set_screen(CurrentScreen::Admin);
-            }
-            ui.add_space(8.0);
-            if ui
-                .selectable_label(
-                    self.app.current_screen() == CurrentScreen::ChangePassword,
-                    "Password",
-                )
-                .clicked()
-            {
-                self.app.set_screen(CurrentScreen::ChangePassword);
-            }
-        });
-        ui.add_space(12.0);
-    }
-
-    fn draw_map_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        ui.horizontal(|ui| {
-            ui.with_layout(
-                egui::Layout::centered_and_justified(Direction::LeftToRight),
-                |ui| {
-                    ui.heading("Friend locations");
-                },
-            );
-        });
-        ui.add_space(8.0);
-
-        {
-            let binding = self.app.data();
-            let data = binding.lock().unwrap();
-            let unknown = "Unknown".to_string();
-            let user_email = data.user.as_ref().map(|u| &u.email).unwrap_or(&unknown);
-            ui.label(format!("Signed in as: {}", user_email));
-        }
-
-        // Quick location publish (persistent inputs so typing survives frames)
-        ui.group(|ui| {
-            ui.label(RichText::new("Publish my location").size(12.0).strong());
-            ui.add_space(4.0);
-            ui.horizontal(|ui| {
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.publish_lat)
-                        .hint_text("Latitude")
-                        .desired_width(100.0),
-                );
+                ui.label("Or stay in Map mode — the map works offline without signing in.");
                 ui.add_space(8.0);
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.publish_lon)
-                        .hint_text("Longitude")
-                        .desired_width(100.0),
-                );
+                if ui.button("Go to Map").clicked() {
+                    self.app.set_screen(CurrentScreen::Map);
+                }
             });
-            ui.add_space(4.0);
-            if ui.button("Publish").clicked() {
-                match (
-                    self.publish_lat.trim().parse::<f64>(),
-                    self.publish_lon.trim().parse::<f64>(),
-                ) {
-                    (Ok(lat), Ok(lon))
-                        if (-90.0..=90.0).contains(&lat) && (-180.0..=180.0).contains(&lon) =>
-                    {
-                        self.spawn_action(
-                            PendingAction::PublishLocation {
-                                lat,
-                                lon,
-                                accuracy: 10.0,
-                            },
-                            ctx,
-                        );
-                    }
-                    _ => {
-                        self.app.set_error(Some(
-                            "Enter a valid latitude (-90..90) and longitude (-180..180)"
-                                .to_string(),
-                        ));
-                    }
-                }
-            }
-        });
-
-        ui.add_space(8.0);
-
-        // Friendships with inline accept/reject for incoming requests
-        ui.group(|ui| {
-            ui.label(RichText::new("Friends").size(14.0).strong());
-            ui.add_space(4.0);
-
-            let binding = self.app.data();
-            let data = binding.lock().unwrap();
-            if data.friendships.is_empty() {
-                ui.label("No friends yet");
-            } else {
-                for friendship in &data.friendships {
-                    let color = match friendship.status.as_str() {
-                        "pending" => Color32::YELLOW,
-                        "accepted" => Color32::GREEN,
-                        _ => Color32::GRAY,
-                    };
-                    let label = format!(
-                        "{} → {}",
-                        friendship.requester_name, friendship.receiver_name
-                    );
-                    let id = friendship.id;
-                    let is_incoming = data
-                        .user
-                        .as_ref()
-                        .map(|u| u.id == friendship.receiver_id)
-                        .unwrap_or(false);
-                    ui.horizontal(|ui| {
-                        ui.colored_label(color, &label);
-                        if friendship.status == "pending" && is_incoming {
-                            if ui.button("Accept").clicked() {
-                                self.spawn_action(
-                                    PendingAction::RespondFriendship {
-                                        id,
-                                        action: "accept".to_string(),
-                                    },
-                                    ctx,
-                                );
-                            }
-                            if ui.button("Reject").clicked() {
-                                self.spawn_action(
-                                    PendingAction::RespondFriendship {
-                                        id,
-                                        action: "reject".to_string(),
-                                    },
-                                    ctx,
-                                );
-                            }
-                        } else if friendship.status == "pending" {
-                            ui.small("awaiting response");
-                        }
-                    });
-                }
-            }
-        });
-
-        ui.add_space(8.0);
-
-        // Location shares
-        ui.group(|ui| {
-            ui.label(RichText::new("Location Sharing").size(14.0).strong());
-            ui.add_space(4.0);
-
-            let binding = self.app.data();
-            let data = binding.lock().unwrap();
-            if data.shares.is_empty() {
-                ui.label("No location sharing permissions");
-            } else {
-                for share in &data.shares {
-                    let precision_color = match share.precision_level.as_str() {
-                        "exact" => Color32::GREEN,
-                        "approximate" => Color32::YELLOW,
-                        "city_only" => Color32::RED,
-                        _ => Color32::GRAY,
-                    };
-                    let is_active = share.is_active;
-                    let share_id = share.id;
-                    ui.horizontal(|ui| {
-                        ui.colored_label(
-                            precision_color,
-                            format!("{} - {}", share.direction, share.precision_level),
-                        );
-                        let label = if is_active { "Pause" } else { "Resume" };
-                        if ui.button(label).clicked() {
-                            self.spawn_action(
-                                PendingAction::ToggleShare {
-                                    share_id,
-                                    is_active: !is_active,
-                                },
-                                ctx,
-                            );
-                        }
-                    });
-                }
-            }
-        });
-
-        ui.add_space(8.0);
-
-        // Map visualization + location list
-        let binding = self.app.data();
-        let mut data = binding.lock().unwrap();
-        map::render_map(ui, &mut data);
-    }
-
-    fn draw_friends_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        self.draw_main_toolbar(ui);
-        ui.horizontal(|ui| {
-            ui.with_layout(
-                egui::Layout::centered_and_justified(Direction::LeftToRight),
-                |ui| {
-                    ui.heading("Friends Management");
-                },
-            );
-        });
-
-        let binding = self.app.data();
-        let data = binding.lock().unwrap();
-        let my_id = data.user.as_ref().map(|u| u.id);
-
-        // Incoming requests (I am the receiver) — the only ones I can answer.
-        ui.group(|ui| {
-            ui.label(RichText::new("Received Requests").size(14.0).strong());
-            ui.add_space(4.0);
-
-            let received: Vec<FriendshipRef> = data
-                .friendships
-                .iter()
-                .filter(|f| f.status == "pending" && Some(f.receiver_id) == my_id)
-                .map(|f| {
-                    // Small adapter so the rows below stay readable.
-                    FriendshipRef {
-                        id: f.id,
-                        requester_name: f.requester_name.clone(),
-                    }
-                })
-                .collect();
-
-            if received.is_empty() {
-                ui.label("No pending friend requests");
-            } else {
-                for req in received {
-                    let id = req.id;
-                    ui.horizontal(|ui| {
-                        ui.label(&req.requester_name);
-                        ui.add_space(4.0);
-                        if ui.button("Accept").clicked() {
-                            self.spawn_action(
-                                PendingAction::RespondFriendship {
-                                    id,
-                                    action: "accept".to_string(),
-                                },
-                                ctx,
-                            );
-                        }
-                        if ui.button("Reject").clicked() {
-                            self.spawn_action(
-                                PendingAction::RespondFriendship {
-                                    id,
-                                    action: "reject".to_string(),
-                                },
-                                ctx,
-                            );
-                        }
-                    });
-                }
-            }
-        });
-
-        ui.add_space(8.0);
-
-        // Outgoing requests (I am the requester) — no actions available.
-        ui.group(|ui| {
-            ui.label(RichText::new("Sent Requests").size(14.0).strong());
-            ui.add_space(4.0);
-
-            let sent: Vec<FriendshipRef> = data
-                .friendships
-                .iter()
-                .filter(|f| f.status == "pending" && Some(f.requester_id) == my_id)
-                .map(|f| FriendshipRef {
-                    id: f.id,
-                    requester_name: f.receiver_name.clone(),
-                })
-                .collect();
-
-            if sent.is_empty() {
-                ui.label("No sent requests");
-            } else {
-                for req in sent {
-                    ui.horizontal(|ui| {
-                        ui.label(format!("{} (awaiting response)", req.requester_name));
-                    });
-                }
-            }
-        });
-
-        ui.add_space(8.0);
-
-        // Add new friend
-        ui.group(|ui| {
-            ui.label(RichText::new("Add Friend").size(14.0).strong());
-            ui.add_space(4.0);
-            ui.add(
-                egui::TextEdit::singleline(&mut self.friends_email)
-                    .hint_text("Email")
-                    .desired_width(150.0),
-            );
-            ui.add_space(8.0);
-            if ui.button("Send Request").clicked() && !self.friends_email.trim().is_empty() {
-                self.spawn_action(
-                    PendingAction::SendFriendRequest {
-                        email: self.friends_email.clone(),
-                    },
-                    ctx,
-                );
-            }
-        });
-    }
-
-    fn draw_sharing_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        self.draw_main_toolbar(ui);
-        ui.horizontal(|ui| {
-            ui.with_layout(
-                egui::Layout::centered_and_justified(Direction::LeftToRight),
-                |ui| {
-                    ui.heading("Location Sharing");
-                },
-            );
-        });
-
-        // Create new share targeting a selected accepted friendship.
-        ui.group(|ui| {
-            ui.label(RichText::new("Share Location").size(14.0).strong());
-            ui.add_space(4.0);
-
-            let accepted: Vec<(i64, String)> = {
-                let binding = self.app.data();
-                let data = binding.lock().unwrap();
-                data.friendships
-                    .iter()
-                    .filter(|f| f.status == "accepted")
-                    .map(|f| (f.id, format!("{} ↔ {}", f.requester_name, f.receiver_name)))
-                    .collect()
-            };
-
-            if accepted.is_empty() {
-                ui.label("Add an accepted friend first.");
-            } else {
-                ui.label("Share with:");
-                for (id, label) in &accepted {
-                    let selected = self.selected_friendship == Some(*id);
-                    if ui.selectable_label(selected, label).clicked() {
-                        self.selected_friendship = Some(*id);
-                    }
-                }
-            }
-
-            ui.add_space(4.0);
-
-            ui.horizontal(|ui| {
-                ui.label("Direction:");
-                ui.selectable_value(
-                    &mut self.share_direction,
-                    "to_friend".to_string(),
-                    "To friend",
-                );
-                ui.add_space(4.0);
-                ui.selectable_value(
-                    &mut self.share_direction,
-                    "from_friend".to_string(),
-                    "From friend",
-                );
-                ui.add_space(4.0);
-                ui.selectable_value(&mut self.share_direction, "mutual".to_string(), "Mutual");
-            });
-
-            ui.add_space(4.0);
-            ui.horizontal(|ui| {
-                ui.label("Precision:");
-                ui.selectable_value(
-                    &mut self.share_precision,
-                    "exact".to_string(),
-                    "Exact (GPS coordinates)",
-                );
-                ui.add_space(4.0);
-                ui.selectable_value(
-                    &mut self.share_precision,
-                    "approximate".to_string(),
-                    "Approximate (neighborhood)",
-                );
-                ui.add_space(4.0);
-                ui.selectable_value(
-                    &mut self.share_precision,
-                    "city_only".to_string(),
-                    "City only (city level)",
-                );
-            });
-
-            ui.add_space(12.0);
-            if ui.button("Create Share").clicked() {
-                if let Some(friendship_id) = self.selected_friendship {
-                    self.spawn_action(
-                        PendingAction::CreateShare {
-                            friendship_id,
-                            direction: self.share_direction.clone(),
-                            precision: self.share_precision.clone(),
-                        },
-                        ctx,
-                    );
-                } else {
-                    self.app
-                        .set_error(Some("Select a friend to share with first".to_string()));
-                }
-            }
-        });
-
-        ui.add_space(8.0);
-
-        // Active shares
-        ui.group(|ui| {
-            ui.label(RichText::new("Active Shares").size(14.0).strong());
-            ui.add_space(4.0);
-
-            let binding = self.app.data();
-            let data = binding.lock().unwrap();
-            if data.shares.is_empty() {
-                ui.label("No active location sharing permissions");
-            } else {
-                for share in &data.shares {
-                    let precision_color = match share.precision_level.as_str() {
-                        "exact" => Color32::GREEN,
-                        "approximate" => Color32::YELLOW,
-                        "city_only" => Color32::RED,
-                        _ => Color32::GRAY,
-                    };
-                    let is_active = share.is_active;
-                    let share_id = share.id;
-                    ui.horizontal(|ui| {
-                        ui.colored_label(
-                            precision_color,
-                            format!("{} sharing {}", share.direction, share.precision_level),
-                        );
-                        let label = if is_active { "Pause" } else { "Resume" };
-                        if ui.button(label).clicked() {
-                            self.spawn_action(
-                                PendingAction::ToggleShare {
-                                    share_id,
-                                    is_active: !is_active,
-                                },
-                                ctx,
-                            );
-                        }
-                    });
-                }
-            }
-        });
-    }
-
-    fn draw_admin_screen(&mut self, ui: &mut egui::Ui) {
-        self.draw_main_toolbar(ui);
-        ui.horizontal(|ui| {
-            ui.with_layout(
-                egui::Layout::centered_and_justified(Direction::LeftToRight),
-                |ui| {
-                    ui.heading("Admin Panel");
-                },
-            );
-        });
-        ui.add_space(8.0);
-        ui.label(format!("Backend: {}", self.app.backend_url()));
-        ui.add_space(8.0);
-
-        let binding = self.app.data();
-        let data = binding.lock().unwrap();
-
-        // The client only renders admin affordances for admins; the server
-        // independently enforces every privileged endpoint.
-        if let Some(user) = &data.user {
-            if user.role == "admin" {
-                ui.group(|ui| {
-                    ui.label(RichText::new("Admin Actions").size(14.0).strong());
-                    ui.add_space(4.0);
-                    ui.label("User management is served by the admin API.");
-                    ui.label("Total users: see GET /api/v1/users");
-                });
-            } else {
-                ui.label("Admin access required");
-            }
-        }
-    }
-
-    fn draw_change_password_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        let forced = {
-            let binding = self.app.data();
-            let data = binding.lock().unwrap();
-            data.must_change_password
-        };
-
-        if !forced {
-            self.draw_main_toolbar(ui);
-        }
-        ui.horizontal(|ui| {
-            ui.with_layout(
-                egui::Layout::centered_and_justified(Direction::LeftToRight),
-                |ui| {
-                    ui.heading("Change Password");
-                },
-            );
-        });
-        ui.add_space(8.0);
-
-        if forced {
-            ui.label("Your administrator requires a password change before continuing.");
-            ui.add_space(8.0);
-        }
-
-        ui.group(|ui| {
-            if !forced {
-                ui.label("Current password");
-                ui.add_space(4.0);
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.change_password_current)
-                        .password(true)
-                        .hint_text("Current Password")
-                        .desired_width(250.0),
-                );
-                ui.add_space(8.0);
-            }
-            ui.label("New password");
-            ui.add_space(4.0);
-            ui.add(
-                egui::TextEdit::singleline(&mut self.change_password_new)
-                    .password(true)
-                    .hint_text("New Password")
-                    .desired_width(250.0),
-            );
-            ui.add_space(8.0);
-            ui.add(
-                egui::TextEdit::singleline(&mut self.change_password_confirm)
-                    .password(true)
-                    .hint_text("Confirm New Password")
-                    .desired_width(250.0),
-            );
-            ui.add_space(16.0);
-            if ui.button("Update Password").clicked() {
-                let current = self.change_password_current.trim().to_string();
-                let new_password = self.change_password_new.clone();
-                let confirm = self.change_password_confirm.clone();
-
-                let error = if !forced && current.is_empty() {
-                    Some("Enter your current password".to_string())
-                } else if new_password.len() < 8 {
-                    Some("New password must be at least 8 characters".to_string())
-                } else if new_password != confirm {
-                    Some("New passwords do not match".to_string())
-                } else {
-                    None
-                };
-
-                if let Some(msg) = error {
-                    self.app.set_error(Some(msg));
-                } else {
-                    self.change_password_current.clear();
-                    self.change_password_new.clear();
-                    self.change_password_confirm.clear();
-                    self.spawn_action(
-                        PendingAction::ChangePassword {
-                            current: if forced { None } else { Some(current) },
-                            new_password,
-                            confirm,
-                        },
-                        ctx,
-                    );
-                }
-            }
+            ui.add_space(24.0);
         });
     }
 }
@@ -904,16 +540,67 @@ impl eframe::App for PinpointAppUI {
             self.draw_header_bar(ui, ctx);
 
             match self.app.current_screen() {
-                CurrentScreen::Login => self.draw_login_form(ui, ctx),
-                CurrentScreen::Register => self.draw_register(ui, ctx),
                 CurrentScreen::Map => {
                     self.draw_main_toolbar(ui);
                     self.draw_map_screen(ui, ctx);
                 }
-                CurrentScreen::Friends => self.draw_friends_screen(ui, ctx),
-                CurrentScreen::Sharing => self.draw_sharing_screen(ui, ctx),
-                CurrentScreen::Admin => self.draw_admin_screen(ui),
-                CurrentScreen::ChangePassword => self.draw_change_password_screen(ui, ctx),
+                CurrentScreen::Login => self.draw_login_form(ui, ctx),
+                CurrentScreen::Register => self.draw_register(ui, ctx),
+                CurrentScreen::Places => self.draw_places_screen(ui, ctx),
+                CurrentScreen::Bookmarks => self.draw_bookmarks_screen(ui, ctx),
+                CurrentScreen::Trips => {
+                    if self.app.is_signed_in() {
+                        self.draw_trips_screen(ui, ctx);
+                    } else {
+                        self.draw_sign_in_required(ui, ctx, "Trips");
+                    }
+                }
+                CurrentScreen::Emergency => {
+                    if self.app.is_signed_in() {
+                        self.draw_emergency_screen(ui, ctx);
+                    } else {
+                        self.draw_sign_in_required(ui, ctx, "Emergency");
+                    }
+                }
+                CurrentScreen::Profile => {
+                    if self.app.is_signed_in() {
+                        self.draw_profile_screen(ui, ctx);
+                    } else {
+                        self.draw_sign_in_required(ui, ctx, "Profile");
+                    }
+                }
+                CurrentScreen::Friends => {
+                    if self.app.is_signed_in() {
+                        self.draw_main_toolbar(ui);
+                        self.draw_friends_screen(ui, ctx);
+                    } else {
+                        self.draw_sign_in_required(ui, ctx, "Friends");
+                    }
+                }
+                CurrentScreen::Sharing => {
+                    if self.app.is_signed_in() {
+                        self.draw_main_toolbar(ui);
+                        self.draw_sharing_screen(ui, ctx);
+                    } else {
+                        self.draw_sign_in_required(ui, ctx, "Sharing");
+                    }
+                }
+                CurrentScreen::Admin => {
+                    if self.app.is_signed_in() {
+                        self.draw_main_toolbar(ui);
+                        self.draw_admin_screen(ui);
+                    } else {
+                        self.draw_sign_in_required(ui, ctx, "Admin");
+                    }
+                }
+                CurrentScreen::ChangePassword => {
+                    if self.app.is_signed_in() {
+                        self.draw_main_toolbar(ui);
+                        self.draw_change_password_screen(ui, ctx);
+                    } else {
+                        self.draw_sign_in_required(ui, ctx, "Change Password");
+                    }
+                }
             }
         });
 
