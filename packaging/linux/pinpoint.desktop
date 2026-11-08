@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Pinpoint
+Exec=pinpoint-desktop --backend http://localhost:8000
+Icon=pinpoint
+Comment=Privacy-first location sharing (map-first, OSM ODbL)
+Categories=Network;Maps;
+Terminal=false

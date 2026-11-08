@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Pinpoint — Map First</title>
+  <link data-trunk rel="copy-config" href="Trunk.toml"/>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 720px; padding: 0 1rem; }
+    code { background: #f1f5f9; padding: .1rem .3rem; border-radius: .25rem; }
+    #pinpoint-web { border: 1px solid #cbd5e1; border-radius: .5rem; padding: 1rem; min-height: 240px; }
+  </style>
+</head>
+<body>
+  <h1>Pinpoint — Map First</h1>
+  <p>Privacy-first location sharing for trusted friends. Map data © OpenStreetMap contributors (ODbL).</p>
+  <div id="pinpoint-web">Loading Pinpoint (Rust/WASM)…</div>
+  <p>Backend: <code id="backend">(see PINPOINT_BACKEND)</code> · Build: <code>trunk build --release</code></p>
+  <p>Desktop: <code>cargo run -- --backend http://localhost:8000</code> · Android: <code>cargo apk build</code> · iOS: <code>cargo xcodebuild</code></p>
+  <script type="module">
+    const el = document.getElementById('pinpoint-web');
+    el.textContent = 'Pinpoint web shell (Rust/WASM). Serve this file via `trunk serve` (see web/README.md).';
+  </script>
+</body>
+</html>

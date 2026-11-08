@@ -1,0 +1,12 @@
+# Trunk.toml — Rust/WASM web client (`trunk build`)
+# Usage: `trunk build --release` (see web/README.md).
+# The WASM entry is src/bin/pinpoint-web.rs; the HTML shell is web/index.html.
+
+[build]
+target = "../src/bin/pinpoint-web.rs"
+dist = "dist"
+public_url = "/"
+
+[[build.extra]]
+name = "pinpoint-config"
+path = "Trunk.toml"
