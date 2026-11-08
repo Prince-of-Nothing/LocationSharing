@@ -61,6 +61,14 @@ pub const MIGRATIONS: &[(u32, &str, &[&str])] = &[
             "ALTER TABLE pinpoint_users ADD COLUMN IF NOT EXISTS mfa_last_step BIGINT NOT NULL DEFAULT 0",
         ],
     ),
+    (
+        11,
+        "user_id_sequence",
+        &[
+            "CREATE SEQUENCE IF NOT EXISTS pinpoint_user_id_seq",
+            "SELECT setval('pinpoint_user_id_seq', COALESCE((SELECT MAX(id) FROM pinpoint_users), 0) + 1, false)",
+        ],
+    ),
 ];
 
 /// Apply all pending migrations (idempotent, recorded in version table).

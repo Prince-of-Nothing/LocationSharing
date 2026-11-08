@@ -80,12 +80,21 @@ impl AppState {
             .bind(&ids)
             .execute(&mut **tx)
             .await;
+        // Keep the sequence ahead of every id this tick wrote, so the next
+        // `sql_insert_user` (NEXTVAL) can never collide with a persisted id.
+        let _ = sqlx::query(
+            "SELECT setval('pinpoint_user_id_seq', GREATEST((SELECT COALESCE(MAX(id), 0) + 1 FROM pinpoint_users), (SELECT last_value FROM pinpoint_user_id_seq) + 1), false)",
+        )
+        .execute(&mut **tx)
+        .await;
     }
 
     /// Direct user insert for the users service (Auth owns `pinpoint_users`
     /// for persist upserts, so the users service must upsert single rows —
     /// never delete+rewrite — to avoid clobbering credentials written by Auth).
-    /// Returns the assigned id. Falls back to the in-memory counter when the
+    /// Ids come from the `pinpoint_user_id_seq` sequence (migration v11):
+    /// concurrent replicas can never pick the same id, unlike the old
+    /// `MAX(id)+1` race. Falls back to the in-memory counter when the
     /// DB is unreachable (demo mode: in-memory store is authoritative).
     pub async fn sql_insert_user(
         &self,
@@ -96,7 +105,7 @@ impl AppState {
     ) -> i64 {
         if let Some(pool) = &self.pg {
             let row: Option<(i64,)> = sqlx::query_as(
-                "INSERT INTO pinpoint_users (id, email, full_name, role, is_active, must_change_password, password_hash) SELECT COALESCE((SELECT max(id) FROM pinpoint_users), 0) + 1, $1, $2, $3, true, false, $4 RETURNING id",
+                "INSERT INTO pinpoint_users (id, email, full_name, role, is_active, must_change_password, password_hash) VALUES (NEXTVAL('pinpoint_user_id_seq'), $1, $2, $3, true, false, $4) RETURNING id",
             )
             .bind(email)
             .bind(full_name)

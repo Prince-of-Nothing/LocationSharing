@@ -12,7 +12,7 @@ be additive — never a rewrite.
 | 1 | Single Responsibility (SRP) | Shipped | Per-service handlers, per-screen UI, per-domain store modules | `cargo test` (91 lib), handler/router probes |
 | 2 | Separation of Concerns | Shipped | transport/domain/OSM/client layers never leak | `tests/contract.rs` pins `api.rs` |
 | 3 | Modular Architecture (services) | Shipped | 4 deployables + gateway routing, `scale: 2` | `docker compose config`, e2e 38 |
-| 4 | Modular Database (ownership) | Shipped | Per-domain upsert persist + advisory lock, roles, FKs, migrations v1–v10 | ownership + lock-key tests |
+| 4 | Modular Database (ownership) | Shipped | Per-domain upsert persist + advisory lock, roles, FKs, migrations v1–v11 (seq ids) | ownership + lock-key tests |
 | 5 | Open/Closed (OCP) | Shipped | New table = new migration + domain module; new screen = new `ui/` module; new service = new router + `ServiceKind` | ADR-0006/0008, migrations test |
 | 6 | Liskov (LSP) | Shipped | `patterns/repository.rs`: `InMemory` + `Postgres` impls, same traits | LSP conformance + Postgres conformance (skips without DB) |
 | 7 | Interface Segregation (ISP) | Shipped | Small traits (`UserRepository`, …) + small routers (`auth_router`…) | compile + router probes |
@@ -101,7 +101,9 @@ methods) and `X-Upstream` intentionally exposes replica IPs to operators.
   `docs/postgres-ha.md`) exists but is opt-in; default recovery is volume
   restart / pg_dump restore. **Single gateway** — auto-restarts; two behind
   your own LB is the prod step.
-- **`sql_insert_user` `max(id)+1` race** — concurrent users-service
-  inserts can collide (falls back to in-memory id); production: sequence.
 - **E2E encryption + OS keychain** are design-only.
 - **ZAP active scan** pending; tiles need `CARTO_API_KEY` for live 200s.
+- **Client CI:** Linux/macOS/Windows build jobs green (ubuntu `rust`,
+  `client-macos`, windows `release`); Android APK / WASM remain
+  scaffolding-only — no CI job yet (need NDK / wasm toolchains; see
+  `docs/client-platforms.md`).
