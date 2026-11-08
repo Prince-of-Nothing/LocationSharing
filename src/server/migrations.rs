@@ -70,6 +70,13 @@ pub const MIGRATIONS: &[(u32, &str, &[&str])] = &[
             "GRANT USAGE, SELECT ON SEQUENCE pinpoint_user_id_seq TO pinpoint_users, pinpoint_auth",
         ],
     ),
+    (
+        12,
+        "user_id_sequence_grant",
+        &[
+            "GRANT USAGE, SELECT ON SEQUENCE pinpoint_user_id_seq TO pinpoint_users, pinpoint_auth",
+        ],
+    ),
 ];
 
 /// Apply all pending migrations (idempotent, recorded in version table).
