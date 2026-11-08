@@ -1,8 +1,10 @@
 # docker-compose.yml — Pure-Rust modular stack (HA-ready)
 #
 # Everything is Rust:
-#   gateway  → nginx reverse proxy (routes /api/v1/auth, /api/v1/users, ...)
-#     with per-request Docker-DNS resolution + proxy_next_upstream retries
+#   gateway  → nginx, the CENTRAL directory (see docs/service-discovery.md):
+#     routes /api/v1/auth, /api/v1/users, /api/v1/locations, /map and picks
+#     ANY healthy replica via per-request Docker-DNS + proxy_next_upstream
+#     retries. Live registry: GET /registry. X-Upstream shows the replica.
 #   auth     → pinpoint-auth (src/bin/auth.rs, internal :8001)
 #   users    → pinpoint-users (src/bin/users.rs, internal :8002)
 #   locations→ pinpoint-locations (src/bin/locations.rs, internal :8003)

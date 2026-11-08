@@ -45,6 +45,11 @@ console.log(String((h.readUInt32BE(o)&0x7fffffff)%1000000).padStart(6,'0'))
 
 Write-Host "== Gateway & headers =="
 Check "GET /health" { (Invoke-RestMethod "$Base/health").status } "healthy"
+Check "GET /registry lists 4 services" { @( (Invoke-RestMethod "$Base/registry").services ).Count } "4"
+Check "X-Upstream present (any-replica proof)" {
+    $h = (Invoke-WebRequest -Uri "$Base/api/v1/users/" -UseBasicParsing).Headers
+    ((($h['X-Upstream'] -join ',') -match ':\d+').ToString())
+} "True"
 Check "gateway headers" {
     $h = (Invoke-WebRequest -Uri "$Base/api/v1/users/" -UseBasicParsing).Headers
     $nosniff = ($h['X-Content-Type-Options'] -join ',') -match 'nosniff'
