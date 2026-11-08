@@ -75,9 +75,10 @@ pub fn router(state: AppState) -> Router {
 
 /// Auth service routes (`/api/v1/auth/*`). Independently scalable.
 /// Stateless: the app state is supplied once by the binary's `with_state`.
+// NOTE: `.layer()` must be applied *after* all routes, otherwise Axum
+// does not wrap routes added later.
 pub fn auth_router() -> Router<AppState> {
     Router::new()
-        .layer(axum::middleware::from_fn(converge))
         .route("/health", get(handlers::health))
         .route("/api/v1/auth/login", post(auth_handlers::login))
         .route("/api/v1/auth/register", post(auth_handlers::register))
@@ -96,13 +97,13 @@ pub fn auth_router() -> Router<AppState> {
         .route("/api/v1/auth/mfa/verify", post(auth_handlers::mfa_verify))
         .route("/api/v1/auth/mfa/status", get(auth_handlers::mfa_status))
         .route("/api/v1/auth/mfa", delete(auth_handlers::mfa_disable))
+        .layer(axum::middleware::from_fn(converge))
 }
 
 /// Users + friendships service routes. Independently scalable.
 /// NOTE: matchit 0.7 (axum 0.7) uses `:param` syntax, NOT `{param}` (that is axum 0.8).
 pub fn users_router() -> Router<AppState> {
     Router::new()
-        .layer(axum::middleware::from_fn(converge))
         .route("/health", get(handlers::health))
         .route(
             "/api/v1/users/",
@@ -127,12 +128,12 @@ pub fn users_router() -> Router<AppState> {
             "/api/v1/friendships/:id",
             delete(users_handlers::delete_friendship),
         )
+        .layer(axum::middleware::from_fn(converge))
 }
 
 /// Locations + shares service routes. Independently scalable.
 pub fn locations_router() -> Router<AppState> {
     Router::new()
-        .layer(axum::middleware::from_fn(converge))
         .route("/health", get(handlers::health))
         .route(
             "/api/v1/locations/shares",
@@ -166,6 +167,7 @@ pub fn locations_router() -> Router<AppState> {
             "/api/v1/locations/emergency/:id",
             patch(locations_handlers::resolve_emergency),
         )
+        .layer(axum::middleware::from_fn(converge))
 }
 
 /// Map service routes (`/map/*`): tile proxy + attribution + health.
