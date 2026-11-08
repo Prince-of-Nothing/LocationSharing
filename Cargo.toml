@@ -1,9 +1,37 @@
 [package]
 name = "pinpoint-desktop"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
-description = "Privacy-first desktop client for Pinpoint"
+description = "Privacy-first location-sharing platform in pure Rust: multiplatform client + API server (desktop + Android + iOS, OSM maps)"
 publish = false
+
+[lib]
+name = "pinpoint_desktop"
+path = "src/lib.rs"
+
+[[bin]]
+name = "pinpoint-desktop"
+path = "src/main.rs"
+
+[[bin]]
+name = "pinpoint-server"
+path = "src/bin/server.rs"
+
+[[bin]]
+name = "pinpoint-auth"
+path = "src/bin/auth.rs"
+
+[[bin]]
+name = "pinpoint-users"
+path = "src/bin/users.rs"
+
+[[bin]]
+name = "pinpoint-locations"
+path = "src/bin/locations.rs"
+
+[[bin]]
+name = "pinpoint-map"
+path = "src/bin/map.rs"
 
 [dependencies]
 eframe = { version = "0.32", default-features = true, features = ["glow"] }
@@ -15,9 +43,37 @@ url = "2.5"
 image = { version = "0.25", default-features = false, features = ["png"] }
 which = "6.0"
 reqwest = { version = "0.12", features = ["json"] }
+webbrowser = "1.2"
+
+# API server (pure Rust, replaces archived Go backend)
+axum = "0.7"
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "tls-rustls-ring"] }
+
+# Security dependencies
+aes-gcm = "0.11"
+base64 = { version = "0.22", features = ["std"] }
+chrono = "0.4"
+cipher = "0.4"
+crypto-common = "0.1.5"
+generic-array = "0.14"
+hybrid-array = "0.4"
+hmac = "0.12"
+rand = "0.8"
+sha2 = "0.10"
+typenum = "1.15"
+zeroize = "1.7"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-tokio = { version = "1.0", default-features = false, features = ["rt-multi-thread", "time"] }
+tokio = { version = "1.0", default-features = false, features = ["rt-multi-thread", "time", "net", "macros"] }
 
 [dev-dependencies]
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
+tempfile = "3.6"
+tower = { version = "0.4", features = ["util"] }
+
+# Multiplatform targets (see docs/sdlc/06-technical-requirements.md):
+# - Desktop: `cargo build --locked` (Windows/Linux/macOS)
+# - Android: `cargo apk build --locked` (eframe/winit → aarch64-linux-android)
+# - iOS:     `cargo xcodebuild` (eframe/winit → aarch64-apple-ios)
+# The same `crate-type` serves all targets; `src/platform.rs` holds every
+# `cfg(target_os)` branch so the UI core stays portable.

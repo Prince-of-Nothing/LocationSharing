@@ -1,0 +1,45 @@
+# Dockerfile.server — Pinpoint pure-Rust API server (pinpoint-server)
+#
+# Build: docker build -f Dockerfile.server -t pinpoint-server:latest .
+# Run:   docker run --rm -p 8000:8000 -e DATABASE_URL=postgresql://user:pass@db:5432/pinpoint pinpoint-server:latest
+
+ARG RUST_VERSION=1.81
+ARG DEBIAN_VERSION=bookworm-slim
+
+FROM rust:bookworm AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential \
+      pkg-config \
+      libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+COPY tests ./tests
+
+RUN cargo build --locked --release --bin pinpoint-server
+
+FROM debian:${DEBIAN_VERSION} AS runtime
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates \
+      libssl3 \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd -r pinpoint && useradd -r -g pinpoint -d /home/pinpoint -s /sbin/nologin pinpoint
+
+WORKDIR /app
+COPY --from=builder /build/target/release/pinpoint-server /app/pinpoint-server
+
+ENV BIND_ADDR=0.0.0.0:8000
+ENV PINPOINT_DATA_DIR=/home/pinpoint/.pinpoint
+
+USER pinpoint
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD cat /proc/self/status | grep -q VmRSS || exit 1
+
+ENTRYPOINT ["/app/pinpoint-server"]

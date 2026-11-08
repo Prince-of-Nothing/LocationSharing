@@ -48,7 +48,8 @@ backend/server
 
 # Android and Gradle build artifacts (APKs are CI artifacts, never committed)
 *.apk
-bin/
+/bin/
+!/src/bin/
 .gradle/
 
 # Rust build output and local check logs
@@ -59,3 +60,7 @@ test_out.txt
 clippy_out.txt
 release_out.txt
 audit_out.txt
+
+# Local MSVC/Windows SDK download artifacts (from get_msvc.py) — never committed
+/msvc/
+/downloads/

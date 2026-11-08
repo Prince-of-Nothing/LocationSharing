@@ -1,0 +1,47 @@
+# Dockerfile.service — any Pinpoint Rust binary (server, auth, users, locations, map)
+#
+# Build: docker build -f Dockerfile.service --build-arg BIN=pinpoint-server -t pinpoint:pinpoint-server .
+# Run:   docker run --rm -p 8000:8000 -e BIND_ADDR=0.0.0.0:8000 pinpoint:pinpoint-server
+
+ARG RUST_VERSION=bookworm
+ARG DEBIAN_VERSION=bookworm-slim
+ARG BIN=pinpoint-server
+
+FROM rust:${RUST_VERSION} AS builder
+
+ARG BIN=pinpoint-server
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential \
+      pkg-config \
+      libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+COPY tests ./tests
+
+RUN cargo build --locked --release --bin ${BIN}
+
+FROM debian:${DEBIAN_VERSION} AS runtime
+
+ARG BIN=pinpoint-server
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates \
+      libssl3 \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd -r pinpoint && useradd -r -g pinpoint -d /home/pinpoint -s /sbin/nologin pinpoint
+
+WORKDIR /app
+COPY --from=builder /build/target/release/${BIN} /app/${BIN}
+
+ENV BIND_ADDR=0.0.0.0:8000
+ENV PINPOINT_BIN=${BIN}
+USER pinpoint
+EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD cat /proc/self/status | grep -q VmRSS || exit 1
+# BIN is a build ARG (pinpoint-server|pinpoint-auth|pinpoint-users|pinpoint-locations|pinpoint-map).
+ENTRYPOINT ["sh", "-c", "exec /app/$PINPOINT_BIN"]
