@@ -9,14 +9,14 @@ be additive — never a rewrite.
 
 | # | Principle | Status | Implementation | Evidence |
 |---|---|---|---|---|
-| 1 | Single Responsibility (SRP) | Shipped | Per-service handlers, per-screen UI, per-domain store modules | `cargo test` (89 lib), handler/router probes |
+| 1 | Single Responsibility (SRP) | Shipped | Per-service handlers, per-screen UI, per-domain store modules | `cargo test` (91 lib), handler/router probes |
 | 2 | Separation of Concerns | Shipped | transport/domain/OSM/client layers never leak | `tests/contract.rs` pins `api.rs` |
 | 3 | Modular Architecture (services) | Shipped | 4 deployables + gateway routing, `scale: 2` | `docker compose config`, e2e 38 |
 | 4 | Modular Database (ownership) | Shipped | Per-domain upsert persist + advisory lock, roles, FKs, migrations v1–v10 | ownership + lock-key tests |
 | 5 | Open/Closed (OCP) | Shipped | New table = new migration + domain module; new screen = new `ui/` module; new service = new router + `ServiceKind` | ADR-0006/0008, migrations test |
-| 6 | Liskov (LSP) | Partial | `patterns/repository.rs` traits have one in-memory impl; Postgres impl is “future” | trait tests; no second impl yet |
+| 6 | Liskov (LSP) | Shipped | `patterns/repository.rs`: `InMemory` + `Postgres` impls, same traits | LSP conformance + Postgres conformance (skips without DB) |
 | 7 | Interface Segregation (ISP) | Shipped | Small traits (`UserRepository`, …) + small routers (`auth_router`…) | compile + router probes |
-| 8 | Dependency Inversion (DIP) | Partial | `patterns/factory` builds `OsmClient`; handlers depend on `AppState`, not sqlx directly | factory + handler code; no injectable DB |
+| 8 | Dependency Inversion (DIP) | Shipped | `patterns/factory` builds `OsmClient`; `open_repository()` factory picks `dyn Repository` | factory + trait-object tests |
 | 9 | DRY | Shipped | Shared helpers in `handlers.rs`; validation in one place | `security/validation.rs` tests |
 | 10 | KISS / YAGNI | Shipped | One crate, std-only crypto, no DI framework | `Cargo.toml`, no enterprise deps |
 | 11 | Fail-Closed | Shipped | Loopback-only HTTP, login/logout fail closed, MFA replay rejected | contract tests (10) |
@@ -64,16 +64,16 @@ load/persist in the owning `state/` module; new screen → new `ui/` module
 + `CurrentScreen` variant; new service → new router + `ServiceKind` +
 gateway location. No existing code is modified to add a peer.
 
-### 6–8. LSP / ISP / DIP (Mixed)
+### 6–8. LSP / ISP / DIP (Shipped)
 
 - **ISP (Shipped):** small handler routers and small `Repository`
   traits (user/friendship/share/location only) — no fat interfaces.
-- **LSP (Partial):** the in-memory repository satisfies the traits, but
-  there is no second (Postgres) impl behind them yet — the server uses
-  `AppState` directly. Adding a Postgres repository would close this.
-- **DIP (Partial):** `patterns/factory::osm_client()` inverts the OSM
-  dependency; handlers invert on `AppState`. A `DbConnection` trait does
-  not exist — sqlx is a direct dependency of the state modules.
+- **LSP (Shipped):** `InMemoryRepository` and `PostgresRepository`
+  (`patterns/repository.rs`) both implement `Repository`; a green
+  conformance suite runs against either (Postgres skips without a DB).
+- **DIP (Shipped):** `patterns/factory::osm_client()` inverts the OSM
+  dependency; `open_repository()` inverts the storage backend
+  (`dyn Repository`); handlers invert on `AppState`.
 
 ### 9–10. DRY / KISS / YAGNI (Shipped)
 
@@ -97,10 +97,10 @@ methods) and `X-Upstream` intentionally exposes replica IPs to operators.
 
 ## Remaining honest gaps
 
-- **Single Postgres primary** (no streaming replica/Patroni) and **single
-  gateway** — recovery is volume restart / pg_dump restore or auto-restart.
-- **LSP/DIP partial** — no Postgres repository impl / injectable DB trait;
-  `Repository` in `patterns/` covers client-side only.
+- **Single Postgres primary** — streaming-replica overlay (`docker-compose.ha.yml`,
+  `docs/postgres-ha.md`) exists but is opt-in; default recovery is volume
+  restart / pg_dump restore. **Single gateway** — auto-restarts; two behind
+  your own LB is the prod step.
 - **`sql_insert_user` `max(id)+1` race** — concurrent users-service
   inserts can collide (falls back to in-memory id); production: sequence.
 - **E2E encryption + OS keychain** are design-only.
