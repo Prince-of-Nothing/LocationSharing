@@ -22,6 +22,9 @@ service or table is additive, never a rewrite.
 | `security/{validation,rate_limit,encryption,audit,session,signing,mfa,password}.rs` | one mechanism each | 30+ unit tests |
 
 `handlers.rs` is now shared-only (helpers + health, 54 lines) — the god-file split happened 2026-11-08.
+`state.rs` (769 lines) is now `server/state/{mod,store,users,friendships,locations}.rs`:
+the `Store` facade (`store.rs`) plus per-domain load/persist modules.
+Full principle-to-code mapping with honest gaps: `docs/principles-matrix.md`.
 `ui.rs` is now the 612-line app shell (dispatch, header, toolbar, pending actions);
 each screen is its own module (`src/ui/{auth,map,friends,sharing,places,bookmarks,
 trips,emergency,profile,admin}.rs`, 55–279 lines each) sharing `PinpointAppUI` via

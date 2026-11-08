@@ -1,0 +1,159 @@
+//! Users domain: `pinpoint_users` load / persist / direct-SQL mutations.
+//!
+//! Owner: Auth (`ServiceKind::owns_users`). The users service never
+//! persists user rows here — it uses `sql_*` single-row helpers so it
+//! cannot clobber credentials written by Auth.
+
+use super::{AppState, Store};
+use crate::models::User;
+
+impl AppState {
+    pub(super) async fn load_users(&self, store: &mut Store) -> bool {
+        let Some(pool) = &self.pg else {
+            return false;
+        };
+        let rows: Vec<(
+            i64,
+            String,
+            String,
+            String,
+            bool,
+            bool,
+            Option<String>,
+            Option<String>,
+            bool,
+            i64,
+        )> = sqlx::query_as(
+            "SELECT id, email, full_name, role, is_active, must_change_password, password_hash, totp_secret, mfa_enabled, mfa_last_step FROM pinpoint_users ORDER BY id",
+        )
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default();
+        if rows.is_empty() {
+            return false;
+        }
+        for (
+            id,
+            email,
+            full_name,
+            role,
+            is_active,
+            must_change_password,
+            password_hash,
+            totp_secret,
+            mfa_enabled,
+            mfa_last_step,
+        ) in rows
+        {
+            store.next_user_id = store.next_user_id.max(id + 1);
+            store.users.push(User {
+                id,
+                email,
+                full_name,
+                role,
+                is_active,
+                must_change_password,
+                password_hash,
+                totp_secret,
+                mfa_enabled,
+                mfa_last_step: mfa_last_step.max(0) as u64,
+            });
+        }
+        true
+    }
+
+    pub(super) async fn persist_users(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        store: &Store,
+    ) {
+        if !self.owner.owns_users() {
+            return;
+        }
+        for u in &store.users {
+            let _ = sqlx::query("INSERT INTO pinpoint_users (id, email, full_name, role, is_active, must_change_password, password_hash, totp_secret, mfa_enabled, mfa_last_step) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, full_name = EXCLUDED.full_name, role = EXCLUDED.role, is_active = EXCLUDED.is_active, must_change_password = EXCLUDED.must_change_password, password_hash = EXCLUDED.password_hash, totp_secret = EXCLUDED.totp_secret, mfa_enabled = EXCLUDED.mfa_enabled, mfa_last_step = EXCLUDED.mfa_last_step")
+                .bind(u.id).bind(&u.email).bind(&u.full_name).bind(&u.role).bind(u.is_active).bind(u.must_change_password).bind(&u.password_hash).bind(&u.totp_secret).bind(u.mfa_enabled).bind(u.mfa_last_step as i64)
+                .execute(&mut **tx).await;
+        }
+        let ids: Vec<i64> = store.users.iter().map(|u| u.id).collect();
+        let _ = sqlx::query("DELETE FROM pinpoint_users WHERE id <> ALL($1::bigint[])")
+            .bind(&ids)
+            .execute(&mut **tx)
+            .await;
+    }
+
+    /// Direct user insert for the users service (Auth owns `pinpoint_users`
+    /// for persist upserts, so the users service must upsert single rows —
+    /// never delete+rewrite — to avoid clobbering credentials written by Auth).
+    /// Returns the assigned id. Falls back to the in-memory counter when the
+    /// DB is unreachable (demo mode: in-memory store is authoritative).
+    pub async fn sql_insert_user(
+        &self,
+        email: &str,
+        full_name: &str,
+        role: &str,
+        password_hash: Option<&str>,
+    ) -> i64 {
+        if let Some(pool) = &self.pg {
+            let row: Option<(i64,)> = sqlx::query_as(
+                "INSERT INTO pinpoint_users (id, email, full_name, role, is_active, must_change_password, password_hash) SELECT COALESCE((SELECT max(id) FROM pinpoint_users), 0) + 1, $1, $2, $3, true, false, $4 RETURNING id",
+            )
+            .bind(email)
+            .bind(full_name)
+            .bind(role)
+            .bind(password_hash)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten();
+            if let Some((id,)) = row {
+                return id;
+            }
+        }
+        let mut store = self.store.lock().unwrap();
+        let id = store.next_user_id;
+        store.next_user_id += 1;
+        id
+    }
+
+    /// Direct user update; no-op when DB unreachable/in-memory mode.
+    pub async fn sql_update_user(
+        &self,
+        id: i64,
+        full_name: Option<&str>,
+        role: Option<&str>,
+        is_active: Option<bool>,
+    ) {
+        let Some(pool) = &self.pg else { return };
+        if let Some(n) = full_name {
+            let _ = sqlx::query("UPDATE pinpoint_users SET full_name=$1 WHERE id=$2")
+                .bind(n)
+                .bind(id)
+                .execute(pool)
+                .await;
+        }
+        if let Some(r) = role {
+            let _ = sqlx::query("UPDATE pinpoint_users SET role=$1 WHERE id=$2")
+                .bind(r)
+                .bind(id)
+                .execute(pool)
+                .await;
+        }
+        if let Some(a) = is_active {
+            let _ = sqlx::query("UPDATE pinpoint_users SET is_active=$1 WHERE id=$2")
+                .bind(a)
+                .bind(id)
+                .execute(pool)
+                .await;
+        }
+    }
+
+    /// Direct user delete; no-op in in-memory mode (store handles it).
+    pub async fn sql_delete_user(&self, id: i64) {
+        let Some(pool) = &self.pg else { return };
+        let _ = sqlx::query("DELETE FROM pinpoint_users WHERE id=$1")
+            .bind(id)
+            .execute(pool)
+            .await;
+    }
+}
