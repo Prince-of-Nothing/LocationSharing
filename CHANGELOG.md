@@ -6,6 +6,15 @@ Semantic Versioning. This is a pre-1.0 (thesis MVP) project.
 
 ## [Unreleased]
 ### Added
+- Client platforms track (`docs/client-platforms.md`): Windows/Linux/macOS
+  desktop via `src/main.rs` (`--help`, `$PINPOINT_BACKEND`, per-platform
+  defaults in `platform.rs`), Linux `.deb`/`.desktop` + macOS `.app`
+  metadata (`Cargo.toml`, `packaging/`), Android `cargo-apk` scaffold
+  (`android/` incl. `network_security_config.xml`), iOS `cargo-xcodebuild`
+  scaffold (`ios/Info.plist`), and a Rust/WASM web entry (`web/`,
+  `src/bin/pinpoint-web.rs` via Trunk). Status is scaffolding-only for
+  mobile/web — GUI verification needs NDK/Xcode/wasm toolchains or CI
+  matrices on those OSes.
 - OSM map parity (web + Android + Rust desktop): interactive Slippy web map
   with CARTO/Wikimedia layers, Nominatim search/reverse, OSRM routing
   (driving/foot/bike + GPX), Overpass POI browse (9 categories), on-device

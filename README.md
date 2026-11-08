@@ -96,6 +96,7 @@ Demo accounts: `alice@example.com` / `DemoPass123!` (if backend is seeded).
 |----------|-------------|
 | `docs/USER_GUIDE.md` | Complete user guide — map, sign in, share, navigate |
 | `docs/SETUP.md` | Installation and setup for all platforms |
+| `docs/client-platforms.md` | Per-OS client status: desktop/Linux/macOS/Android/iOS/Web build+verify |
 | `docs/TROUBLESHOOTING.md` | Common problems and fixes |
 | `docs/FEATURES.md` | Complete feature reference |
 | `docs/END_OF_SERVICE.md` | Data export and code reuse after service ends |
