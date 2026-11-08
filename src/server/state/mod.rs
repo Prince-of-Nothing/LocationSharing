@@ -201,8 +201,6 @@ impl AppState {
     /// preserved unless this snapshot legitimately removed it.
     pub async fn persist(&self) {
         let Some(pool) = &self.pg else { return };
-        // Snapshot the in-memory store once (lock released before I/O).
-        let store = self.store.lock().unwrap().snapshot();
         let mut tx = match pool.begin().await {
             Ok(tx) => tx,
             Err(_) => return,
@@ -213,6 +211,12 @@ impl AppState {
             .bind(self.owner.lock_key())
             .execute(&mut *tx)
             .await;
+        // Snapshot AFTER the lock: a snapshot taken before the lock could
+        // delete rows another replica committed between our snapshot and
+        // our delete-missing (the scale-2 share loss). Taking it here
+        // (still without holding the Mutex across I/O) makes the delete
+        // set fresh relative to the serialized writer.
+        let store = self.store.lock().unwrap().snapshot();
         // Rollback snapshot (combined binary only).
         if self.owner.owns_snapshot() {
             let data = serde_json::to_value(&store).unwrap_or_default();
