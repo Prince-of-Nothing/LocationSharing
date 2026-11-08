@@ -12,8 +12,8 @@ async fn main() -> anyhow::Result<()> {
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(Duration::from_secs(5)).await;
-            persist_state.persist().await;
             persist_state.refresh_from_db().await;
+            persist_state.persist().await;
         }
     });
     println!("pinpoint-locations listening on http://{addr}/");

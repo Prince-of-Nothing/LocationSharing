@@ -12,10 +12,10 @@ async fn main() -> anyhow::Result<()> {
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(Duration::from_secs(5)).await;
-            persist_state.persist().await;
-            // Converge: pick up other services' direct writes (e.g. auth's
-            // credential updates) so no service serves a stale view.
+            // Converge first, then persist: the snapshot must already
+            // contain other services' direct writes before we upsert.
             persist_state.refresh_from_db().await;
+            persist_state.persist().await;
         }
     });
     println!("pinpoint-users listening on http://{addr}/");

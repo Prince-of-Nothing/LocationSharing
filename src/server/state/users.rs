@@ -75,11 +75,10 @@ impl AppState {
                 .bind(u.id).bind(&u.email).bind(&u.full_name).bind(&u.role).bind(u.is_active).bind(u.must_change_password).bind(&u.password_hash).bind(&u.totp_secret).bind(u.mfa_enabled).bind(u.mfa_last_step as i64)
                 .execute(&mut **tx).await;
         }
-        let ids: Vec<i64> = store.users.iter().map(|u| u.id).collect();
-        let _ = sqlx::query("DELETE FROM pinpoint_users WHERE id <> ALL($1::bigint[])")
-            .bind(&ids)
-            .execute(&mut **tx)
-            .await;
+        // NOTE: no delete-missing for users. Two services write this table
+        // (Auth upserts here, Users inserts via direct SQL); a stale Auth
+        // snapshot must never erase a user the Users service just created.
+        // Deletions are explicit (`sql_delete_user` + handler retain) only.
         // Keep the sequence ahead of every id this tick wrote, so the next
         // `sql_insert_user` (NEXTVAL) can never collide with a persisted id.
         let _ = sqlx::query(
