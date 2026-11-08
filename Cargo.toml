@@ -33,6 +33,10 @@ path = "src/bin/locations.rs"
 name = "pinpoint-map"
 path = "src/bin/map.rs"
 
+[[bin]]
+name = "pinpoint-web"
+path = "src/bin/pinpoint-web.rs"
+
 [dependencies]
 eframe = { version = "0.32", default-features = true, features = ["glow"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -66,6 +70,9 @@ zeroize = "1.7"
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1.0", default-features = false, features = ["rt-multi-thread", "time", "net", "macros"] }
 
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+
 [dev-dependencies]
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 tempfile = "3.6"
@@ -77,3 +84,28 @@ tower = { version = "0.4", features = ["util"] }
 # - iOS:     `cargo xcodebuild` (eframe/winit → aarch64-apple-ios)
 # The same `crate-type` serves all targets; `src/platform.rs` holds every
 # `cfg(target_os)` branch so the UI core stays portable.
+# - Web:     `trunk build` with `src/bin/pinpoint-web.rs` (wasm32, see `web/`)
+
+# Linux .deb packaging (cargo-deb, optional — see packaging/linux/README).
+[package.metadata.deb]
+name = "pinpoint"
+maintainer = "Pinpoint Team"
+section = "net"
+priority = "optional"
+assets = [
+    ["target/release/pinpoint-desktop", "/usr/bin/pinpoint-desktop", "755"],
+    ["packaging/linux/pinpoint.desktop", "/usr/share/applications/pinpoint.desktop", "644"],
+]
+description = "Privacy-first location-sharing client (offline map-first, OSM ODbL)."
+
+# macOS .app bundle (cargo-bundle, optional — see packaging/macos/README).
+[package.metadata.bundle]
+name = "Pinpoint"
+identifier = "com.pinpoint.desktop"
+resources = []
+category = "Social Networking"
+short_description = "Privacy-first location sharing (map-first, OSM)."
+copyright = "MIT © 2026 Pinpoint"
+# NSLocationWhenInUseUsageDescription etc. are optional: publish/share is
+# manual lat/lon today; GPS requires the same entitlements as Android/iOS
+# (see ios/Info.plist NSLocation* keys).

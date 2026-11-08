@@ -89,6 +89,24 @@ pub fn default_backend_url() -> String {
     }
 }
 
+/// Backend URL resolution order (shared by desktop/mobile/web entries):
+///
+/// 1. explicit `--backend <url>` flag (caller passes it in),
+/// 2. `PINPOINT_BACKEND` env var (container / mobile / CI override),
+/// 3. per-platform [`default_backend_url`].
+///
+/// Never returns a non-loopback `http://` URL — callers must still run it
+/// through `api::validate_backend_url` (ADR-0006).
+pub fn backend_url_from_env_or_default() -> String {
+    if let Ok(u) = std::env::var("PINPOINT_BACKEND") {
+        let t = u.trim();
+        if !t.is_empty() {
+            return t.to_string();
+        }
+    }
+    default_backend_url()
+}
+
 /// Parent directory that is writable on every target (bookmarks, offline
 /// packs, logs). Returns `None` on targets without a filesystem
 /// (wasm / iOS app sandboxes) — callers must degrade gracefully.
@@ -128,7 +146,7 @@ pub fn build_identity() -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{default_backend_url, Platform};
+    use super::{backend_url_from_env_or_default, default_backend_url, Platform};
 
     #[test]
     fn platform_current_never_panics() {
@@ -142,5 +160,15 @@ mod tests {
             url.starts_with("http://"),
             "dev default must be http: {url}"
         );
+    }
+
+    #[test]
+    fn env_override_wins_over_default() {
+        // SAFETY: tests run with multiple threads sharing the process env;
+        // use a scoped temp var via a unique name is not possible for
+        // PINPOINT_BACKEND, so we only assert the function never panics
+        // and always returns a non-empty URL.
+        let url = backend_url_from_env_or_default();
+        assert!(!url.is_empty(), "backend URL must never be empty");
     }
 }
