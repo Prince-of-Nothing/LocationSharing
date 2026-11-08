@@ -32,6 +32,8 @@ Examples: backend framework, real-time transport (WebSockets vs. MQTT), authenti
 | 0004 | [Web Client for the MVP Demonstration; Flutter Deferred](./web-client-for-mvp-demonstration.md) | Accepted |
 | 0005 | [Store Only the Latest Location; Derive States on Read](./store-latest-location-only.md) | Accepted |
 | 0006 | [Rust Desktop Client Transport Policy and Session Contract](./0006-rust-client-transport-and-session-contract.md) | Accepted |
+| 0007 | [Rust Multiplatform as the Sole Application Codebase](./0007-rust-multiplatform.md) | Accepted |
+| 0008 | [Split Rust API into Independently Scalable Services Behind a Gateway](./0008-modular-rust-services.md) | Accepted |
 
 See [`architecture/architecture-decisions-link.md`](../architecture/architecture-decisions-link.md) for the complete list.
 

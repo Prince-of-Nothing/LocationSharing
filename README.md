@@ -2,51 +2,129 @@
 
 **A privacy-first location-sharing platform for trusted friends.**
 
-Friendship does not grant access to anyone's location: each person explicitly chooses who can see them, at what precision, and for how long. Every share can be revoked, and recipients can see whether a location is fresh or stale.
+Friendship does not grant access to anyone's location: each person
+explicitly chooses who can see them, at what precision, and for how long.
+Every share can be revoked, and recipients can see whether a location is
+fresh or stale.
 
-This repository contains two backend implementations sharing the same API:
+## Map First
 
-- **Go API** (default Docker stack): `backend/cmd/server` + `backend/internal/`
-- **Python/FastAPI API** (alternate): `backend/app`, migrations in `backend/alembic/`, tests in `backend/tests/`
+Open the app and you're immediately on the map — no login required. The map
+works offline with demo locations. Sign in to unlock friends, location
+sharing, and admin features.
 
-Web clients: `web/` (Go stack, nginx) and `backend/web/` (Python-served). Android app: `mobile/` — Kotlin/Jetpack Compose, Clean Architecture modules (`app` composition root + `core:{domain,network,data,map}` + `feature:{auth,map,friends,sharing}`), MapLibre maps, 0 trackers.
+```
+Open app → See map → (optional) Sign in → Unlock friends/sharing
+```
+
+---
 
 ## Features
 
-- Private-by-default accounts, sessions, and password management
-- Friend requests, removal, and blocking
-- Directional location sharing with precision, purpose, expiry, and revocation
-- Live, stale, and expired location states
-- Safety check-ins, admin account management, and audit logging
-- Browser client with an OpenStreetMap map (MapLibre Native, zero telemetry, ODbL attribution visible)
+- **Map-first UX** — Interactive map opens immediately, works offline
+- **OpenStreetMap (ODbL)** — All map data from OSM; attribution always visible
+- **Search places** — Nominatim search for cafés, pharmacies, parks, etc.
+- **Navigate** — OpenStreetMap directions and OSM map links for any location
+- **Consent-based sharing** — Directional shares (to_friend/from_friend/
+  mutual) with precision (exact/approximate/city_only) and expiry
+- **Honest freshness** — Every location shows age/accuracy; stale states
+  are never displayed as live
+- **0 trackers** — No analytics, crash reporting, or advertising SDKs
+- **Server-side enforcement** — All consent decisions made on the server
+- **Multiplatform** — Rust client for desktop (Windows/Linux/macOS),
+  Android, and iOS from one codebase
+
+---
 
 ## Quick Start
 
-### Go API (default Docker stack)
+### Terminal 1 — Rust API server (pure Rust, no Go)
 
 ```bash
-cd backend
-go build ./... && go vet ./...
-DB_DRIVER=memory SEED_DEMO_DATA=true WEB_ROOT=...web/public go run ./cmd/server   # port 8000
+cargo run --bin pinpoint-server
+# → http://localhost:8000/ (demo accounts pre-seeded, in-memory store)
 ```
 
-### Python/FastAPI API (alternate)
+### Terminal 2 — Desktop client
 
 ```bash
-cd backend
-pip install -r requirements-dev.txt
-pytest                                   # addopts: -q, testpaths=tests
-alembic upgrade head                     # needs DATABASE_URL (PostgreSQL)
+cargo run -- --backend http://localhost:8000
+# (map opens immediately; sign in optional)
 ```
 
-Full stack: `docker compose up --build` → http://localhost:8080
+### With Docker (backend + Postgres, all Rust)
 
-## Contribution Rules
+```bash
+# Start Postgres + Rust API server
+docker compose up --build -d db api
 
-- Small PRs, Conventional Commits, docs in the same PR
-- Security changes need a regression test *and* a fail-closed test
-- Every commit co-authored by the human team members (see `CONTRIBUTING.md`)
+# Run the desktop client against the containerized API
+cargo run -- --backend http://localhost:8000
+
+# Full CI gate inside a container (fmt/clippy/build/test)
+docker build -f Dockerfile.client --target tester -t pinpoint-desktop:tester .
+docker run --rm pinpoint-desktop:tester
+```
+
+### With Podman
+
+```bash
+podman build -t pinpoint-desktop:latest -f Containerfile.podman --target runtime .
+podman run --rm -e PINPOINT_BACKEND=http://host.containers.internal:8000 \
+  pinpoint-desktop:latest
+```
+
+---
+
+## Sign In
+
+Click **Sign in** in the header to unlock:
+
+- Publish your location
+- Send/accept friend requests
+- Create location shares (precision, purpose, expiry)
+- Admin panel (administrator role only)
+- Change password
+
+Demo accounts: `alice@example.com` / `DemoPass123!` (if backend is seeded).
+
+---
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| `docs/USER_GUIDE.md` | Complete user guide — map, sign in, share, navigate |
+| `docs/SETUP.md` | Installation and setup for all platforms |
+| `docs/TROUBLESHOOTING.md` | Common problems and fixes |
+| `docs/FEATURES.md` | Complete feature reference |
+| `docs/END_OF_SERVICE.md` | Data export and code reuse after service ends |
+| `docs/sdlc/` | Full SDLC documentation set (00–16) |
+| `docs/uml/` | Mermaid diagrams (01–15) |
+
+---
+
+## Quality Gates
+
+All four commands must pass before pushing:
+
+```bash
+cargo fmt --all -- --check
+cargo clippy --all-targets -- -D warnings
+cargo build --locked
+cargo test --locked
+```
+
+---
 
 ## License
 
-MIT © 2025 Pinpoint
+MIT © 2026 Pinpoint
+
+---
+
+## Contributing
+
+Small PRs, conventional commits, docs in the same pr. Security changes need
+a regression test and a fail-closed test. Every commit is co-authored by
+the human team members (see `CONTRIBUTING.md`).

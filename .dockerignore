@@ -1,4 +1,10 @@
-.git
-**/node_modules
-**/dist
-thesis_content.md
+# .dockerignore — Pure-Rust Docker builds
+.git/
+.github/
+.idea/
+archive/
+docs/
+downloads/
+msvc/
+target/
+*.log

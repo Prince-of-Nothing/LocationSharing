@@ -1,0 +1,1 @@
+rem both bat files are here only for nvcc, do not call them manually

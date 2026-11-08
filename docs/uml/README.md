@@ -17,6 +17,10 @@ This folder holds all modelled views of the system. Diagrams are written as **Me
 | [09-er-diagram.md](09-er-diagram.md) | Data model | Postgres schema (target, per T01/T02) with cardinalities |
 | [10-deployment-diagram.md](10-deployment-diagram.md) | Deployment | Dev compose vs production topology |
 | [11-use-case-diagram.md](11-use-case-diagram.md) | Requirements | Actors ↔ use cases mapped to tasks Txx |
+| [12-sequence-map-search.md](12-sequence-map-search.md) | Behaviour | Search (Nominatim) → pick → save/route; POI browse (Overpass) · FR-07/08/10 |
+| [13-sequence-routing-navigation.md](13-sequence-routing-navigation.md) | Behaviour | OSRM route → turn-by-turn → `geo:` hand-off; RoutingEngine classes · FR-09/12 |
+| [14-offline-and-bookmarks.md](14-offline-and-bookmarks.md) | Behaviour / states | Mobile offline packs; bookmark lifecycle + storage rules · FR-11/13 |
+| [15-web-slippy-engine.md](15-web-slippy-engine.md) | Components / projection | Web Slippy engine: tile grid, overlays, Web Mercator math, input states · FR-06 |
 
 ## Conventions
 - **Naming:** files numbered by viewpoint order; keep one diagram family per file.

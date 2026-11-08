@@ -6,6 +6,19 @@ Semantic Versioning. This is a pre-1.0 (thesis MVP) project.
 
 ## [Unreleased]
 ### Added
+- OSM map parity (web + Android + Rust desktop): interactive Slippy web map
+  with CARTO/Wikimedia layers, Nominatim search/reverse, OSRM routing
+  (driving/foot/bike + GPX), Overpass POI browse (9 categories), on-device
+  bookmarks (GeoJSON export); Android MapLibre with 3 OpenFreeMap styles,
+  offline packs, Nominatim/OSRM/Overpass screens, DataStore bookmarks;
+  Rust desktop OSM hand-off links fixed (OSM/directions/Organic Maps + ODbL credit)
+- Full SDLC documentation set (`docs/sdlc/00-16`): BRD, FR/NFR/TRS, OSM
+  integration guide (ODbL, Nominatim/OSRM/Overpass policies, self-hosting),
+  architecture, security/privacy, QA, deployment, risks, traceability
+- UML diagrams 12–15: map search/places, routing/navigation, offline/
+  bookmarks, web Slippy engine (Mermaid, with FR traceability)
+- Automatic QA: `scripts/qa.sh` + `scripts/qa.ps1` (tile policy, attribution,
+  CSP sync, SW SHELL, Mermaid, notices) + CI `map-qa` job
 - Rust desktop client (`pinpoint-desktop`, root crate): eframe/egui UI with
   stateful login/register/logout/password-change, `reqwest` API client bound to
   the server contract (session cookie + `X-CSRF-Token` double-submit), transport
