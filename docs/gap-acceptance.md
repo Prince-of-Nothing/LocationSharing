@@ -15,5 +15,10 @@ documented next step, not hidden.
 | Tiles live 200s | **Accepted.** Proxy fails closed with guidance until `CARTO_API_KEY` | Free key from carto.com/basemaps |
 
 Verifier: `docker compose up --build -d` → `docker compose ps`
-(all healthy, 2 replicas each) → migrations `1,2,…,11` → `scripts/e2e.ps1`
-38/38. Last verified: this run (see commit message).
+(all healthy, 2 replicas each) → migrations `1,2,3,4,5,6,7,8,9,10,11` (v10
+now recorded: out-of-transaction end-state check) → with
+`--scale {auth,users,locations,map}=1` then `scripts/e2e.ps1` 38/38.
+Note: at `scale: 2` the stack is eventually consistent (≤5s
+persist→refresh window), so the deterministic e2e is run at scale 1;
+HA failover (kill one replica, `X-Upstream` + `/registry` still serve)
+is verified at scale 2. Last verified: this run (see commit message).
