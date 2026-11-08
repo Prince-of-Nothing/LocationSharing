@@ -16,15 +16,20 @@ server code lives in `src/server/` and builds as four binaries
 | Service     | Image                        | Ports                  | Role |
 |-------------|------------------------------|------------------------|------|
 | `db`        | `postgres:16-alpine`         | `5432` (published)     | Postgres persistence (`pinpoint_state` JSONB snapshot, volume `pinpoint-db-data`) |
-| `auth`      | `Dockerfile.service` (`BIN=pinpoint-auth`) | `8001` (published) | Rust Axum auth (`/api/v1/auth/*`) |
-| `users`     | `Dockerfile.service` (`BIN=pinpoint-users`) | `8002` (published) | Rust Axum users + friendships (`/api/v1/users/*`, `/api/v1/friendships/*`) |
-| `locations` | `Dockerfile.service` (`BIN=pinpoint-locations`) | `8003` (published) | Rust Axum locations + shares (`/api/v1/locations/*`) |
-| `map`       | `Dockerfile.service` (`BIN=pinpoint-map`) | `8004` (published) | Rust Axum map (`/map/*`, OSM ODbL attribution) |
+| `db-backup` | `postgres:16-alpine`         | — | `pg_dump` every 300s → `pinpoint-backups` (keep 24) |
+| `auth`      | `Dockerfile.service` (`BIN=pinpoint-auth`) | `:8001` internal, **2 replicas** | Rust Axum auth (`/api/v1/auth/*`) |
+| `users`     | `Dockerfile.service` (`BIN=pinpoint-users`) | `:8002` internal, **2 replicas** | Rust Axum users + friendships (`/api/v1/users/*`, `/api/v1/friendships/*`) |
+| `locations` | `Dockerfile.service` (`BIN=pinpoint-locations`) | `:8003` internal, **2 replicas** | Rust Axum locations + shares (`/api/v1/locations/*`) |
+| `map`       | `Dockerfile.service` (`BIN=pinpoint-map`) | `:8004` internal, **2 replicas** | Rust Axum map (`/map/*`, OSM ODbL attribution) |
 | `gateway`   | `nginx:1.27-alpine`          | `8000` → 80 (published) | Reverse proxy by path (docker/nginx-gateway.conf); single client entrypoint |
 | `client`    | `Dockerfile.client` runtime  | — (profile `client`)   | Desktop GUI (Linux X11 host only) |
 
-Scale any service independently (e.g. `docker compose up --scale locations=3`).
-Direct ports 8001–8004 are for debugging; clients use the gateway on 8000.
+Each service runs 2 replicas by default (`scale`/`deploy.replicas`);
+kill one and the gateway retries the survivor (`proxy_next_upstream`,
+per-request Docker-DNS resolution). Clients use the gateway on 8000;
+direct ports are unpublished so replicas never collide. Full model,
+limits (single Postgres primary), and the failover drill:
+`docs/redundancy.md`.
 
 ## Quick start
 
