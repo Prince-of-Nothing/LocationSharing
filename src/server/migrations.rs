@@ -67,6 +67,7 @@ pub const MIGRATIONS: &[(u32, &str, &[&str])] = &[
         &[
             "CREATE SEQUENCE IF NOT EXISTS pinpoint_user_id_seq",
             "SELECT setval('pinpoint_user_id_seq', COALESCE((SELECT MAX(id) FROM pinpoint_users), 0) + 1, false)",
+            "GRANT USAGE, SELECT ON SEQUENCE pinpoint_user_id_seq TO pinpoint_users, pinpoint_auth",
         ],
     ),
 ];
@@ -99,17 +100,35 @@ pub async fn apply_migrations(pool: &sqlx::PgPool) -> Vec<u32> {
                 break;
             }
         }
-        // End-state fallback: older DBs already carry e.g. the MFA columns
-        // (created by legacy DDL); ALTER then fails only due to table
-        // ownership, but the desired state holds — record as applied.
-        if !ok && *version == 10 {
+        if !ok {
+            // End-state fallback (v10 only): an aborted transaction cannot
+            // run further queries, so roll back first, then verify the
+            // desired state outside the transaction. Older DBs created the
+            // MFA columns via legacy DDL; the least-privilege service roles
+            // cannot ALTER, but the columns still exist — record as applied.
+            let _ = tx.rollback().await;
+            if *version != 10 {
+                continue;
+            }
             let cols: Vec<(i64,)> = sqlx::query_as(
                 "SELECT count(*) FROM information_schema.columns WHERE table_name = 'pinpoint_users' AND column_name IN ('totp_secret','mfa_enabled','mfa_last_step')",
             )
-            .fetch_all(&mut *tx)
+            .fetch_all(pool)
             .await
             .unwrap_or_default();
             ok = cols.first().map(|(c,)| *c == 3).unwrap_or(false);
+            if !ok {
+                continue;
+            }
+            let _ = sqlx::query(
+                "INSERT INTO pinpoint_schema_migrations (version, name) VALUES ($1, $2) ON CONFLICT (version) DO NOTHING",
+            )
+            .bind(*version as i32)
+            .bind(*name)
+            .execute(pool)
+            .await;
+            newly.push(*version);
+            continue;
         }
         if ok
             && sqlx::query(
