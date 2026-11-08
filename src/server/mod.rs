@@ -30,10 +30,37 @@ pub use state::{AppState, ServiceKind, Store};
 pub use crate::models::{FriendLocation, Friendship, LocationShare, User};
 
 use axum::{
+    middleware::Next,
     routing::{delete, get, patch, post},
     Json, Router,
 };
 use serde_json::json;
+
+/// Per-request convergence for multi-replica determinism.
+///
+/// With 2 replicas, reading only the in-memory `Store` (5s tick) serves
+/// stale data and breaks read-after-write (the e2e saw 29/38 at scale 2).
+/// This middleware makes every request converge: refresh from Postgres
+/// before the handler, and persist after mutating requests. In-memory
+/// mode (no `DATABASE_URL`) and all unit/router tests are a no-op (both
+/// calls early-return), so the suite stays green.
+/// State is read from request extensions (not a `State` extractor) so this
+/// layer composes on `Router<AppState>` before `with_state`.
+async fn converge(
+    req: axum::http::Request<axum::body::Body>,
+    next: Next,
+) -> axum::response::Response {
+    let Some(state) = req.extensions().get::<AppState>().cloned() else {
+        return next.run(req).await;
+    };
+    let method = req.method().clone();
+    state.refresh_from_db().await;
+    let res = next.run(req).await;
+    if method != axum::http::Method::GET {
+        state.persist().await;
+    }
+    res
+}
 
 /// Build the full Axum router with all `/api/v1` routes + health.
 pub fn router(state: AppState) -> Router {
@@ -42,6 +69,7 @@ pub fn router(state: AppState) -> Router {
         .merge(locations_router())
         .merge(map_router())
         .route("/health", get(handlers::health))
+        .layer(axum::middleware::from_fn(converge))
         .with_state(state)
 }
 
@@ -49,6 +77,7 @@ pub fn router(state: AppState) -> Router {
 /// Stateless: the app state is supplied once by the binary's `with_state`.
 pub fn auth_router() -> Router<AppState> {
     Router::new()
+        .layer(axum::middleware::from_fn(converge))
         .route("/health", get(handlers::health))
         .route("/api/v1/auth/login", post(auth_handlers::login))
         .route("/api/v1/auth/register", post(auth_handlers::register))
@@ -73,6 +102,7 @@ pub fn auth_router() -> Router<AppState> {
 /// NOTE: matchit 0.7 (axum 0.7) uses `:param` syntax, NOT `{param}` (that is axum 0.8).
 pub fn users_router() -> Router<AppState> {
     Router::new()
+        .layer(axum::middleware::from_fn(converge))
         .route("/health", get(handlers::health))
         .route(
             "/api/v1/users/",
@@ -102,6 +132,7 @@ pub fn users_router() -> Router<AppState> {
 /// Locations + shares service routes. Independently scalable.
 pub fn locations_router() -> Router<AppState> {
     Router::new()
+        .layer(axum::middleware::from_fn(converge))
         .route("/health", get(handlers::health))
         .route(
             "/api/v1/locations/shares",
