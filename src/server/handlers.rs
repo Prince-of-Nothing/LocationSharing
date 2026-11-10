@@ -1,13 +1,9 @@
-﻿//! Shared HTTP handler helpers for the Rust API server.
+//! Shared HTTP handler helpers for the Rust API server.
 //!
 //! Service-specific handlers live in `auth_handlers`, `users_handlers` and
 //! `locations_handlers` so each deployable compiles only what it serves.
 
-use axum::{
-    extract::State,
-    http::StatusCode,
-    Json,
-};
+use axum::{extract::State, http::StatusCode, Json};
 use serde_json::{json, Value};
 
 use super::state::AppState;
@@ -60,7 +56,14 @@ pub async fn health(State(state): State<AppState>) -> (StatusCode, Json<Value>) 
     let mut checks = serde_json::Map::new();
     checks.insert("status".to_string(), json!("healthy"));
     checks.insert("version".to_string(), json!("0.2.0"));
-    checks.insert("mode".to_string(), json!(if state.pg.is_some() { "postgres" } else { "in-memory" }));
+    checks.insert(
+        "mode".to_string(),
+        json!(if state.pg.is_some() {
+            "postgres"
+        } else {
+            "in-memory"
+        }),
+    );
 
     if let Some(pool) = &state.pg {
         match sqlx::query("SELECT 1").fetch_one(pool).await {

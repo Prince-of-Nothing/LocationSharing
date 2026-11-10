@@ -4,6 +4,92 @@ use crate::patterns::state::StateContext;
 use crate::security::{AuditLogger, KeyManager, RateLimiter};
 use std::sync::{Arc, Mutex};
 
+/// A mutation that failed because all backends were unavailable.
+/// Queued locally and replayed when a backend comes back online.
+#[derive(Debug, Clone)]
+pub enum PendingMutation {
+    PublishLocation {
+        lat: f64,
+        lon: f64,
+        accuracy: f64,
+    },
+    CreateShare {
+        friendship_id: i64,
+        direction: String,
+        precision: String,
+    },
+    UpdateShare {
+        share_id: i64,
+        is_active: Option<bool>,
+        precision: Option<String>,
+    },
+    DeleteShare {
+        share_id: i64,
+    },
+    CreateShareWithExpiry {
+        friendship_id: i64,
+        direction: String,
+        precision: String,
+        duration_hours: Option<i64>,
+        label: Option<String>,
+    },
+    DeleteFriendship {
+        id: i64,
+    },
+    SendFriendRequest {
+        email: String,
+    },
+    RespondFriendship {
+        id: i64,
+        action: String,
+    },
+    CreateCheckIn {
+        lat: f64,
+        lon: f64,
+        note: String,
+        kind: String,
+    },
+    TriggerEmergency {
+        lat: f64,
+        lon: f64,
+    },
+    UpdateUser {
+        id: i64,
+        full_name: String,
+    },
+    ChangePassword {
+        current_password: Option<String>,
+        new_password: String,
+        confirm_password: String,
+    },
+    MFAVerify {
+        code: String,
+    },
+    MFADisable,
+}
+
+impl PendingMutation {
+    /// Human-readable description for UI display.
+    pub fn description(&self) -> &str {
+        match self {
+            PendingMutation::PublishLocation { .. } => "Publish location",
+            PendingMutation::CreateShare { .. } => "Create location share",
+            PendingMutation::UpdateShare { .. } => "Update location share",
+            PendingMutation::DeleteShare { .. } => "Delete location share",
+            PendingMutation::CreateShareWithExpiry { .. } => "Create share with expiry",
+            PendingMutation::DeleteFriendship { .. } => "Delete friendship",
+            PendingMutation::SendFriendRequest { .. } => "Send friend request",
+            PendingMutation::RespondFriendship { .. } => "Respond to friendship",
+            PendingMutation::CreateCheckIn { .. } => "Create check-in",
+            PendingMutation::TriggerEmergency { .. } => "Trigger emergency",
+            PendingMutation::UpdateUser { .. } => "Update profile",
+            PendingMutation::ChangePassword { .. } => "Change password",
+            PendingMutation::MFAVerify { .. } => "Verify MFA",
+            PendingMutation::MFADisable => "Disable MFA",
+        }
+    }
+}
+
 /// Core application state/logic shared by desktop/mobile clients.
 ///
 /// Depends on [`DynBackend`] (the modular backend abstraction) rather than a
@@ -21,6 +107,9 @@ pub struct PinpointApp {
     error_message: Arc<Mutex<Option<String>>>,
     notice_message: Arc<Mutex<Option<String>>>,
     offline_mode: Arc<Mutex<bool>>,
+    /// Mutations that failed because all backends were down.
+    /// Replayed automatically when connectivity is restored.
+    pending_mutations: Arc<Mutex<Vec<PendingMutation>>>,
     state_context: Arc<Mutex<StateContext>>,
     rate_limiter: Arc<Mutex<RateLimiter>>,
     audit_logger: Arc<AuditLogger>,
@@ -105,6 +194,7 @@ impl PinpointApp {
             error_message: Arc::new(Mutex::new(None)),
             notice_message: Arc::new(Mutex::new(None)),
             offline_mode: Arc::new(Mutex::new(true)),
+            pending_mutations: Arc::new(Mutex::new(Vec::new())),
             state_context: Arc::new(Mutex::new(StateContext::new())),
             rate_limiter: Arc::new(Mutex::new(RateLimiter::with_defaults())),
             audit_logger: Arc::new(AuditLogger::with_console()),
@@ -231,6 +321,163 @@ impl PinpointApp {
 
     pub fn set_offline_mode(&self, offline: bool) {
         *self.offline_mode.lock().unwrap() = offline;
+    }
+
+    /// Returns the number of pending (unsynced) mutations.
+    pub fn pending_mutation_count(&self) -> usize {
+        self.pending_mutations.lock().unwrap().len()
+    }
+
+    /// Returns descriptions of all pending mutations (for UI display).
+    pub fn pending_mutation_descriptions(&self) -> Vec<String> {
+        self.pending_mutations
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|m| m.description().to_string())
+            .collect()
+    }
+
+    /// Queue a mutation for later replay when a backend becomes available.
+    fn queue_mutation(&self, mutation: PendingMutation) {
+        self.pending_mutations.lock().unwrap().push(mutation);
+        self.set_offline_mode(true);
+    }
+
+    /// Replay all pending mutations against the current backend.
+    /// Returns the number of mutations still pending after the sync attempt.
+    pub async fn sync_pending_mutations(&self) -> usize {
+        let pending = {
+            let mut guard = self.pending_mutations.lock().unwrap();
+            let count = guard.len();
+            if count == 0 {
+                return 0;
+            }
+            // Clone the list, clear the queue, replay one by one.
+            let mutations = guard.clone();
+            guard.clear();
+            mutations
+        };
+
+        let mut still_pending = Vec::new();
+        for mutation in pending {
+            let result = self.replay_mutation(&mutation).await;
+            if result.is_err() {
+                // Put it back at the front of the queue.
+                still_pending.push(mutation);
+            }
+        }
+
+        let remaining = still_pending.len();
+        if remaining > 0 {
+            let mut guard = self.pending_mutations.lock().unwrap();
+            guard.extend(still_pending);
+        }
+
+        remaining
+    }
+
+    /// Replay a single pending mutation.
+    async fn replay_mutation(&self, mutation: &PendingMutation) -> anyhow::Result<()> {
+        match mutation {
+            PendingMutation::PublishLocation { lat, lon, accuracy } => {
+                self.backend.publish_location(*lat, *lon, *accuracy).await?;
+                self.refresh_friend_locations().await?;
+                self.refresh_my_location().await?;
+            }
+            PendingMutation::CreateShare {
+                friendship_id,
+                direction,
+                precision,
+            } => {
+                self.backend
+                    .create_location_share(*friendship_id, direction, precision)
+                    .await?;
+                self.refresh_shares().await?;
+            }
+            PendingMutation::UpdateShare {
+                share_id,
+                is_active,
+                precision,
+            } => {
+                self.backend
+                    .update_location_share(*share_id, *is_active, precision.clone())
+                    .await?;
+                self.refresh_shares().await?;
+            }
+            PendingMutation::DeleteShare { share_id } => {
+                self.backend.delete_share(*share_id).await?;
+                self.refresh_shares().await?;
+            }
+            PendingMutation::CreateShareWithExpiry {
+                friendship_id,
+                direction,
+                precision,
+                duration_hours,
+                label,
+            } => {
+                self.backend
+                    .create_share_with_expiry(
+                        *friendship_id,
+                        direction,
+                        precision,
+                        *duration_hours,
+                        label.as_deref(),
+                    )
+                    .await?;
+                self.refresh_shares().await?;
+            }
+            PendingMutation::DeleteFriendship { id } => {
+                self.backend.delete_friendship(*id).await?;
+                self.refresh_friendships().await?;
+                self.refresh_shares().await?;
+            }
+            PendingMutation::SendFriendRequest { email } => {
+                self.backend.send_friend_request(email).await?;
+                self.refresh_friendships().await?;
+            }
+            PendingMutation::RespondFriendship { id, action } => {
+                self.backend.respond_to_friendship(*id, action).await?;
+                self.refresh_friendships().await?;
+                self.refresh_shares().await?;
+            }
+            PendingMutation::CreateCheckIn {
+                lat,
+                lon,
+                note,
+                kind,
+            } => {
+                self.backend.create_check_in(*lat, *lon, note, kind).await?;
+                self.refresh_check_ins().await?;
+            }
+            PendingMutation::TriggerEmergency { lat, lon } => {
+                self.backend.trigger_emergency(*lat, *lon).await?;
+                self.refresh_emergencies().await?;
+                self.refresh_shares().await?;
+            }
+            PendingMutation::UpdateUser { id, full_name } => {
+                self.backend
+                    .update_user(*id, serde_json::json!({ "full_name": full_name }))
+                    .await?;
+                self.refresh_users().await?;
+            }
+            PendingMutation::ChangePassword {
+                current_password,
+                new_password,
+                confirm_password,
+            } => {
+                self.backend
+                    .change_password(current_password.as_deref(), new_password, confirm_password)
+                    .await?;
+            }
+            PendingMutation::MFAVerify { code } => {
+                self.backend.mfa_verify(code).await?;
+            }
+            PendingMutation::MFADisable => {
+                self.backend.mfa_disable().await?;
+            }
+        }
+        Ok(())
     }
 
     pub fn requires_sign_in(&self, screen: CurrentScreen) -> bool {
@@ -458,7 +705,15 @@ impl PinpointApp {
                 Ok(())
             }
             Err(e) => {
-                self.set_error(Some(e.to_string()));
+                self.queue_mutation(PendingMutation::ChangePassword {
+                    current_password,
+                    new_password,
+                    confirm_password,
+                });
+                self.set_error(Some(format!(
+                    "All backends unavailable — queued for sync ({} pending)",
+                    self.pending_mutation_count()
+                )));
                 Err(e)
             }
         }
@@ -523,7 +778,11 @@ impl PinpointApp {
         } else {
             self.audit_logger
                 .log_event("friends", "send_request", Some(&email), "failure");
-            self.set_error(result.as_ref().err().map(|e| e.to_string()));
+            self.queue_mutation(PendingMutation::SendFriendRequest { email });
+            self.set_error(Some(format!(
+                "All backends unavailable — queued for sync ({} pending)",
+                self.pending_mutation_count()
+            )));
         }
         result
     }
@@ -540,7 +799,13 @@ impl PinpointApp {
                     self.set_error(Some(e.to_string()));
                 }
             }
-            Err(e) => self.set_error(Some(e.to_string())),
+            Err(_e) => {
+                self.queue_mutation(PendingMutation::RespondFriendship { id, action });
+                self.set_error(Some(format!(
+                    "All backends unavailable — queued for sync ({} pending)",
+                    self.pending_mutation_count()
+                )));
+            }
         }
         result
     }
@@ -563,7 +828,17 @@ impl PinpointApp {
                     self.set_error(Some(e.to_string()));
                 }
             }
-            Err(e) => self.set_error(Some(e.to_string())),
+            Err(_e) => {
+                self.queue_mutation(PendingMutation::CreateShare {
+                    friendship_id,
+                    direction,
+                    precision,
+                });
+                self.set_error(Some(format!(
+                    "All backends unavailable — queued for sync ({} pending)",
+                    self.pending_mutation_count()
+                )));
+            }
         }
         result
     }
@@ -577,7 +852,7 @@ impl PinpointApp {
         self.set_loading(true);
         let result = self
             .backend
-            .update_location_share(share_id, is_active, precision)
+            .update_location_share(share_id, is_active, precision.clone())
             .await;
         self.set_loading(false);
         match &result {
@@ -586,7 +861,17 @@ impl PinpointApp {
                     self.set_error(Some(e.to_string()));
                 }
             }
-            Err(e) => self.set_error(Some(e.to_string())),
+            Err(_e) => {
+                self.queue_mutation(PendingMutation::UpdateShare {
+                    share_id,
+                    is_active,
+                    precision,
+                });
+                self.set_error(Some(format!(
+                    "All backends unavailable — queued for sync ({} pending)",
+                    self.pending_mutation_count()
+                )));
+            }
         }
         result
     }
@@ -608,20 +893,29 @@ impl PinpointApp {
             return Err(anyhow::anyhow!("Rate limited — try again shortly."));
         }
         let result = self.backend.publish_location(lat, lon, accuracy).await;
-        if let Err(e) = &result {
-            self.set_error(Some(e.to_string()));
-        } else {
-            self.audit_logger
-                .log_event("location", "publish", None, "success");
-            self.set_notice(Some("Location published.".to_string()));
-            if let Err(e) = self.refresh_friend_locations().await {
-                self.set_error(Some(e.to_string()));
+        match result {
+            Ok(()) => {
+                self.audit_logger
+                    .log_event("location", "publish", None, "success");
+                self.set_notice(Some("Location published.".to_string()));
+                if let Err(e) = self.refresh_friend_locations().await {
+                    self.set_error(Some(e.to_string()));
+                }
+                if let Err(e) = self.refresh_my_location().await {
+                    self.set_error(Some(e.to_string()));
+                }
             }
-            if let Err(e) = self.refresh_my_location().await {
-                self.set_error(Some(e.to_string()));
+            Err(e) => {
+                // Queue for replay when a backend comes back.
+                self.queue_mutation(PendingMutation::PublishLocation { lat, lon, accuracy });
+                self.set_error(Some(format!(
+                    "All backends unavailable — queued for sync ({} pending)",
+                    self.pending_mutation_count()
+                )));
+                return Err(e);
             }
         }
-        result
+        Ok(())
     }
 
     // ---- Maximum-feature additions ----
@@ -660,7 +954,11 @@ impl PinpointApp {
                 self.refresh_shares().await
             }
             Err(e) => {
-                self.set_error(Some(e.to_string()));
+                self.queue_mutation(PendingMutation::DeleteShare { share_id });
+                self.set_error(Some(format!(
+                    "All backends unavailable — queued for sync ({} pending)",
+                    self.pending_mutation_count()
+                )));
                 Err(e)
             }
         }
@@ -687,7 +985,17 @@ impl PinpointApp {
         match result {
             Ok(()) => self.refresh_shares().await,
             Err(e) => {
-                self.set_error(Some(e.to_string()));
+                self.queue_mutation(PendingMutation::CreateShareWithExpiry {
+                    friendship_id,
+                    direction,
+                    precision,
+                    duration_hours,
+                    label,
+                });
+                self.set_error(Some(format!(
+                    "All backends unavailable — queued for sync ({} pending)",
+                    self.pending_mutation_count()
+                )));
                 Err(e)
             }
         }
@@ -701,7 +1009,11 @@ impl PinpointApp {
                 self.refresh_shares().await
             }
             Err(e) => {
-                self.set_error(Some(e.to_string()));
+                self.queue_mutation(PendingMutation::DeleteFriendship { id });
+                self.set_error(Some(format!(
+                    "All backends unavailable — queued for sync ({} pending)",
+                    self.pending_mutation_count()
+                )));
                 Err(e)
             }
         }
@@ -722,7 +1034,16 @@ impl PinpointApp {
                 self.refresh_check_ins().await
             }
             Err(e) => {
-                self.set_error(Some(e.to_string()));
+                self.queue_mutation(PendingMutation::CreateCheckIn {
+                    lat,
+                    lon,
+                    note,
+                    kind,
+                });
+                self.set_error(Some(format!(
+                    "All backends unavailable — queued for sync ({} pending)",
+                    self.pending_mutation_count()
+                )));
                 Err(e)
             }
         }
@@ -741,7 +1062,11 @@ impl PinpointApp {
                 self.refresh_shares().await
             }
             Err(e) => {
-                self.set_error(Some(e.to_string()));
+                self.queue_mutation(PendingMutation::TriggerEmergency { lat, lon });
+                self.set_error(Some(format!(
+                    "All backends unavailable — queued for sync ({} pending)",
+                    self.pending_mutation_count()
+                )));
                 Err(e)
             }
         }
@@ -765,7 +1090,11 @@ impl PinpointApp {
         match result {
             Ok(()) => self.refresh_users().await,
             Err(e) => {
-                self.set_error(Some(e.to_string()));
+                self.queue_mutation(PendingMutation::UpdateUser { id, full_name });
+                self.set_error(Some(format!(
+                    "All backends unavailable — queued for sync ({} pending)",
+                    self.pending_mutation_count()
+                )));
                 Err(e)
             }
         }
@@ -795,7 +1124,11 @@ impl PinpointApp {
                 Ok(())
             }
             Err(e) => {
-                self.set_error(Some(e.to_string()));
+                self.queue_mutation(PendingMutation::MFAVerify { code });
+                self.set_error(Some(format!(
+                    "All backends unavailable — queued for sync ({} pending)",
+                    self.pending_mutation_count()
+                )));
                 Err(e)
             }
         }
@@ -811,7 +1144,11 @@ impl PinpointApp {
                 Ok(())
             }
             Err(e) => {
-                self.set_error(Some(e.to_string()));
+                self.queue_mutation(PendingMutation::MFADisable);
+                self.set_error(Some(format!(
+                    "All backends unavailable — queued for sync ({} pending)",
+                    self.pending_mutation_count()
+                )));
                 Err(e)
             }
         }
