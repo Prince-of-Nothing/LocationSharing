@@ -126,6 +126,9 @@ pub struct Settings {
     /// Default precision for new shares.
     #[serde(default = "default_precision")]
     pub default_precision: String,
+    /// Profile visibility: "friends_only" (default) or "public".
+    #[serde(default = "default_visibility")]
+    pub profile_visibility: String,
 }
 
 fn default_refresh_interval() -> u64 {
@@ -138,12 +141,17 @@ fn default_precision() -> String {
     "exact".to_string()
 }
 
+fn default_visibility() -> String {
+    "friends_only".to_string()
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
             refresh_interval_secs: default_refresh_interval(),
             metric: default_metric(),
             default_precision: default_precision(),
+            profile_visibility: default_visibility(),
         }
     }
 }

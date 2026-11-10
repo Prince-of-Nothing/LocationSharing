@@ -140,13 +140,13 @@ impl Store {
 
         self.users = vec![admin, alice, bob];
         self.friendships = vec![friendship];
-        // Demo locations (Chicago)
+        // Demo locations (Chișinău, Moldova)
         self.locations = vec![
             FriendLocation {
                 user_id: self.users[1].id,
                 user_name: "Alice Example".into(),
-                latitude: 41.8902,
-                longitude: -87.6323,
+                latitude: 47.0105,
+                longitude: 28.8638,
                 precision_level: "exact".into(),
                 updated_at: "2026-11-08T12:00:00Z".into(),
                 accuracy: Some(8.0),
@@ -154,8 +154,8 @@ impl Store {
             FriendLocation {
                 user_id: self.users[2].id,
                 user_name: "Bob Example".into(),
-                latitude: 41.8781,
-                longitude: -87.6298,
+                latitude: 47.0056,
+                longitude: 28.8575,
                 precision_level: "exact".into(),
                 updated_at: "2026-11-08T12:00:00Z".into(),
                 accuracy: Some(10.0),

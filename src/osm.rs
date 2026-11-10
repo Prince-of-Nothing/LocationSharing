@@ -242,10 +242,31 @@ impl OsmClient {
         if q.chars().count() < 3 {
             anyhow::bail!("Type at least 3 characters to search.");
         }
+        // Moldova-first bias: append country hint unless the user already
+        // named a place, so "Cemetary of Mihai" resolves to the Moldovan
+        // result instead of a homonym elsewhere. Diacritics are kept (Nominatim
+        // handles them) but we also accept ASCII fallbacks ("Chisinau").
+        let lower = q.to_lowercase();
+        let biased = if [
+            "moldova",
+            "chisinau",
+            "chișinău",
+            "balti",
+            "bălți",
+            "tiraspol",
+            "orhei",
+        ]
+        .iter()
+        .any(|k| lower.contains(k))
+        {
+            q.to_string()
+        } else {
+            format!("{q}, Moldova")
+        };
         self.throttle().await;
         let url = format!(
-            "{NOMINATIM_BASE}/search?q={}&format=jsonv2&limit=8&addressdetails=1",
-            urlencoding(q)
+            "{NOMINATIM_BASE}/search?q={}&format=jsonv2&limit=8&addressdetails=1&bounded=0&viewbox=26.5,48.5,30.0,45.5&accept-language=ro,ru,en",
+            urlencoding(&biased)
         );
         let items: Vec<NominatimItem> = self.http.get(&url).send().await?.json().await?;
         Ok(items

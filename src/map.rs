@@ -192,7 +192,7 @@ fn draw_location_list(ui: &mut Ui, locations: &[FriendLocation]) {
                 );
             });
             // Distance from first demo point (proxy for "near me" when no GPS).
-            let anchor = (41.8902, -87.6323);
+            let anchor = (47.0105, 28.8638);
             let d = crate::models::haversine_m(anchor.0, anchor.1, loc.latitude, loc.longitude);
             let b = crate::models::bearing_deg(anchor.0, anchor.1, loc.latitude, loc.longitude);
             // Freshness badge (honest: stale/dead never shown as live).
