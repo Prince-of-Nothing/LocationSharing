@@ -50,6 +50,24 @@ Semantic Versioning. This is a pre-1.0 (thesis MVP) project.
   RUSTSEC-2026-0195, both high) to `0.41.0`; `cargo audit` now exits 0 with
   0 vulnerabilities (5 unmaintained warnings only)
 
+## [Unreleased-redundancy]
+### Added
+- Client-side redundancy: `src/security/circuit_breaker.rs` (per-backend
+  circuit breaker with Closed/HalfOpen/Open states), `src/backend/health.rs`
+  (active health monitoring of backend URLs), `src/backend/failover.rs`
+  (FailoverBackend wrapping multiple REST backends with automatic failover,
+  circuit breakers, and exponential backoff retry), `FailoverV1`
+  `BackendKind` + `PINPOINT_FAILOVER_URLS` env support
+- Server reliability: `/health` verifies Postgres connectivity (returns
+  `degraded` when DB unreachable); new `GET /api/v1/sync-status` endpoint
+  reports replication freshness (`last_persist_at`, `last_persist_age_secs`,
+  `fresh`) for monitoring replica health
+- Client offline resilience: `PendingMutation` queue in `PinpointApp` — all
+  mutation methods queue locally when all backends are unavailable;
+  `sync_pending_mutations()` auto-replays queued mutations when connectivity
+  returns; `pending_mutation_count()` / `pending_mutation_descriptions()`
+  exposed for UI; offline mode auto-engaged on failure
+
 ## [0.3.0] - 2026-10-13
 ### Added
 - Docker deployment: `docker-compose.yml`, multi-stage `backend/Dockerfile` (non-root,

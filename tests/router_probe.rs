@@ -2,6 +2,7 @@
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
+use axum::routing::get;
 use tower::ServiceExt;
 
 #[tokio::test]
@@ -79,4 +80,36 @@ async fn health_route_matches_all_services() {
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK, "/health missing");
     }
+}
+
+#[tokio::test]
+async fn sync_status_route_matches() {
+    // Redundancy: /api/v1/sync-status must be reachable for replica
+    // freshness monitoring by clients and load balancers.
+    let app = axum::Router::new()
+        .route(
+            "/api/v1/sync-status",
+            get(pinpoint_desktop::server::sync_status),
+        )
+        .with_state(pinpoint_desktop::server::AppState::new());
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/sync-status")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_ne!(
+        resp.status(),
+        StatusCode::NOT_FOUND,
+        "sync-status route missing"
+    );
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["mode"], "in-memory");
+    assert_eq!(json["database_connected"], false);
 }

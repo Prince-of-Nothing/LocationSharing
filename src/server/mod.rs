@@ -25,6 +25,7 @@ mod migrations;
 mod state;
 mod users_handlers;
 
+pub use handlers::sync_status;
 pub use state::{AppState, ServiceKind, Store};
 
 pub use crate::models::{FriendLocation, Friendship, LocationShare, User};
@@ -71,6 +72,7 @@ pub fn router(state: AppState) -> Router {
         .merge(locations_router())
         .merge(map_router())
         .route("/health", get(handlers::health))
+        .route("/api/v1/sync-status", get(handlers::sync_status))
         .with_state(state)
         .layer(axum::middleware::from_fn_with_state(app_state, converge))
 }

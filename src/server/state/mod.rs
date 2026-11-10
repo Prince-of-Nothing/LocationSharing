@@ -17,6 +17,7 @@ mod users;
 pub use store::Store;
 
 use std::sync::{Arc, Mutex};
+use std::time::SystemTime;
 
 /// Application state shared between handlers.
 #[derive(Debug, Clone)]
@@ -26,6 +27,9 @@ pub struct AppState {
     /// Which service owns this instance — scopes `persist()` to owned tables
     /// only, so services never clobber each other's rows.
     pub owner: ServiceKind,
+    /// Last successful persist timestamp — used by `/sync-status` to report
+    /// replication freshness across replicas.
+    pub last_persist_at: Arc<Mutex<Option<SystemTime>>>,
 }
 
 /// Which deployable this `AppState` backs (controls persistence ownership).
@@ -83,6 +87,7 @@ impl AppState {
             store: Arc::new(Mutex::new(Store::new())),
             pg: None,
             owner,
+            last_persist_at: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -101,6 +106,7 @@ impl AppState {
                     store: Arc::new(Mutex::new(Store::new())),
                     pg: Some(pool),
                     owner,
+                    last_persist_at: Arc::new(Mutex::new(None)),
                 };
                 app.init_postgres().await;
                 app
@@ -205,6 +211,7 @@ impl AppState {
                 .await;
         }
         let _ = tx.commit().await;
+        *self.last_persist_at.lock().unwrap() = Some(SystemTime::now());
     }
 }
 

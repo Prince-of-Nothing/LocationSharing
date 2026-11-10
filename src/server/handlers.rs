@@ -5,6 +5,7 @@
 
 use axum::{extract::State, http::StatusCode, Json};
 use serde_json::{json, Value};
+use std::time::SystemTime;
 
 use super::state::AppState;
 
@@ -81,4 +82,29 @@ pub async fn health(State(state): State<AppState>) -> (StatusCode, Json<Value>) 
     }
 
     (StatusCode::OK, Json(Value::Object(checks)))
+}
+
+/// Sync status — reports replication freshness for monitoring replica health.
+/// `last_persist_at` is the last successful `persist()` timestamp; clients and
+/// load balancers can use this to detect stale replicas.
+pub async fn sync_status(State(state): State<AppState>) -> Json<Value> {
+    let last_persist = state.last_persist_at.lock().unwrap();
+    let age_secs = last_persist
+        .as_ref()
+        .and_then(|t| t.elapsed().ok())
+        .map(|d| d.as_secs())
+        .unwrap_or(u64::MAX);
+    let db_connected = state.pg.is_some();
+    let mode = if state.pg.is_some() {
+        "postgres"
+    } else {
+        "in-memory"
+    };
+    Json(json!({
+        "mode": mode,
+        "database_connected": db_connected,
+        "last_persist_at": last_persist.map(|t| t.duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_secs()),
+        "last_persist_age_secs": age_secs,
+        "fresh": age_secs <= 10,
+    }))
 }
