@@ -40,9 +40,6 @@ pub enum ServiceKind {
 }
 
 impl ServiceKind {
-    /// `pinpoint_users` is owned EXCLUSIVELY by Auth (credentials + profile
-    /// columns). The users service touches user rows via direct SQL only,
-    /// never the persist rewrite — see `users.rs::sql_*` helpers.
     pub fn owns_users(self) -> bool {
         matches!(self, Self::All | Self::Auth)
     }
@@ -65,12 +62,6 @@ impl ServiceKind {
         matches!(self, Self::All)
     }
 
-    /// Stable advisory-lock key per service, serializing the persist tick
-    /// across replicas of the same service (`pg_advisory_xact_lock` inside
-    /// the per-tick transaction in `persist()`). Distinct keys let
-    /// auth/users/locations persist concurrently without blocking each
-    /// other; replicas of the same service take turns. `MapOnly` never
-    /// persists, so its key is unused but still distinct for safety.
     pub fn lock_key(self) -> i64 {
         match self {
             Self::All => 1,
@@ -95,11 +86,6 @@ impl AppState {
         }
     }
 
-    /// Production constructor: connects to Postgres when `DATABASE_URL`
-    /// is set, loads the persisted snapshot (or seeds demo data), and
-    /// persists mutations back to Postgres. Falls back to in-memory
-    /// demo mode when `DATABASE_URL` is empty (local/tests).
-    /// Ownership scopes which tables this instance may write.
     pub async fn from_env() -> Self {
         Self::from_env_for(ServiceKind::All).await
     }
@@ -128,17 +114,13 @@ impl AppState {
 
     async fn init_postgres(&self) {
         let Some(pool) = &self.pg else { return };
-        // Typed migration history (v1..v10) applies at boot; old DBs converge
-        // idempotently since every statement is CREATE/ALTER IF NOT EXISTS.
         let applied = crate::server::migrations::apply_migrations(pool).await;
         if !applied.is_empty() {
             eprintln!("applied migrations: {:?}", applied);
         }
-        // Normalized is authoritative once it has rows.
         if self.load_normalized().await {
             return;
         }
-        // Else migrate legacy JSONB snapshot (or seed fresh), then normalize.
         let loaded: Option<(serde_json::Value,)> =
             sqlx::query_as("SELECT data FROM pinpoint_state WHERE id = 1")
                 .fetch_optional(pool)
@@ -174,50 +156,22 @@ impl AppState {
         true
     }
 
-    /// Reload every table from Postgres into the in-memory Store (merge
-    /// convergence). Callers run this right AFTER `persist()` on each tick so
-    /// cross-service writes (e.g. users-service direct-SQL user rows visible
-    /// to the auth service) converge within one interval. No-op without DB
-    /// or when the DB has no rows yet.
     pub async fn refresh_from_db(&self) {
         let Some(_) = &self.pg else { return };
-        // load_normalized replaces the whole Store from DB rows.
         self.load_normalized().await;
     }
 
-    /// Persist owned tables to Postgres (no-op without DB).
-    ///
-    /// Modularity: each owned table is written per-row (upsert +
-    /// delete-missing) inside one transaction serialized across replicas
-    /// of the same service by `pg_advisory_xact_lock(owner.lock_key())`.
-    /// A service only writes tables it owns, so parallel services never
-    /// clobber each other's rows. Reads (load) are shared by all.
-    /// The legacy JSONB snapshot is written only by `ServiceKind::All`.
-    ///
-    /// Order matters for the FK graph: upserts run parents-first
-    /// (users → friendships → shares → locations → check-ins →
-    /// emergencies), deletes run children-first. Unlike the old
-    /// wipe-rewrite, a row written by another replica between ticks is
-    /// preserved unless this snapshot legitimately removed it.
     pub async fn persist(&self) {
         let Some(pool) = &self.pg else { return };
         let mut tx = match pool.begin().await {
             Ok(tx) => tx,
             Err(_) => return,
         };
-        // Replicas of the same service serialize their tick; different
-        // services (different keys) proceed concurrently.
         let _ = sqlx::query("SELECT pg_advisory_xact_lock($1)")
             .bind(self.owner.lock_key())
             .execute(&mut *tx)
             .await;
-        // Snapshot AFTER the lock: a snapshot taken before the lock could
-        // delete rows another replica committed between our snapshot and
-        // our delete-missing (the scale-2 share loss). Taking it here
-        // (still without holding the Mutex across I/O) makes the delete
-        // set fresh relative to the serialized writer.
         let store = self.store.lock().unwrap().snapshot();
-        // Rollback snapshot (combined binary only).
         if self.owner.owns_snapshot() {
             let data = serde_json::to_value(&store).unwrap_or_default();
             let _ = sqlx::query(
@@ -227,12 +181,9 @@ impl AppState {
             .execute(&mut *tx)
             .await;
         }
-        // Domain persists, parents-first (users → friendships → locations).
         self.persist_users(&mut tx, &store).await;
         self.persist_friendships(&mut tx, &store).await;
         self.persist_locations_domain(&mut tx, &store).await;
-        // Counter columns are owned by the same services as their tables;
-        // update only owned columns so writers don't overwrite each other.
         if self.owner.owns_users() {
             let _ = sqlx::query("UPDATE pinpoint_counters SET next_user_id=$1 WHERE id=1")
                 .bind(store.next_user_id)
@@ -269,25 +220,20 @@ mod tests {
 
     #[test]
     fn ownership_matrix_is_exclusive() {
-        // Auth owns users only.
         assert!(ServiceKind::Auth.owns_users());
         assert!(!ServiceKind::Auth.owns_friendships());
         assert!(!ServiceKind::Auth.owns_shares());
-        // Users owns friendships only (user rows go via direct SQL).
         assert!(ServiceKind::Users.owns_friendships());
         assert!(!ServiceKind::Users.owns_users());
         assert!(!ServiceKind::Users.owns_locations());
-        // Locations owns its four tables only.
         assert!(ServiceKind::Locations.owns_shares());
         assert!(ServiceKind::Locations.owns_locations());
         assert!(ServiceKind::Locations.owns_checkins());
         assert!(ServiceKind::Locations.owns_emergencies());
         assert!(!ServiceKind::Locations.owns_users());
-        // Map owns nothing.
         assert!(!ServiceKind::MapOnly.owns_users());
         assert!(!ServiceKind::MapOnly.owns_friendships());
         assert!(!ServiceKind::MapOnly.owns_locations());
-        // Combined binary owns everything + the rollback snapshot.
         assert!(ServiceKind::All.owns_users());
         assert!(ServiceKind::All.owns_snapshot());
         assert!(!ServiceKind::Auth.owns_snapshot());

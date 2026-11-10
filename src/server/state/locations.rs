@@ -178,7 +178,7 @@ impl AppState {
         }
         // No delete-missing: deletions go through sql_delete_* (explicit)
         // so a stale snapshot can never erase a row another replica just
-        // committed — keeps scale-2 deterministic.
+        // committed.
     }
 
     pub async fn sql_delete_share(&self, id: i64) {

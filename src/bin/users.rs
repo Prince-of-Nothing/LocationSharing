@@ -1,6 +1,6 @@
 //! Users + friendships service binary (pure Rust).
 //! Run: `cargo run --bin pinpoint-users` (BIND_ADDR default 0.0.0.0:8002).
-use pinpoint_desktop::server::{users_router, AppState, ServiceKind};
+use pinpoint_desktop::server::{converge, users_router, AppState, ServiceKind};
 use std::time::Duration;
 
 #[tokio::main]
@@ -12,14 +12,16 @@ async fn main() -> anyhow::Result<()> {
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(Duration::from_secs(5)).await;
-            // Converge first, then persist: the snapshot must already
-            // contain other services' direct writes before we upsert.
             persist_state.refresh_from_db().await;
             persist_state.persist().await;
         }
     });
     println!("pinpoint-users listening on http://{addr}/");
     let listener = tokio::net::TcpListener::bind(&addr).await?;
-    axum::serve(listener, users_router().with_state(state)).await?;
+    let app_state = state.clone();
+    let app = users_router()
+        .with_state(state)
+        .layer(axum::middleware::from_fn_with_state(app_state, converge));
+    axum::serve(listener, app).await?;
     Ok(())
 }

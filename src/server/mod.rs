@@ -30,6 +30,7 @@ pub use state::{AppState, ServiceKind, Store};
 pub use crate::models::{FriendLocation, Friendship, LocationShare, User};
 
 use axum::{
+    extract::State,
     middleware::Next,
     routing::{delete, get, patch, post},
     Json, Router,
@@ -46,37 +47,36 @@ use serde_json::json;
 /// calls early-return), so the suite stays green.
 /// State is read from request extensions (not a `State` extractor) so this
 /// layer composes on `Router<AppState>` before `with_state`.
-async fn converge(
+pub async fn converge(
+    State(state): State<AppState>,
     req: axum::http::Request<axum::body::Body>,
     next: Next,
 ) -> axum::response::Response {
-    let Some(state) = req.extensions().get::<AppState>().cloned() else {
-        return next.run(req).await;
-    };
     let method = req.method().clone();
+    eprintln!("CONVERGE run {} {}", method, req.uri());
     state.refresh_from_db().await;
     let res = next.run(req).await;
     if method != axum::http::Method::GET {
         state.persist().await;
+        eprintln!("CONVERGE persisted");
     }
     res
 }
 
 /// Build the full Axum router with all `/api/v1` routes + health.
 pub fn router(state: AppState) -> Router {
+    let app_state = state.clone();
     auth_router()
         .merge(users_router())
         .merge(locations_router())
         .merge(map_router())
         .route("/health", get(handlers::health))
-        .layer(axum::middleware::from_fn(converge))
         .with_state(state)
+        .layer(axum::middleware::from_fn_with_state(app_state, converge))
 }
 
 /// Auth service routes (`/api/v1/auth/*`). Independently scalable.
 /// Stateless: the app state is supplied once by the binary's `with_state`.
-// NOTE: `.layer()` must be applied *after* all routes, otherwise Axum
-// does not wrap routes added later.
 pub fn auth_router() -> Router<AppState> {
     Router::new()
         .route("/health", get(handlers::health))
@@ -97,7 +97,6 @@ pub fn auth_router() -> Router<AppState> {
         .route("/api/v1/auth/mfa/verify", post(auth_handlers::mfa_verify))
         .route("/api/v1/auth/mfa/status", get(auth_handlers::mfa_status))
         .route("/api/v1/auth/mfa", delete(auth_handlers::mfa_disable))
-        .layer(axum::middleware::from_fn(converge))
 }
 
 /// Users + friendships service routes. Independently scalable.
@@ -128,7 +127,6 @@ pub fn users_router() -> Router<AppState> {
             "/api/v1/friendships/:id",
             delete(users_handlers::delete_friendship),
         )
-        .layer(axum::middleware::from_fn(converge))
 }
 
 /// Locations + shares service routes. Independently scalable.
@@ -167,7 +165,6 @@ pub fn locations_router() -> Router<AppState> {
             "/api/v1/locations/emergency/:id",
             patch(locations_handlers::resolve_emergency),
         )
-        .layer(axum::middleware::from_fn(converge))
 }
 
 /// Map service routes (`/map/*`): tile proxy + attribution + health.
