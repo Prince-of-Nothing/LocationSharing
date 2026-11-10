@@ -16,6 +16,8 @@
 //! - Never leak secrets/tokens in error messages or logs.
 //! - Server-side enforcement only; clients are untrusted.
 
+pub mod failover;
+pub mod health;
 pub mod rest;
 
 use crate::models::{CheckIn, EmergencyAlert, FriendLocation, Friendship, LocationShare, User};
@@ -145,6 +147,10 @@ pub enum BackendKind {
     /// Browser-adapted REST variant (fetch credentials/CORS semantics handled by
     /// adapter; endpoint/auth mapping may differ from native cookie handling).
     BrowserRestV1,
+    /// Failover across multiple REST v1 URLs with circuit breakers, health
+    /// monitoring, and exponential backoff retry. `base_url` is the primary;
+    /// additional URLs come from `options["failover_urls"]` (comma-separated).
+    FailoverV1,
     // Future: RestV2, GraphQL, GrpcWebBridge, Mock, etc.
 }
 
@@ -213,6 +219,21 @@ impl BackendConfig {
         }
     }
 
+    /// Failover config: primary URL plus comma-separated replica URLs in
+    /// `PINPOINT_FAILOVER_URLS` (or passed via `options["failover_urls"]`).
+    pub fn failover_v1(base_url: impl Into<String>, failover_urls: Vec<String>) -> Self {
+        let mut options = std::collections::BTreeMap::new();
+        if !failover_urls.is_empty() {
+            options.insert("failover_urls".to_string(), failover_urls.join(","));
+        }
+        Self {
+            kind: BackendKind::FailoverV1,
+            base_url: base_url.into(),
+            timeout_secs: None,
+            options,
+        }
+    }
+
     /// Builder-style option setter (non-secret options only).
     pub fn with_option(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.options.insert(key.into(), value.into());
@@ -221,24 +242,57 @@ impl BackendConfig {
 
     pub fn capabilities(&self) -> BackendCapabilities {
         match self.kind {
-            BackendKind::RestV1 | BackendKind::BrowserRestV1 => BackendCapabilities::rest_v1(),
+            BackendKind::RestV1 | BackendKind::BrowserRestV1 | BackendKind::FailoverV1 => {
+                BackendCapabilities::rest_v1()
+            }
         }
     }
 
     /// Resolve config from environment/platform defaults, preserving the
     /// existing resolution order: `PINPOINT_BACKEND` > platform default.
+    /// Reads `PINPOINT_FAILOVER_URLS` (comma-separated) for redundancy.
     pub fn from_env() -> Self {
-        Self::rest_v1(crate::platform::backend_url_from_env_or_default())
+        let base_url = crate::platform::backend_url_from_env_or_default();
+        let failover_urls: Vec<String> = std::env::var("PINPOINT_FAILOVER_URLS")
+            .ok()
+            .map(|v| {
+                v.split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect()
+            })
+            .unwrap_or_default();
+        if !failover_urls.is_empty() {
+            Self::failover_v1(base_url, failover_urls)
+        } else {
+            Self::rest_v1(base_url)
+        }
     }
 }
 
 /// Build a backend from config. This is the single extension point for changed
 /// backend architectures.
 pub fn build_backend(config: &BackendConfig) -> anyhow::Result<DynBackend> {
+    use crate::backend::failover::FailoverBackend;
     match config.kind {
         BackendKind::RestV1 | BackendKind::BrowserRestV1 => rest::build_rest_backend(config),
-        // Note: BrowserRestV1 currently shares the REST adapter; a dedicated
-        // browser fetch/credential adapter can be added here without changing callers.
+        BackendKind::FailoverV1 => {
+            let primary = config.base_url.clone();
+            let mut urls = vec![primary.clone()];
+            if let Some(extra) = config.options.get("failover_urls") {
+                for u in extra.split(',') {
+                    let u = u.trim();
+                    if !u.is_empty() && u != primary {
+                        urls.push(u.to_string());
+                    }
+                }
+            }
+            let fb = FailoverBackend::new(urls)?
+                .with_max_retries(3)
+                .with_base_backoff_ms(500);
+            Ok(Arc::new(fb) as DynBackend)
+        } // Note: BrowserRestV1 currently shares the REST adapter; a dedicated
+          // browser fetch/credential adapter can be added here without changing callers.
     }
 }
 

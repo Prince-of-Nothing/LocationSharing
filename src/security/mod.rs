@@ -9,6 +9,7 @@
 //! - Request signing (signing.rs)
 
 pub mod audit;
+pub mod circuit_breaker;
 pub mod encryption;
 pub mod mfa;
 pub mod oauth;

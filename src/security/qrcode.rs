@@ -116,8 +116,11 @@ pub fn qr_matrix(data: &str) -> Option<Vec<Vec<bool>>> {
     for (r0, c0) in [(0usize, 0usize), (0usize, n - 7), (n - 7, 0usize)] {
         for r in 0..7usize {
             for c in 0..7usize {
-                let dark =
-                    r == 0 || r == 6 || c == 0 || c == 6 || (2..=4).contains(&r) && (2..=4).contains(&c);
+                let dark = r == 0
+                    || r == 6
+                    || c == 0
+                    || c == 6
+                    || (2..=4).contains(&r) && (2..=4).contains(&c);
                 matrix[r0 + r][c0 + c] = dark;
                 reserved[r0 + r][c0 + c] = true;
             }
