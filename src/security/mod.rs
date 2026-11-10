@@ -13,6 +13,7 @@ pub mod encryption;
 pub mod mfa;
 pub mod oauth;
 pub mod password;
+pub mod qrcode;
 pub mod rate_limit;
 pub mod scrape;
 pub mod session;
