@@ -7,22 +7,25 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   rust:
     # Rust multiplatform client (root crate): format, lints, locked build,
     # unit + API-contract tests, and a dependency audit.
-    # The archived Go/Python/web/Kotlin stacks no longer build (ADR-0007);
-    # this is the sole application gate.
+    # Includes desktop/mobile-shared core and web app bins (web/weba/webk stubs).
     runs-on: ubuntu-latest
-    # rustsec/audit-check publishes its findings as a check-run via the
-    # Checks API; the workflow-wide `contents: read` default leaves the
-    # token without `checks: write`, which makes the action fail with
-    # "Resource not accessible by integration" before it can report.
     permissions:
       contents: read
       checks: write
     steps:
       - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
       - name: Install system dependencies (egui/winit link, reqwest TLS)
         run: |
           sudo apt-get update
@@ -44,6 +47,8 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
       - name: Build (locked)
         run: cargo build --locked
+      - name: Build web app bins (native stubs)
+        run: cargo build --locked --bin pinpoint-web --bin pinpoint-weba --bin pinpoint-webk
       - name: Tests (locked) — unit + API contract
         run: cargo test --locked
       - name: Dependency vulnerability audit (cargo-audit)
@@ -51,15 +56,47 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
+  wasm:
+    # Compile-check web clients for wasm32 (Trunk entry bins + wasm cfg paths).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Cache cargo registry and build output
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-wasm-${{ hashFiles('**/Cargo.lock') }}
+      - name: Check web bins for wasm32
+        run: |
+          cargo check --locked --target wasm32-unknown-unknown \
+            --bin pinpoint-web --bin pinpoint-weba --bin pinpoint-webk
+
   client-macos:
-    # macBook desktop build — same `src/` as Linux/Windows via eframe.
-    # No X11 deps needed (macOS window server owns them); GUI run still
-    # needs a human first-run (see docs/client-platforms.md).
+    # macOS desktop build — same `src/` as Linux/Windows via eframe.
     runs-on: macos-latest
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Cache cargo registry and build output
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Format check
         run: cargo fmt --all -- --check
       - name: Clippy (deny warnings)
@@ -68,36 +105,45 @@ jobs:
         run: cargo build --locked
       - name: Tests (locked) — unit + API contract
         run: cargo test --locked
-      - name: Web stub builds on macOS
-        run: cargo build --locked --bin pinpoint-web
+      - name: Build web app bins (native stubs)
+        run: cargo build --locked --bin pinpoint-web --bin pinpoint-weba --bin pinpoint-webk
       - name: Upload macOS binary artifact
         uses: actions/upload-artifact@v4
         with:
           name: pinpoint-desktop-macos
           path: target/release/pinpoint-desktop
+          if-no-files-found: warn
 
-  release:
+  release-windows:
+    if: github.event_name == 'push'
     runs-on: windows-latest
     permissions:
       contents: read
       actions: write
     steps:
       - uses: actions/checkout@v4
-      - name: Install Rust stable
-        uses: actions-rs/toolchain@v1
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo registry and build output
+        uses: actions/cache@v4
         with:
-          toolchain: stable
-          override: true
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
       - name: Build release binary
-        run: cargo build --release --locked
+        run: cargo build --release --locked --bin pinpoint-desktop
       - name: Package artifact
         shell: pwsh
         run: |
-          $zipPath = "pinpoint-desktop.zip"
-          $exePath = "target\x86_64-pc-windows-msvc/release/pinpoint-desktop.exe"
+          $zipPath = "pinpoint-desktop-windows.zip"
+          $exePath = "target/release/pinpoint-desktop.exe"
+          if (-not (Test-Path $exePath)) { throw "Missing binary: $exePath" }
           Compress-Archive -Path $exePath -DestinationPath $zipPath -Force
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pinpoint-desktop
-          path: pinpoint-desktop.zip
+          name: pinpoint-desktop-windows
+          path: pinpoint-desktop-windows.zip
+          if-no-files-found: error

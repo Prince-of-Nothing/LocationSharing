@@ -4,12 +4,7 @@
 //! isolated in `webapp::kiosk` + adapter routes so backend architecture changes
 //! do not require UI rewrites.
 
-use pinpoint_desktop::webapp::{
-    config::WebAppConfig,
-    kiosk::{KioskApp, KioskRestRoutes},
-    kiosk_rest::RestKioskAdapter,
-    WebAppKind,
-};
+use pinpoint_desktop::webapp::{config::WebAppConfig, kiosk::KioskApp, WebAppKind};
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() {
@@ -31,6 +26,8 @@ fn main() {
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::JsCast;
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen(start)]
@@ -56,7 +53,10 @@ fn wire_dom(mut app: KioskApp) -> Result<(), JsValue> {
     // Bootstrap info.
     set_input_value(&document, "token", &app.state.token_input);
     set_text("backend", &app.config.backend.base_url);
-    set_text("status", "Ready. Enter a token to resolve (modular kiosk adapter).");
+    set_text(
+        "status",
+        "Ready. Enter a token to resolve (modular kiosk adapter).",
+    );
     set_text("app-info", &app.snapshot_json());
 
     // Open/resolve button.
@@ -131,9 +131,15 @@ fn wire_dom(mut app: KioskApp) -> Result<(), JsValue> {
 fn render_resolved(app: &KioskApp) {
     if let Some(v) = &app.state.resolved {
         let mut msg = format!("Resolved token. consent_required={}", v.consent_required);
-        if let Some(label) = &v.label { msg.push_str(&format!(" label={label}")); }
-        if let Some(exp) = &v.expires_at { msg.push_str(&format!(" expires={exp}")); }
-        if v.location.is_some() { msg.push_str(" location=available"); }
+        if let Some(label) = &v.label {
+            msg.push_str(&format!(" label={label}"));
+        }
+        if let Some(exp) = &v.expires_at {
+            msg.push_str(&format!(" expires={exp}"));
+        }
+        if v.location.is_some() {
+            msg.push_str(" location=available");
+        }
         set_text("status", &msg);
         if let Some(loc) = &v.location {
             set_text(
@@ -158,14 +164,20 @@ fn query_param(key: &str) -> Option<String> {
 
 #[cfg(target_arch = "wasm32")]
 fn set_text(id: &str, text: &str) {
-    if let Some(el) = web_sys::window().and_then(|w| w.document()).and_then(|d| d.get_element_by_id(id)) {
+    if let Some(el) = web_sys::window()
+        .and_then(|w| w.document())
+        .and_then(|d| d.get_element_by_id(id))
+    {
         el.set_text_content(Some(text));
     }
 }
 
 #[cfg(target_arch = "wasm32")]
 fn set_input_value(doc: &web_sys::Document, id: &str, value: &str) {
-    if let Some(input) = doc.get_element_by_id(id).and_then(|e| e.dyn_into::<web_sys::HtmlInputElement>().ok()) {
+    if let Some(input) = doc
+        .get_element_by_id(id)
+        .and_then(|e| e.dyn_into::<web_sys::HtmlInputElement>().ok())
+    {
         input.set_value(value);
     }
 }

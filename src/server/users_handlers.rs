@@ -333,13 +333,16 @@ pub async fn delete_friendship(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> impl IntoResponse {
-    let mut store = state.store.lock().unwrap();
-    let pos = match store.friendships.iter().position(|f| f.id == id) {
-        Some(p) => p,
-        None => return error_envelope("FRIENDSHIP_NOT_FOUND", "Friendship not found."),
-    };
-    store.friendships.remove(pos);
-    store.shares.retain(|s| s.friendship_id != id);
+    {
+        let mut store = state.store.lock().unwrap();
+        let pos = match store.friendships.iter().position(|f| f.id == id) {
+            Some(p) => p,
+            None => return error_envelope("FRIENDSHIP_NOT_FOUND", "Friendship not found."),
+        };
+        store.friendships.remove(pos);
+        store.shares.retain(|s| s.friendship_id != id);
+    }
+    state.sql_delete_friendship(id).await;
     (
         StatusCode::OK,
         Json(json!({"message": "Friendship removed."})),

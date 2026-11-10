@@ -86,10 +86,13 @@ pub fn is_admin(user: Option<&User>) -> bool {
 pub async fn load_users(backend: &DynBackend, state: &mut AdminState) -> anyhow::Result<()> {
     state.loading = true;
     state.clear_messages();
-    let res = if state.query.trim().is_empty() {
+    let query =
+        crate::webapp::validation::validate_query(&state.query).map_err(|e| anyhow::anyhow!(e))?;
+    state.query = query.clone();
+    let res = if query.is_empty() {
         backend.list_users().await
     } else {
-        backend.search_users(state.query.trim()).await
+        backend.search_users(query.trim()).await
     };
     state.loading = false;
     match res {

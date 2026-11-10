@@ -149,7 +149,7 @@ impl KioskApp {
         if t.is_empty() {
             return Err("Enter a share token or check-in code.".into());
         }
-        if t.len() > 512 {
+        if t.len() > crate::webapp::validation::MAX_TOKEN_LEN {
             return Err("Token is too long.".into());
         }
         if t.chars().any(|c| c.is_control()) {
@@ -188,6 +188,7 @@ impl KioskApp {
             })
             .ok_or_else(|| "No token available for check-in.".to_string())?;
         Self::validate_token(&token)?;
+        let note = crate::webapp::validation::validate_note(note.as_deref())?;
         if let Some(v) = &self.state.resolved {
             if v.consent_required && !self.state.consent_accepted {
                 return Err("Consent is required before check-in.".into());
@@ -196,7 +197,7 @@ impl KioskApp {
         self.state.loading = true;
         Ok(KioskCheckInRequest {
             token,
-            note: note.filter(|n| !n.trim().is_empty()),
+            note,
             latitude: None,
             longitude: None,
         })

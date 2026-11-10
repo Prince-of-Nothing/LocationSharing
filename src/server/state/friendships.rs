@@ -51,10 +51,16 @@ impl AppState {
                 .bind(f.id).bind(f.requester_id).bind(f.receiver_id).bind(&f.requester_name).bind(&f.receiver_name).bind(&f.status).bind(&f.created_at).bind(&f.responded_at)
                 .execute(&mut **tx).await;
         }
-        let ids: Vec<i64> = store.friendships.iter().map(|f| f.id).collect();
-        let _ = sqlx::query("DELETE FROM pinpoint_friendships WHERE id <> ALL($1::bigint[])")
-            .bind(&ids)
-            .execute(&mut **tx)
+        // No delete-missing: deletions go through sql_delete_friendship()
+        // (explicit) so a stale snapshot can never erase a row another
+        // replica just committed.
+    }
+
+    pub async fn sql_delete_friendship(&self, id: i64) {
+        let Some(pool) = &self.pg else { return };
+        let _ = sqlx::query("DELETE FROM pinpoint_friendships WHERE id=$1")
+            .bind(id)
+            .execute(pool)
             .await;
     }
 }

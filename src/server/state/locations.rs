@@ -176,35 +176,32 @@ impl AppState {
                     .execute(&mut **tx).await;
             }
         }
-        // Deletes: children-first.
-        if self.owner.owns_emergencies() {
-            let ids: Vec<i64> = store.emergencies.iter().map(|e| e.id).collect();
-            let _ = sqlx::query("DELETE FROM pinpoint_emergencies WHERE id <> ALL($1::bigint[])")
-                .bind(&ids)
-                .execute(&mut **tx)
-                .await;
-        }
-        if self.owner.owns_checkins() {
-            let ids: Vec<i64> = store.check_ins.iter().map(|c| c.id).collect();
-            let _ = sqlx::query("DELETE FROM pinpoint_checkins WHERE id <> ALL($1::bigint[])")
-                .bind(&ids)
-                .execute(&mut **tx)
-                .await;
-        }
-        if self.owner.owns_locations() {
-            let ids: Vec<i64> = store.locations.iter().map(|l| l.user_id).collect();
-            let _ =
-                sqlx::query("DELETE FROM pinpoint_locations WHERE user_id <> ALL($1::bigint[])")
-                    .bind(&ids)
-                    .execute(&mut **tx)
-                    .await;
-        }
-        if self.owner.owns_shares() {
-            let ids: Vec<i64> = store.shares.iter().map(|s| s.id).collect();
-            let _ = sqlx::query("DELETE FROM pinpoint_shares WHERE id <> ALL($1::bigint[])")
-                .bind(&ids)
-                .execute(&mut **tx)
-                .await;
-        }
+        // No delete-missing: deletions go through sql_delete_* (explicit)
+        // so a stale snapshot can never erase a row another replica just
+        // committed — keeps scale-2 deterministic.
+    }
+
+    pub async fn sql_delete_share(&self, id: i64) {
+        let Some(pool) = &self.pg else { return };
+        let _ = sqlx::query("DELETE FROM pinpoint_shares WHERE id=$1")
+            .bind(id)
+            .execute(pool)
+            .await;
+    }
+
+    pub async fn sql_delete_check_in(&self, id: i64) {
+        let Some(pool) = &self.pg else { return };
+        let _ = sqlx::query("DELETE FROM pinpoint_checkins WHERE id=$1")
+            .bind(id)
+            .execute(pool)
+            .await;
+    }
+
+    pub async fn sql_delete_emergency(&self, id: i64) {
+        let Some(pool) = &self.pg else { return };
+        let _ = sqlx::query("DELETE FROM pinpoint_emergencies WHERE id=$1")
+            .bind(id)
+            .execute(pool)
+            .await;
     }
 }

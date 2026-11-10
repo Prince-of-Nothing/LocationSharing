@@ -43,13 +43,18 @@
       </div>
     </div>
     <div class="card">
+      <h3 style="margin-top:0">Admin panel</h3>
+      <div id="admin-panel" class="muted">Sign in to load admin actions (user list/search/management via modular backend).</div>
+    </div>
+    <div class="card">
       <h3 style="margin-top:0">Backend config</h3>
       <p>Backend URL: <code id="backend">(host-configured)</code>. Resolution follows app config/env; production must use HTTPS (ADR-0006).</p>
+      <details><summary class="muted">App snapshot (debug)</summary><pre id="app-info" style="white-space:pre-wrap"></pre></details>
       <p class="muted">Build: <code>trunk serve --config web/weba/Trunk.toml</code></p>
     </div>
   </main>
   <script type="module">
-    document.getElementById('status').textContent = 'Ready for backend adapter wiring (Rust/WASM).';
+    // Trunk loads and starts the Rust/WASM module; it wires DOM handlers.
   </script>
 </body>
 </html>

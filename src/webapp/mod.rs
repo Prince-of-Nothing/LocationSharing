@@ -11,9 +11,11 @@
 //! web shells can consume.
 
 pub mod admin;
+pub mod commands;
 pub mod config;
 pub mod kiosk;
 pub mod kiosk_rest;
+pub mod validation;
 pub mod view_model;
 pub mod web;
 

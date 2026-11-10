@@ -4,22 +4,28 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Pinpoint — Map First</title>
-  <link data-trunk rel="copy-config" href="Trunk.toml"/>
+  <link data-trunk rel="rust" data-bin="pinpoint-web" data-target-name="pinpoint_web"/>
   <style>
-    body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 720px; padding: 0 1rem; }
-    code { background: #f1f5f9; padding: .1rem .3rem; border-radius: .25rem; }
-    #pinpoint-web { border: 1px solid #cbd5e1; border-radius: .5rem; padding: 1rem; min-height: 240px; }
+    body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 760px; padding: 0 1rem; background:#0b1020; color:#e5e7eb; }
+    code, pre { background: #111827; border:1px solid #1f2937; padding: .1rem .3rem; border-radius: .25rem; }
+    .card { border: 1px solid #1f2937; background:#0f172a; border-radius: .75rem; padding: 1rem; margin:.75rem 0; }
+    .muted { color:#9ca3af; }
   </style>
 </head>
 <body>
   <h1>Pinpoint — Map First</h1>
   <p>Privacy-first location sharing for trusted friends. Map data © OpenStreetMap contributors (ODbL).</p>
-  <div id="pinpoint-web">Loading Pinpoint (Rust/WASM)…</div>
-  <p>Backend: <code id="backend">(see PINPOINT_BACKEND)</code> · Build: <code>trunk build --release</code></p>
-  <p>Desktop: <code>cargo run -- --backend http://localhost:8000</code> · Android: <code>cargo apk build</code> · iOS: <code>cargo xcodebuild</code></p>
+  <div class="card">
+    <div id="pinpoint-web"><strong id="status">Loading Pinpoint (Rust/WASM)…</strong></div>
+    <p class="muted" style="margin-bottom:0">Modular clients: <a href="/admin/">weba (admin)</a> · <a href="/kiosk/">webk (kiosk)</a></p>
+  </div>
+  <div class="card">
+    <p>Backend: <code id="backend">(host-configured)</code></p>
+    <details><summary class="muted">App snapshot (debug)</summary><pre id="app-info" style="white-space:pre-wrap"></pre></details>
+  </div>
+  <p class="muted">Desktop: <code>cargo run -- --backend http://localhost:8000</code> · Android: <code>cargo apk build</code> · iOS: <code>cargo xcodebuild</code></p>
   <script type="module">
-    const el = document.getElementById('pinpoint-web');
-    el.textContent = 'Pinpoint web shell (Rust/WASM). Serve this file via `trunk serve` (see web/README.md).';
+    // Rust/WASM start hook populates status/backend/app-info when Trunk loads the module.
   </script>
 </body>
 </html>

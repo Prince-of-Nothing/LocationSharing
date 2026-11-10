@@ -23,14 +23,21 @@ fn main() {
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::JsCast;
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen(start)]
 pub fn start() {
-    std::panic::set_hook(Box::new(|info| set_text("status", &format!("panic: {info}"))));
+    std::panic::set_hook(Box::new(|info| {
+        set_text("status", &format!("panic: {info}"))
+    }));
     let cfg = WebAppConfig::new(WebAppKind::Admin);
     set_text("backend", &cfg.backend.base_url);
-    set_text("status", "Ready. Sign in with an admin account (server-enforced).");
+    set_text(
+        "status",
+        "Ready. Sign in with an admin account (server-enforced).",
+    );
     let app = pinpoint_desktop::webapp::admin::AdminApp::new(cfg);
     set_text("app-info", &app.snapshot_json());
     if let Err(e) = wire_dom() {
@@ -63,7 +70,7 @@ fn wire_dom() -> Result<(), JsValue> {
                 "admin-panel",
                 &format!(
                     "<p class='muted'>Prepared admin login for <code>{}</code>. Adapter wiring pending for browser credential flow.</p>",
-                    escape_html(email.trim())
+                    pinpoint_desktop::webapp::validation::escape_html(email.trim())
                 ),
             );
         });
@@ -85,21 +92,22 @@ fn get_input_value(id: &str) -> Option<String> {
 
 #[cfg(target_arch = "wasm32")]
 fn set_text(id: &str, text: &str) {
-    if let Some(el) = web_sys::window().and_then(|w| w.document()).and_then(|d| d.get_element_by_id(id)) {
+    if let Some(el) = web_sys::window()
+        .and_then(|w| w.document())
+        .and_then(|d| d.get_element_by_id(id))
+    {
         el.set_text_content(Some(text));
     }
 }
 
 #[cfg(target_arch = "wasm32")]
 fn set_html(id: &str, html: &str) {
-    if let Some(el) = web_sys::window().and_then(|w| w.document()).and_then(|d| d.get_element_by_id(id)) {
+    if let Some(el) = web_sys::window()
+        .and_then(|w| w.document())
+        .and_then(|d| d.get_element_by_id(id))
+    {
         el.set_inner_html(html);
     }
-}
-
-#[cfg(target_arch = "wasm32")]
-fn escape_html(s: &str) -> String {
-    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
 }
 
 #[cfg(target_arch = "wasm32")]

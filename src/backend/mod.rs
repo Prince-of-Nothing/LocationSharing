@@ -142,7 +142,41 @@ pub trait Backend: BackendBounds {
 pub enum BackendKind {
     /// Current REST contract (`/api/v1/*`, session cookie + CSRF double-submit).
     RestV1,
+    /// Browser-adapted REST variant (fetch credentials/CORS semantics handled by
+    /// adapter; endpoint/auth mapping may differ from native cookie handling).
+    BrowserRestV1,
     // Future: RestV2, GraphQL, GrpcWebBridge, Mock, etc.
+}
+
+/// Declares capabilities a backend/adapter may support. Useful for
+/// feature-detection when backend architecture varies across deployments.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct BackendCapabilities {
+    pub session_auth: bool,
+    pub mfa: bool,
+    pub friendships: bool,
+    pub location_shares: bool,
+    pub live_locations: bool,
+    pub admin_users: bool,
+    pub kiosk_share_links: bool,
+    pub check_ins: bool,
+    pub emergency: bool,
+}
+
+impl BackendCapabilities {
+    pub fn rest_v1() -> Self {
+        Self {
+            session_auth: true,
+            mfa: true,
+            friendships: true,
+            location_shares: true,
+            live_locations: true,
+            admin_users: true,
+            kiosk_share_links: false,
+            check_ins: true,
+            emergency: true,
+        }
+    }
 }
 
 /// Configuration for constructing a backend client.
@@ -170,6 +204,27 @@ impl BackendConfig {
         }
     }
 
+    pub fn browser_rest_v1(base_url: impl Into<String>) -> Self {
+        Self {
+            kind: BackendKind::BrowserRestV1,
+            base_url: base_url.into(),
+            timeout_secs: None,
+            options: std::collections::BTreeMap::new(),
+        }
+    }
+
+    /// Builder-style option setter (non-secret options only).
+    pub fn with_option(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.options.insert(key.into(), value.into());
+        self
+    }
+
+    pub fn capabilities(&self) -> BackendCapabilities {
+        match self.kind {
+            BackendKind::RestV1 | BackendKind::BrowserRestV1 => BackendCapabilities::rest_v1(),
+        }
+    }
+
     /// Resolve config from environment/platform defaults, preserving the
     /// existing resolution order: `PINPOINT_BACKEND` > platform default.
     pub fn from_env() -> Self {
@@ -181,7 +236,9 @@ impl BackendConfig {
 /// backend architectures.
 pub fn build_backend(config: &BackendConfig) -> anyhow::Result<DynBackend> {
     match config.kind {
-        BackendKind::RestV1 => rest::build_rest_backend(config),
+        BackendKind::RestV1 | BackendKind::BrowserRestV1 => rest::build_rest_backend(config),
+        // Note: BrowserRestV1 currently shares the REST adapter; a dedicated
+        // browser fetch/credential adapter can be added here without changing callers.
     }
 }
 

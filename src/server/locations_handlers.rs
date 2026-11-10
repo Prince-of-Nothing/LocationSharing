@@ -135,12 +135,15 @@ pub async fn update_share(
 
 /// `DELETE /locations/shares/{id}` — revoke a share permanently.
 pub async fn delete_share(State(state): State<AppState>, Path(id): Path<i64>) -> impl IntoResponse {
-    let mut store = state.store.lock().unwrap();
-    let pos = match store.shares.iter().position(|s| s.id == id) {
-        Some(p) => p,
-        None => return error_envelope("SHARE_NOT_FOUND", "Share not found."),
-    };
-    store.shares.remove(pos);
+    {
+        let mut store = state.store.lock().unwrap();
+        let pos = match store.shares.iter().position(|s| s.id == id) {
+            Some(p) => p,
+            None => return error_envelope("SHARE_NOT_FOUND", "Share not found."),
+        };
+        store.shares.remove(pos);
+    }
+    state.sql_delete_share(id).await;
     (StatusCode::OK, Json(json!({"message": "Share deleted."}))).into_response()
 }
 
@@ -339,12 +342,15 @@ pub async fn delete_check_in(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> impl IntoResponse {
-    let mut store = state.store.lock().unwrap();
-    let pos = match store.check_ins.iter().position(|c| c.id == id) {
-        Some(p) => p,
-        None => return error_envelope("CHECK_IN_NOT_FOUND", "Check-in not found."),
-    };
-    store.check_ins.remove(pos);
+    {
+        let mut store = state.store.lock().unwrap();
+        let pos = match store.check_ins.iter().position(|c| c.id == id) {
+            Some(p) => p,
+            None => return error_envelope("CHECK_IN_NOT_FOUND", "Check-in not found."),
+        };
+        store.check_ins.remove(pos);
+    }
+    state.sql_delete_check_in(id).await;
     (
         StatusCode::OK,
         Json(json!({"message": "Check-in deleted."})),
