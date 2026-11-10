@@ -62,6 +62,28 @@ Co-authored-by: Tcacenco Nichita <nichita.tcacenco@isa.utm.md>
 
 Exclude bots: `qwen.ai[bot]`, copilot, dependabot.
 
+## Module map (AI-friendly)
+
+Pinpoint is one Rust crate (`pinpoint-desktop`) serving desktop/Android/iOS/Web.
+All platform code lives in `src/platform.rs`; all OS branches are there.
+
+- `src/lib.rs` declares modules; `src/main.rs` is the desktop entry.
+- `src/api.rs` — HTTP client (session cookie + CSRF, URL policy ADR-0006).
+- `src/app.rs` — `PinpointApp` state, depends on `DynBackend` (not a concrete client).
+- `src/backend/` — `DynBackend` trait + REST adapter (swappable backend).
+- `src/ui.rs` + `src/ui/` — egui shell + 10 per-screen modules.
+- `src/osm.rs` — Nominatim/OSRM/Overpass; friend coords never sent.
+- `src/map.rs`, `src/tilepacks.rs`, `src/bookmarks.rs` — map pins, offline tiles, bookmarks.
+- `src/models.rs` — serde domain models + pure math.
+- `src/i18n.rs` — 79-language registry + `t()` + auto-detect.
+- `src/security/` — one mechanism per file (validation, rate_limit, encryption, audit, session, signing, mfa, password).
+- `src/patterns/` — Repository (InMemory + Postgres), Strategy, Command, State, Observer, Factory, Decorator, Proxy.
+- `src/server/` — Axum services: `mod.rs` (routers, /health, convergence middleware), `state/` (mod, store facade, users, friendships, locations), `*_handlers.rs`, `migrations.rs` (v1–v12).
+- `src/webapp/` — portable web clients (admin, kiosk, view-model).
+- `src/mobile/` — platform adapters (android, ios).
+- `src/bin/` — one binary per deployable.
+
+Additive seams (never rewrite): new table → migration + domain module; new screen → `src/ui/<name>.rs`; new service → router + binary + gateway; new language → `Lang` variant + block; new platform → `platform.rs` only.
 ## Docs conventions
 
 - Diagrams are Mermaid text, never binary images; keep the table in
