@@ -14,7 +14,7 @@ documented next step, not hidden.
 | ZAP active scan | **Pending.** Baseline passed (headers/CSP); active scan not run | Run + file results before public beta |
 | Linux/macOS GUI first-run | **Accepted.** CI builds pass (`rust` ubuntu, `client-macos`, windows `release`); GUI run needs a human on each OS | Manual tick-list in `docs/client-platforms.md` |
 | Android APK / WASM Web GUI | **Accepted as scaffolding.** Manifests + stub entries shipped; no CI build | NDK / wasm-toolchain CI jobs |
-| Tiles live 200s | **Accepted.** Proxy fails closed with guidance until `CARTO_API_KEY` | Free key from carto.com/basemaps |
+| Tiles live 200s | **Resolved.** Tile proxy now tries multiple ODbL-compliant sources in order (CARTO with key → Wikimedia → OpenFreeMap) instead of failing closed at 502. Map works without any external key. `X-Tile-Source` header reports which source served each tile | None (shipped) |
 
 Verifier: `docker compose up --build -d` → `docker compose ps`
 (all healthy, 2 replicas each) → migrations `1,2,3,4,5,6,7,8,9,10,11` (v10

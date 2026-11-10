@@ -67,6 +67,11 @@ Semantic Versioning. This is a pre-1.0 (thesis MVP) project.
   `sync_pending_mutations()` auto-replays queued mutations when connectivity
   returns; `pending_mutation_count()` / `pending_mutation_descriptions()`
   exposed for UI; offline mode auto-engaged on failure
+- Map tile redundancy: `src/server/mod.rs` `map_handlers::tile` now tries
+  multiple ODbL-compliant sources in order (CARTO with key → Wikimedia →
+  OpenFreeMap) instead of failing closed at 502 when CARTO_API_KEY is missing.
+  `X-Tile-Source` header reports which source served the tile. Attribution
+  endpoint lists all configured sources.
 
 ## [0.3.0] - 2026-10-13
 ### Added

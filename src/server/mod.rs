@@ -195,6 +195,36 @@ pub mod map_handlers {
     const TILE_TTL: Duration = Duration::from_secs(3600);
     const TILE_CACHE_MAX: usize = 1024;
 
+    /// Ordered list of tile sources tried in sequence on failure.
+    /// All are ODbL-compliant (OSM-derived). Never uses tile.openstreetmap.org.
+    const TILE_SOURCES: &[TileSource] = &[
+        TileSource {
+            name: "carto",
+            url_pattern: "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+            requires_api_key: true,
+            attribution: "© OpenStreetMap contributors",
+        },
+        TileSource {
+            name: "wikimedia",
+            url_pattern: "https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png",
+            requires_api_key: false,
+            attribution: "© OpenStreetMap contributors",
+        },
+        TileSource {
+            name: "openfreemap",
+            url_pattern: "https://tiles.openfreemap.org/styles/light/{z}/{x}/{y}",
+            requires_api_key: false,
+            attribution: "© OpenStreetMap contributors",
+        },
+    ];
+
+    struct TileSource {
+        name: &'static str,
+        url_pattern: &'static str,
+        requires_api_key: bool,
+        attribution: &'static str,
+    }
+
     fn tile_cache() -> &'static Mutex<TileCacheMap> {
         TILE_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
     }
@@ -211,7 +241,13 @@ pub mod map_handlers {
         Json(json!({
             "data": "© OpenStreetMap contributors",
             "license": "https://opendatacommons.org/licenses/odbl/1-0/",
-            "tiles": "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+            "tiles": TILE_SOURCES.iter().map(|s| json!({
+                "name": s.name,
+                "url_pattern": s.url_pattern,
+                "requires_api_key": s.requires_api_key,
+                "attribution": s.attribution,
+            })).collect::<Vec<_>>(),
+            "note": "Sources tried in order; first success wins. Never uses tile.openstreetmap.org.",
         }))
     }
 
@@ -243,14 +279,9 @@ pub mod map_handlers {
                 return (StatusCode::OK, headers, bytes.clone()).into_response();
             }
         }
-        // CARTO Basemaps now requires a (free) API key — see
-        // https://carto.com/basemaps/apikey. Read CARTO_API_KEY at request
-        // time so operators can inject it without rebuilding.
-        let key_param = match std::env::var("CARTO_API_KEY") {
-            Ok(k) if !k.trim().is_empty() => format!("?apikey={}", k.trim()),
-            _ => String::new(),
-        };
-        let url = format!("https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png{key_param}");
+        // Try each ODbL-compliant tile source in order; first success wins.
+        // CARTO requires CARTO_API_KEY; Wikimedia and OpenFreeMap need no key.
+        // Never uses tile.openstreetmap.org (OSMF policy).
         let client = match reqwest::Client::builder()
             .timeout(Duration::from_secs(10))
             .user_agent("PinpointMap/0.2.0 (ODbL tile proxy)")
@@ -265,43 +296,76 @@ pub mod map_handlers {
                     .into_response()
             }
         };
-        match client.get(&url).send().await {
-            Ok(resp) if resp.status().is_success() => match resp.bytes().await {
-                Ok(body) => {
-                    let bytes = body.to_vec();
-                    {
-                        let mut cache = tile_cache().lock().unwrap();
-                        if cache.len() >= TILE_CACHE_MAX {
-                            cache.clear();
-                        }
-                        cache.insert(key, (bytes.clone(), Instant::now()));
+
+        let mut last_error: Option<anyhow::Error> = None;
+        for source in TILE_SOURCES {
+            let mut url = source
+                .url_pattern
+                .replace("{z}", &z.to_string())
+                .replace("{x}", &x.to_string())
+                .replace("{y}", &y.to_string());
+            if source.requires_api_key {
+                if let Ok(k) = std::env::var("CARTO_API_KEY") {
+                    if !k.trim().is_empty() {
+                        url = format!("{}?apikey={}", url, k.trim());
                     }
-                    let mut headers = HeaderMap::new();
-                    headers.insert(header::CONTENT_TYPE, "image/png".parse().unwrap());
-                    headers.insert(header::CACHE_CONTROL, "public, max-age=3600".parse().unwrap());
-                    headers.insert("X-Data-Attribution", "© OpenStreetMap contributors".parse().unwrap());
-                    (StatusCode::OK, headers, bytes).into_response()
                 }
-                Err(_) => (
-                    StatusCode::BAD_GATEWAY,
-                    Json(json!({"error": {"code": "TILE_FETCH_FAILED", "message": "Tile read failed"}})),
-                )
-                    .into_response(),
-            },
-            Ok(resp) => {
-                let upstream = resp.status().as_u16();
-                (
-                    StatusCode::BAD_GATEWAY,
-                    Json(json!({"error": {"code": "TILE_FETCH_FAILED", "message": format!("Upstream tile service returned {upstream}. If upstream is CARTO, set CARTO_API_KEY (free at https://carto.com/basemaps/apikey)."), "upstream_status": upstream}})),
-                )
-                    .into_response()
+                if !url.contains("apikey=") {
+                    continue;
+                }
             }
-            Err(_) => (
-                StatusCode::BAD_GATEWAY,
-                Json(json!({"error": {"code": "TILE_FETCH_FAILED", "message": "Tile service unavailable"}})),
-            )
-                .into_response(),
+            match client.get(&url).send().await {
+                Ok(resp) if resp.status().is_success() => match resp.bytes().await {
+                    Ok(body) => {
+                        let bytes = body.to_vec();
+                        {
+                            let mut cache = tile_cache().lock().unwrap();
+                            if cache.len() >= TILE_CACHE_MAX {
+                                cache.clear();
+                            }
+                            cache.insert(key, (bytes.clone(), Instant::now()));
+                        }
+                        let mut headers = HeaderMap::new();
+                        headers.insert(header::CONTENT_TYPE, "image/png".parse().unwrap());
+                        headers.insert(
+                            header::CACHE_CONTROL,
+                            "public, max-age=3600".parse().unwrap(),
+                        );
+                        headers.insert(
+                            "X-Data-Attribution",
+                            "© OpenStreetMap contributors".parse().unwrap(),
+                        );
+                        headers.insert(
+                            "X-Tile-Source",
+                            header::HeaderValue::from_str(source.name).unwrap(),
+                        );
+                        return (StatusCode::OK, headers, bytes).into_response();
+                    }
+                    Err(_e) => {
+                        last_error = Some(anyhow::anyhow!("{}: read failed", source.name));
+                    }
+                },
+                Ok(resp) => {
+                    last_error = Some(anyhow::anyhow!("{}: {}", source.name, resp.status()));
+                }
+                Err(_e) => {
+                    last_error = Some(anyhow::anyhow!("{}: {}", source.name, _e));
+                }
+            }
         }
+
+        // All sources failed.
+        (
+            StatusCode::BAD_GATEWAY,
+            Json(json!({
+                "error": {
+                    "code": "TILE_FETCH_FAILED",
+                    "message": format!("All tile sources unavailable: {}", last_error.map(|e| e.to_string()).unwrap_or_default()),
+                    "sources": TILE_SOURCES.iter().map(|s| s.name).collect::<Vec<_>>(),
+                }
+            }))
+        )
+            .into_response()
     }
 }
 
