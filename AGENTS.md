@@ -84,6 +84,17 @@ All platform code lives in `src/platform.rs`; all OS branches are there.
 - `src/bin/` — one binary per deployable.
 
 Additive seams (never rewrite): new table → migration + domain module; new screen → `src/ui/<name>.rs`; new service → router + binary + gateway; new language → `Lang` variant + block; new platform → `platform.rs` only.
+## Changelog & auto-commit on "push"
+
+- Every completed feature gets a commit (per the Commits section) and a
+  one-line entry under `[Unreleased]` in `CHANGELOG.md` (Added/Changed/
+  Fixed/Removed). The `scripts/commit.ps1 -Message "..."` helper does
+  both: runs the full gate, prepends a stub, commits with trailers.
+- When the user says "push" (or "commit and push"): run the full gate,
+  update `CHANGELOG.md`, commit with all co-author trailers, then
+  `git push` (only after the gate is green). Never push a red tree.
+- Never commit without running `cargo fmt/clippy/build/test` first.
+
 ## Docs conventions
 
 - Diagrams are Mermaid text, never binary images; keep the table in
