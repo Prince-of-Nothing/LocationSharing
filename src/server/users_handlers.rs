@@ -82,6 +82,8 @@ pub async fn create_user(
         totp_secret: None,
         mfa_enabled: false,
         mfa_last_step: 0,
+        failed_login_attempts: 0,
+        locked_until: None,
     };
     {
         let mut store = state.store.lock().unwrap();

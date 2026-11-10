@@ -34,15 +34,48 @@ pub async fn login(
     if !user.is_active {
         return invalid();
     }
+    // Lockout check.
+    if let Some(until) = &user.locked_until {
+        if until.as_str() > "2026-01-01T00:00:00Z" {
+            // Compare against now; lockout expiry in the future blocks login.
+            let now = chrono::Utc::now().to_rfc3339();
+            if until.as_str() > now.as_str() {
+                return (
+                    StatusCode::TOO_MANY_REQUESTS,
+                    Json(json!({"error": {"code": "ACCOUNT_LOCKED", "message": "Account temporarily locked. Try again later."}})),
+                )
+                    .into_response();
+            }
+        }
+    }
     let ok = match &user.password_hash {
         Some(h) => crate::security::password::verify_password(password, h),
         None => false,
     };
+    let user_id = user.id;
+    drop(store);
     if !ok {
+        // Increment failed attempts; lock after 5.
+        {
+            let mut store = state.store.lock().unwrap();
+            if let Some(u) = store.users.iter_mut().find(|u| u.id == user_id) {
+                u.failed_login_attempts = u.failed_login_attempts.saturating_add(1);
+                if u.failed_login_attempts >= 5 {
+                    u.locked_until =
+                        Some((chrono::Utc::now() + chrono::Duration::minutes(15)).to_rfc3339());
+                }
+            }
+        }
         return invalid();
     }
-    // Release the read guard before taking the mutable lock below.
-    drop(store);
+    // Reset on success.
+    {
+        let mut store = state.store.lock().unwrap();
+        if let Some(u) = store.users.iter_mut().find(|u| u.id == user_id) {
+            u.failed_login_attempts = 0;
+            u.locked_until = None;
+        }
+    }
     // MFA gate: enrolled users must present a valid TOTP (demo "current user"
     // scope for verify/status; login binds the code to the account).
     if user.mfa_enabled {
@@ -143,6 +176,8 @@ pub async fn register(State(state): State<AppState>, Json(body): Json<Value>) ->
         totp_secret: None,
         mfa_enabled: false,
         mfa_last_step: 0,
+        failed_login_attempts: 0,
+        locked_until: None,
     };
     store.users.push(user.clone());
     let mut resp = (

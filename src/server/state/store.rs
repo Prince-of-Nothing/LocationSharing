@@ -91,6 +91,8 @@ impl Store {
             totp_secret: None,
             mfa_enabled: false,
             mfa_last_step: 0,
+            failed_login_attempts: 0,
+            locked_until: None,
         };
         self.next_user_id += 1;
         let alice = User {
@@ -107,6 +109,8 @@ impl Store {
             totp_secret: None,
             mfa_enabled: false,
             mfa_last_step: 0,
+            failed_login_attempts: 0,
+            locked_until: None,
         };
         self.next_user_id += 1;
         let bob = User {
@@ -123,6 +127,8 @@ impl Store {
             totp_secret: None,
             mfa_enabled: false,
             mfa_last_step: 0,
+            failed_login_attempts: 0,
+            locked_until: None,
         };
         self.next_user_id += 1;
 

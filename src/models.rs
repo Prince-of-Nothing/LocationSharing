@@ -24,6 +24,12 @@ pub struct User {
     /// Last consumed TOTP step (replay protection). Server-only.
     #[serde(skip_serializing, default)]
     pub mfa_last_step: u64,
+    /// Failed login attempts (lockout). Server-only.
+    #[serde(skip_serializing, default)]
+    pub failed_login_attempts: u32,
+    /// ISO-8601 lockout expiry (None = not locked). Server-only.
+    #[serde(skip_serializing, default)]
+    pub locked_until: Option<String>,
 }
 
 /// Envelope of `POST /api/v1/auth/login` and `POST /api/v1/auth/register`.

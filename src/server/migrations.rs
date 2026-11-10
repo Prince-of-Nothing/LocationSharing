@@ -77,6 +77,14 @@ pub const MIGRATIONS: &[(u32, &str, &[&str])] = &[
             "GRANT USAGE, SELECT ON SEQUENCE pinpoint_user_id_seq TO pinpoint_users, pinpoint_auth",
         ],
     ),
+    (
+        13,
+        "login_lockout",
+        &[
+            "ALTER TABLE pinpoint_users ADD COLUMN IF NOT EXISTS failed_login_attempts INT NOT NULL DEFAULT 0",
+            "ALTER TABLE pinpoint_users ADD COLUMN IF NOT EXISTS locked_until TEXT",
+        ],
+    ),
 ];
 
 /// Apply all pending migrations (idempotent, recorded in version table).

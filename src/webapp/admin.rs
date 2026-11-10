@@ -150,6 +150,8 @@ mod tests {
             totp_secret: None,
             mfa_enabled: false,
             mfa_last_step: 0,
+            failed_login_attempts: 0,
+            locked_until: None,
         }
     }
 

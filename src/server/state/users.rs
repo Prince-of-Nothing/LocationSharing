@@ -23,8 +23,10 @@ impl AppState {
             Option<String>,
             bool,
             i64,
+            i32,
+            Option<String>,
         )> = sqlx::query_as(
-            "SELECT id, email, full_name, role, is_active, must_change_password, password_hash, totp_secret, mfa_enabled, mfa_last_step FROM pinpoint_users ORDER BY id",
+            "SELECT id, email, full_name, role, is_active, must_change_password, password_hash, totp_secret, mfa_enabled, mfa_last_step, failed_login_attempts, locked_until FROM pinpoint_users ORDER BY id",
         )
         .fetch_all(pool)
         .await
@@ -43,6 +45,8 @@ impl AppState {
             totp_secret,
             mfa_enabled,
             mfa_last_step,
+            failed_login_attempts,
+            locked_until,
         ) in rows
         {
             store.next_user_id = store.next_user_id.max(id + 1);
@@ -57,6 +61,8 @@ impl AppState {
                 totp_secret,
                 mfa_enabled,
                 mfa_last_step: mfa_last_step.max(0) as u64,
+                failed_login_attempts: failed_login_attempts.max(0) as u32,
+                locked_until,
             });
         }
         true
@@ -71,8 +77,8 @@ impl AppState {
             return;
         }
         for u in &store.users {
-            let _ = sqlx::query("INSERT INTO pinpoint_users (id, email, full_name, role, is_active, must_change_password, password_hash, totp_secret, mfa_enabled, mfa_last_step) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, full_name = EXCLUDED.full_name, role = EXCLUDED.role, is_active = EXCLUDED.is_active, must_change_password = EXCLUDED.must_change_password, password_hash = EXCLUDED.password_hash, totp_secret = EXCLUDED.totp_secret, mfa_enabled = EXCLUDED.mfa_enabled, mfa_last_step = EXCLUDED.mfa_last_step")
-                .bind(u.id).bind(&u.email).bind(&u.full_name).bind(&u.role).bind(u.is_active).bind(u.must_change_password).bind(&u.password_hash).bind(&u.totp_secret).bind(u.mfa_enabled).bind(u.mfa_last_step as i64)
+            let _ = sqlx::query("INSERT INTO pinpoint_users (id, email, full_name, role, is_active, must_change_password, password_hash, totp_secret, mfa_enabled, mfa_last_step, failed_login_attempts, locked_until) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, full_name = EXCLUDED.full_name, role = EXCLUDED.role, is_active = EXCLUDED.is_active, must_change_password = EXCLUDED.must_change_password, password_hash = EXCLUDED.password_hash, totp_secret = EXCLUDED.totp_secret, mfa_enabled = EXCLUDED.mfa_enabled, mfa_last_step = EXCLUDED.mfa_last_step, failed_login_attempts = EXCLUDED.failed_login_attempts, locked_until = EXCLUDED.locked_until")
+                .bind(u.id).bind(&u.email).bind(&u.full_name).bind(&u.role).bind(u.is_active).bind(u.must_change_password).bind(&u.password_hash).bind(&u.totp_secret).bind(u.mfa_enabled).bind(u.mfa_last_step as i64).bind(u.failed_login_attempts as i32).bind(&u.locked_until)
                 .execute(&mut **tx).await;
         }
         // NOTE: no delete-missing for users. Two services write this table
