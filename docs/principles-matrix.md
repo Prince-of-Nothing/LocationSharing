@@ -9,7 +9,7 @@ be additive — never a rewrite.
 
 | # | Principle | Status | Implementation | Evidence |
 |---|---|---|---|---|
-| 1 | Single Responsibility (SRP) | Shipped | Per-service handlers, per-screen UI, per-domain store modules | `cargo test` (91 lib), handler/router probes |
+| 1 | Single Responsibility (SRP) | Shipped | Per-service handlers, per-screen UI, per-domain store modules | `cargo test` (104 lib), handler/router probes |
 | 2 | Separation of Concerns | Shipped | transport/domain/OSM/client layers never leak | `tests/contract.rs` pins `api.rs` |
 | 3 | Modular Architecture (services) | Shipped | 4 deployables + gateway routing, `scale: 2` | `docker compose config`, e2e 38 |
 | 4 | Modular Database (ownership) | Shipped | Per-domain upsert persist + advisory lock, roles, FKs, migrations v1–v11 (seq ids) | ownership + lock-key tests |

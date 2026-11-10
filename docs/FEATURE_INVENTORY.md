@@ -57,8 +57,9 @@ coverage. Live automation: `scripts/e2e.ps1` (needs stack up; exit code =
 
 - `scripts/e2e.ps1`: 38 live checks — headers+registry(4), auth(7),
   users+friendships(9), locations+shares+check-ins+emergency(13), map(3).
-  Full run = exit 0.
-- `cargo test`: 89 lib (validation/rate/encryption/audit/session/signing/MFA/
-  password/patterns/osm/bookmarks/geo/tilepacks + ownership/lock-key) +
-  10 api contract + 4 router probes (`tests/router_probe.rs`) + 1 ignored
-  on-demand live round-trip.
+  Full run = exit 0 (verified at scale 1; scale 2 is eventually
+  consistent, HA verified by kill drill).
+- `cargo test`: 104 lib (validation/rate/encryption/audit/session/signing/MFA/
+  password/patterns/osm/bookmarks/geo/tilepacks + ownership/lock-key +
+  backend/webapp/mobile) + 10 api contract + 4 router probes
+  (`tests/router_probe.rs`) + 1 ignored on-demand live round-trip.

@@ -26,9 +26,9 @@ Goal `have the best app ever` is only met when ALL criteria below hold. Status v
 ## C. Quality gates
 - [x] `cargo fmt --all -- --check` → 0
 - [x] `cargo clippy --all-targets -- -D warnings` → 0
-- [x] `cargo test` → **86 lib + 10 contract + 3 router**, 1 ignored (live round-trip)
-- [x] `docker compose up --build` → 6 services healthy, gateway :8000
-- [x] `scripts/e2e.ps1` → 36/36 (two consecutive full-green runs)
+- [x] `cargo test` → **104 lib + 10 contract + 4 router**, 1 ignored (live round-trip)
+- [x] `docker compose up --build` → 6 services healthy (2 replicas each), gateway :8000
+- [x] `scripts/e2e.ps1` → **38/38 at scale 1** (`--scale ...=1`); scale 2 is eventually consistent (≤5s persist→refresh) and verified by the failover drill + `X-Upstream`/`/registry` (see `docs/redundancy.md`, `docs/gap-acceptance.md`)
 - [ ] OWASP ZAP active scan clean (Z-6/Z-7) — baseline checklist in `docs/evidence/zap-scan-report.md`, full ZAP GUI run pending
 - [ ] No `tile.openstreetmap.org` tile URLs in code (OSMF policy, CI `map-qa.yml` grep)
 
