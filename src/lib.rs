@@ -14,6 +14,7 @@ pub mod api;
 pub mod app;
 pub mod backend;
 pub mod bookmarks;
+pub mod i18n;
 pub mod mobile;
 pub mod models;
 pub mod osm;

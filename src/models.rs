@@ -129,6 +129,9 @@ pub struct Settings {
     /// Profile visibility: "friends_only" (default) or "public".
     #[serde(default = "default_visibility")]
     pub profile_visibility: String,
+    /// UI language code (ISO 639-1). Empty = auto-detect from OS locale.
+    #[serde(default)]
+    pub language: String,
 }
 
 fn default_refresh_interval() -> u64 {
@@ -152,6 +155,7 @@ impl Default for Settings {
             metric: default_metric(),
             default_precision: default_precision(),
             profile_visibility: default_visibility(),
+            language: String::new(),
         }
     }
 }

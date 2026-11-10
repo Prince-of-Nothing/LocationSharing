@@ -1,16 +1,18 @@
 //! Map screen
 use super::{PendingAction, PinpointAppUI};
+use crate::i18n::{self, key};
 use crate::map;
 use crate::models::FriendLocation;
 use eframe::egui::{self, Color32, Direction, RichText};
 
 impl PinpointAppUI {
     pub fn draw_map_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        let lang = self.lang;
         ui.horizontal(|ui| {
             ui.with_layout(
                 egui::Layout::centered_and_justified(Direction::LeftToRight),
                 |ui| {
-                    ui.heading("Friend locations");
+                    ui.heading(i18n::t(lang, key::FRIEND_LOCATIONS));
                 },
             );
         });
@@ -26,23 +28,27 @@ impl PinpointAppUI {
 
         // Quick location publish (persistent inputs so typing survives frames)
         ui.group(|ui| {
-            ui.label(RichText::new("Publish my location").size(12.0).strong());
+            ui.label(
+                RichText::new(i18n::t(lang, key::PUBLISH_MY_LOCATION))
+                    .size(12.0)
+                    .strong(),
+            );
             ui.add_space(4.0);
             ui.horizontal(|ui| {
                 ui.add(
                     egui::TextEdit::singleline(&mut self.publish_lat)
-                        .hint_text("Latitude")
+                        .hint_text(i18n::t(lang, key::LATITUDE))
                         .desired_width(100.0),
                 );
                 ui.add_space(8.0);
                 ui.add(
                     egui::TextEdit::singleline(&mut self.publish_lon)
-                        .hint_text("Longitude")
+                        .hint_text(i18n::t(lang, key::LONGITUDE))
                         .desired_width(100.0),
                 );
             });
             ui.add_space(4.0);
-            if ui.button("Publish").clicked() {
+            if ui.button(i18n::t(lang, key::PUBLISH)).clicked() {
                 match (
                     self.publish_lat.trim().parse::<f64>(),
                     self.publish_lon.trim().parse::<f64>(),
@@ -73,13 +79,17 @@ impl PinpointAppUI {
 
         // Friendships with inline accept/reject for incoming requests
         ui.group(|ui| {
-            ui.label(RichText::new("Friends").size(14.0).strong());
+            ui.label(
+                RichText::new(i18n::t(lang, key::FRIENDS))
+                    .size(14.0)
+                    .strong(),
+            );
             ui.add_space(4.0);
 
             let binding = self.app.data();
             let data = binding.lock().unwrap();
             if data.friendships.is_empty() {
-                ui.label("No friends yet");
+                ui.label(i18n::t(lang, key::NO_FRIENDS));
             } else {
                 for friendship in &data.friendships {
                     let color = match friendship.status.as_str() {
@@ -100,7 +110,7 @@ impl PinpointAppUI {
                     ui.horizontal(|ui| {
                         ui.colored_label(color, &label);
                         if friendship.status == "pending" && is_incoming {
-                            if ui.button("Accept").clicked() {
+                            if ui.button(i18n::t(lang, key::ACCEPT)).clicked() {
                                 self.spawn_action(
                                     PendingAction::RespondFriendship {
                                         id,
@@ -109,7 +119,7 @@ impl PinpointAppUI {
                                     ctx,
                                 );
                             }
-                            if ui.button("Reject").clicked() {
+                            if ui.button(i18n::t(lang, key::REJECT)).clicked() {
                                 self.spawn_action(
                                     PendingAction::RespondFriendship {
                                         id,
@@ -119,7 +129,7 @@ impl PinpointAppUI {
                                 );
                             }
                         } else if friendship.status == "pending" {
-                            ui.small("awaiting response");
+                            ui.small(i18n::t(lang, key::AWAITING_RESPONSE));
                         }
                     });
                 }
@@ -130,13 +140,17 @@ impl PinpointAppUI {
 
         // Location shares
         ui.group(|ui| {
-            ui.label(RichText::new("Location Sharing").size(14.0).strong());
+            ui.label(
+                RichText::new(i18n::t(lang, key::LOCATION_SHARING))
+                    .size(14.0)
+                    .strong(),
+            );
             ui.add_space(4.0);
 
             let binding = self.app.data();
             let data = binding.lock().unwrap();
             if data.shares.is_empty() {
-                ui.label("No location sharing permissions");
+                ui.label(i18n::t(lang, key::NO_SHARING));
             } else {
                 for share in &data.shares {
                     let precision_color = match share.precision_level.as_str() {
@@ -152,7 +166,11 @@ impl PinpointAppUI {
                             precision_color,
                             format!("{} - {}", share.direction, share.precision_level),
                         );
-                        let label = if is_active { "Pause" } else { "Resume" };
+                        let label = if is_active {
+                            i18n::t(lang, key::PAUSE)
+                        } else {
+                            i18n::t(lang, key::RESUME)
+                        };
                         if ui.button(label).clicked() {
                             self.spawn_action(
                                 PendingAction::ToggleShare {
@@ -178,12 +196,16 @@ impl PinpointAppUI {
 
         // Navigation to friend locations
         ui.group(|ui| {
-            ui.label(RichText::new("Navigate to a friend").size(14.0).strong());
+            ui.label(
+                RichText::new(i18n::t(lang, key::NAVIGATE_TO_FRIEND))
+                    .size(14.0)
+                    .strong(),
+            );
             ui.add_space(4.0);
             let locations: Vec<FriendLocation> = data.locations.clone();
             drop(data);
             if locations.is_empty() {
-                ui.label("No locations to navigate to.");
+                ui.label(i18n::t(lang, key::NO_LOCATIONS));
             } else {
                 for loc in &locations {
                     ui.horizontal(|ui| {
@@ -192,7 +214,7 @@ impl PinpointAppUI {
                             loc.user_name, loc.latitude, loc.longitude
                         ));
                         ui.add_space(4.0);
-                        if ui.button("Navigate").clicked() {
+                        if ui.button(i18n::t(lang, key::NAVIGATE)).clicked() {
                             let url = format!(
                                 "https://www.openstreetmap.org/directions?to={:.4}%2C{:.4}",
                                 loc.latitude, loc.longitude
@@ -203,7 +225,7 @@ impl PinpointAppUI {
                                 loc.user_name
                             )));
                         }
-                        if ui.button("OSM Map").clicked() {
+                        if ui.button(i18n::t(lang, key::OSM_MAP)).clicked() {
                             let url = format!(
                                 "https://www.openstreetmap.org/#map=14/{:.4}/{:.4}",
                                 loc.latitude, loc.longitude
@@ -220,7 +242,7 @@ impl PinpointAppUI {
         // Search for places (Nominatim)
         ui.group(|ui| {
             ui.label(
-                RichText::new("Search places (OpenStreetMap)")
+                RichText::new(i18n::t(lang, key::SEARCH_PLACES))
                     .size(14.0)
                     .strong(),
             );
@@ -232,17 +254,23 @@ impl PinpointAppUI {
             drop(data);
             ui.add(
                 egui::TextEdit::singleline(&mut self.search_query)
-                    .hint_text("Search for a place (e.g. café, pharmacy, Chicago)")
+                    .hint_text(i18n::t(lang, key::SEARCH_PLACES))
                     .desired_width(300.0),
             );
             ui.add_space(4.0);
-            if ui.button("Search").clicked() && !self.search_query.trim().is_empty() {
+            if ui.button(i18n::t(lang, key::SEARCH)).clicked()
+                && !self.search_query.trim().is_empty()
+            {
                 let query = self.search_query.clone();
                 self.spawn_action(PendingAction::SearchPlaces { query }, ctx);
             }
             if !results.is_empty() {
                 ui.add_space(4.0);
-                ui.label(format!("Results ({}):", results.len()));
+                ui.label(format!(
+                    "{} ({}):",
+                    i18n::t(lang, key::RESULTS),
+                    results.len()
+                ));
                 for place in results {
                     ui.horizontal(|ui| {
                         ui.label(format!(
@@ -261,7 +289,7 @@ impl PinpointAppUI {
                                 place.display_name
                             )));
                         }
-                        if ui.button("OSM Map").clicked() {
+                        if ui.button(i18n::t(lang, key::OSM_MAP)).clicked() {
                             let url = format!(
                                 "https://www.openstreetmap.org/#map=14/{:.4}/{:.4}",
                                 place.latitude, place.longitude

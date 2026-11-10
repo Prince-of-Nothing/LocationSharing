@@ -21,6 +21,7 @@ pub(crate) mod trips;
 
 use crate::app::{CurrentScreen, PinpointApp};
 use crate::backend::DynBackend;
+use crate::i18n::{self, key, Lang};
 use crate::osm::OsmClient;
 use eframe::egui::{self, Align, Color32, Direction};
 use std::sync::Arc;
@@ -113,6 +114,8 @@ enum PendingAction {
 pub struct PinpointAppUI {
     app: Arc<PinpointApp>,
     rt: Runtime,
+    /// Current UI language (auto-detected from the OS locale; overridable).
+    lang: Lang,
     // Sign-in / sign-up form state
     login_email: String,
     login_password: String,
@@ -171,6 +174,7 @@ impl PinpointAppUI {
         Self {
             app,
             rt: Runtime::new().expect("Failed to create tokio runtime"),
+            lang: Lang::system(),
             login_email: String::new(),
             login_password: String::new(),
             register_email: String::new(),
@@ -388,30 +392,45 @@ impl PinpointAppUI {
 
     fn draw_header_bar(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         let signed_in = self.app.is_signed_in();
+        let lang = self.lang;
 
         ui.horizontal(|ui| {
             ui.with_layout(
                 egui::Layout::centered_and_justified(Direction::LeftToRight),
                 |ui| {
-                    ui.heading("Pinpoint");
+                    ui.heading(i18n::t(lang, key::APP_TITLE));
                 },
             );
             ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                // Language picker (works for every registered language).
+                egui::ComboBox::from_id_salt("lang")
+                    .selected_text(self.lang.native_name())
+                    .show_ui(ui, |ui| {
+                        for l in Lang::all() {
+                            if ui
+                                .selectable_label(self.lang == *l, l.native_name())
+                                .clicked()
+                            {
+                                self.lang = *l;
+                            }
+                        }
+                    });
+                ui.add_space(4.0);
                 if signed_in {
-                    if ui.button("Sign out").clicked() {
+                    if ui.button(i18n::t(lang, key::SIGN_OUT)).clicked() {
                         self.spawn_action(PendingAction::Logout, ctx);
                     }
                     if let Some(user) = &self.app.data().lock().unwrap().user {
                         ui.label(user.email.to_string());
                     }
                 } else {
-                    if ui.button("Sign in").clicked() {
+                    if ui.button(i18n::t(lang, key::SIGN_IN)).clicked() {
                         self.app.set_screen(CurrentScreen::Login);
                     }
                 }
                 ui.add_space(4.0);
                 if self.app.is_offline_mode() {
-                    ui.label("Offline mode");
+                    ui.label(i18n::t(lang, key::OFFLINE_MODE));
                 }
                 if self.app.is_loading() {
                     ui.spinner();
@@ -428,29 +447,30 @@ impl PinpointAppUI {
     }
 
     fn draw_main_toolbar(&mut self, ui: &mut egui::Ui) {
+        let lang = self.lang;
         let screens = [
-            (CurrentScreen::Map, "Map"),
-            (CurrentScreen::Friends, "Friends"),
-            (CurrentScreen::Sharing, "Sharing"),
-            (CurrentScreen::Places, "Places"),
-            (CurrentScreen::Bookmarks, "Saved"),
-            (CurrentScreen::Trips, "Trips"),
-            (CurrentScreen::Emergency, "Emergency"),
-            (CurrentScreen::Profile, "Profile"),
-            (CurrentScreen::Admin, "Admin"),
-            (CurrentScreen::ChangePassword, "Password"),
+            (CurrentScreen::Map, key::MAP),
+            (CurrentScreen::Friends, key::FRIENDS),
+            (CurrentScreen::Sharing, key::SHARING),
+            (CurrentScreen::Places, key::PLACES),
+            (CurrentScreen::Bookmarks, key::SAVED),
+            (CurrentScreen::Trips, key::TRIPS),
+            (CurrentScreen::Emergency, key::EMERGENCY),
+            (CurrentScreen::Profile, key::PROFILE),
+            (CurrentScreen::Admin, key::ADMIN),
+            (CurrentScreen::ChangePassword, key::PASSWORD),
         ];
         ui.horizontal(|ui| {
-            for (screen, label) in screens {
+            for (screen, key_str) in screens {
                 if ui
-                    .selectable_label(self.app.current_screen() == screen, label)
+                    .selectable_label(self.app.current_screen() == screen, i18n::t(lang, key_str))
                     .clicked()
                 {
                     self.app.set_screen(screen);
                 }
                 ui.add_space(4.0);
             }
-            if ui.button("Refresh").clicked() {
+            if ui.button(i18n::t(lang, key::REFRESH)).clicked() {
                 let app = self.app.clone();
                 let rt = Arc::new(Runtime::new().expect("tokio"));
                 // Fire-and-forget refresh on a throwaway runtime thread.
@@ -468,17 +488,15 @@ impl PinpointAppUI {
     }
 
     fn draw_sign_in_required(&mut self, ui: &mut egui::Ui, ctx: &egui::Context, feature: &str) {
+        let lang = self.lang;
         ui.vertical_centered(|ui| {
             ui.add_space(40.0);
-            ui.heading("Sign in required");
+            ui.heading(i18n::t(lang, key::SIGN_IN_REQUIRED));
             ui.add_space(16.0);
-            ui.label(format!(
-                "To use {} features, please sign in first.",
-                feature
-            ));
+            ui.label(i18n::t(lang, key::SIGN_IN_TO_USE).replace("{feature}", feature));
             ui.add_space(24.0);
             ui.group(|ui| {
-                ui.label("Sign in");
+                ui.label(i18n::t(lang, key::SIGN_IN));
                 ui.add_space(8.0);
                 ui.add(
                     egui::TextEdit::singleline(&mut self.login_email)
@@ -493,7 +511,7 @@ impl PinpointAppUI {
                         .desired_width(250.0),
                 );
                 ui.add_space(16.0);
-                if ui.button("Sign in").clicked()
+                if ui.button(i18n::t(lang, key::SIGN_IN)).clicked()
                     && !self.login_email.is_empty()
                     && !self.login_password.is_empty()
                 {
@@ -502,9 +520,9 @@ impl PinpointAppUI {
                     self.spawn_action(PendingAction::Login { email, password }, ctx);
                 }
                 ui.add_space(8.0);
-                ui.label("Or stay in Map mode — the map works offline without signing in.");
+                ui.label(i18n::t(lang, key::OFFLINE_MAP_HINT));
                 ui.add_space(8.0);
-                if ui.button("Go to Map").clicked() {
+                if ui.button(i18n::t(lang, key::GO_TO_MAP)).clicked() {
                     self.app.set_screen(CurrentScreen::Map);
                 }
             });
