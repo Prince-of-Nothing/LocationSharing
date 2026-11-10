@@ -72,6 +72,12 @@ Semantic Versioning. This is a pre-1.0 (thesis MVP) project.
   OpenFreeMap) instead of failing closed at 502 when CARTO_API_KEY is missing.
   `X-Tile-Source` header reports which source served the tile. Attribution
   endpoint lists all configured sources.
+- E2E encryption: `src/security/e2e.rs` provides AES-256-GCM end-to-end
+  encryption for location data with PBKDF2-derived per-user keys. Location
+  payloads are encrypted client-side before being sent to the server; the
+  server stores ciphertext only. `derive_location_key`, `encrypt_location`,
+  `decrypt_location` exported from `src/security/mod.rs`. `pbkdf2` made public
+  in `src/security/password.rs`.
 
 ## [0.3.0] - 2026-10-13
 ### Added

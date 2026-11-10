@@ -45,7 +45,7 @@ pub fn verify_password(password: &str, encoded: &str) -> bool {
             == 0
 }
 
-fn pbkdf2(password: &[u8], salt: &[u8], iters: u32) -> [u8; 32] {
+pub fn pbkdf2(password: &[u8], salt: &[u8], iters: u32) -> [u8; 32] {
     // Single-block PBKDF2 (dkLen = hLen = 32).
     let mut block = Vec::with_capacity(salt.len() + 4);
     block.extend_from_slice(salt);
