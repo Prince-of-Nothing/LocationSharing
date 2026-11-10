@@ -680,6 +680,190 @@ fn format_api_error(status: reqwest::StatusCode, body: &str, fallback: &str) -> 
     }
 }
 
+// ── Backend trait adapter ──────────────────────────────────────────────────
+// Implements the modular backend abstraction so app/UI code can target
+// `backend::Backend` while this file remains the canonical REST v1 adapter.
+
+impl crate::backend::Backend for ApiClient {
+    fn backend_url(&self) -> &str {
+        ApiClient::backend_url(self)
+    }
+    fn session_active(&self) -> bool {
+        ApiClient::session_active(self)
+    }
+    fn login<'a>(
+        &'a self,
+        email: &'a str,
+        password: &'a str,
+    ) -> crate::backend::BackendFuture<'a, crate::models::User> {
+        Box::pin(async move { ApiClient::login(self, email, password).await })
+    }
+    fn register<'a>(
+        &'a self,
+        email: &'a str,
+        password: &'a str,
+        full_name: &'a str,
+    ) -> crate::backend::BackendFuture<'a, crate::models::User> {
+        Box::pin(async move { ApiClient::register(self, email, password, full_name).await })
+    }
+    fn logout<'a>(&'a self) -> crate::backend::BackendFuture<'a, ()> {
+        Box::pin(async move { ApiClient::logout(self).await })
+    }
+    fn mfa_enroll<'a>(&'a self) -> crate::backend::BackendFuture<'a, (String, String)> {
+        Box::pin(async move { ApiClient::mfa_enroll(self).await })
+    }
+    fn mfa_verify<'a>(&'a self, code: &'a str) -> crate::backend::BackendFuture<'a, ()> {
+        Box::pin(async move { ApiClient::mfa_verify(self, code).await })
+    }
+    fn mfa_status<'a>(&'a self) -> crate::backend::BackendFuture<'a, bool> {
+        Box::pin(async move { ApiClient::mfa_status(self).await })
+    }
+    fn mfa_disable<'a>(&'a self) -> crate::backend::BackendFuture<'a, ()> {
+        Box::pin(async move { ApiClient::mfa_disable(self).await })
+    }
+    fn change_password<'a>(
+        &'a self,
+        current_password: Option<&'a str>,
+        new_password: &'a str,
+        confirm_password: &'a str,
+    ) -> crate::backend::BackendFuture<'a, bool> {
+        Box::pin(async move {
+            ApiClient::change_password(self, current_password, new_password, confirm_password).await
+        })
+    }
+    fn get_friendships<'a>(
+        &'a self,
+    ) -> crate::backend::BackendFuture<'a, Vec<crate::models::Friendship>> {
+        Box::pin(async move { ApiClient::get_friendships(self).await })
+    }
+    fn send_friend_request<'a>(&'a self, email: &'a str) -> crate::backend::BackendFuture<'a, ()> {
+        Box::pin(async move { ApiClient::send_friend_request(self, email).await })
+    }
+    fn respond_to_friendship<'a>(
+        &'a self,
+        id: i64,
+        action: &'a str,
+    ) -> crate::backend::BackendFuture<'a, ()> {
+        Box::pin(async move { ApiClient::respond_to_friendship(self, id, action).await })
+    }
+    fn delete_friendship<'a>(&'a self, id: i64) -> crate::backend::BackendFuture<'a, ()> {
+        Box::pin(async move { ApiClient::delete_friendship(self, id).await })
+    }
+    fn get_location_shares<'a>(
+        &'a self,
+    ) -> crate::backend::BackendFuture<'a, Vec<crate::models::LocationShare>> {
+        Box::pin(async move { ApiClient::get_location_shares(self).await })
+    }
+    fn create_location_share<'a>(
+        &'a self,
+        friendship_id: i64,
+        direction: &'a str,
+        precision_level: &'a str,
+    ) -> crate::backend::BackendFuture<'a, ()> {
+        Box::pin(async move {
+            ApiClient::create_location_share(self, friendship_id, direction, precision_level).await
+        })
+    }
+    fn create_share_with_expiry<'a>(
+        &'a self,
+        friendship_id: i64,
+        direction: &'a str,
+        precision_level: &'a str,
+        duration_hours: Option<i64>,
+        label: Option<&'a str>,
+    ) -> crate::backend::BackendFuture<'a, ()> {
+        Box::pin(async move {
+            ApiClient::create_share_with_expiry(
+                self,
+                friendship_id,
+                direction,
+                precision_level,
+                duration_hours,
+                label,
+            )
+            .await
+        })
+    }
+    fn update_location_share<'a>(
+        &'a self,
+        share_id: i64,
+        is_active: Option<bool>,
+        precision: Option<String>,
+    ) -> crate::backend::BackendFuture<'a, ()> {
+        Box::pin(async move {
+            ApiClient::update_location_share(self, share_id, is_active, precision).await
+        })
+    }
+    fn delete_share<'a>(&'a self, share_id: i64) -> crate::backend::BackendFuture<'a, ()> {
+        Box::pin(async move { ApiClient::delete_share(self, share_id).await })
+    }
+    fn get_friend_locations<'a>(
+        &'a self,
+    ) -> crate::backend::BackendFuture<'a, Vec<crate::models::FriendLocation>> {
+        Box::pin(async move { ApiClient::get_friend_locations(self).await })
+    }
+    fn publish_location<'a>(
+        &'a self,
+        latitude: f64,
+        longitude: f64,
+        accuracy: f64,
+    ) -> crate::backend::BackendFuture<'a, ()> {
+        Box::pin(
+            async move { ApiClient::publish_location(self, latitude, longitude, accuracy).await },
+        )
+    }
+    fn get_my_location<'a>(
+        &'a self,
+    ) -> crate::backend::BackendFuture<'a, crate::models::FriendLocation> {
+        Box::pin(async move { ApiClient::get_my_location(self).await })
+    }
+    fn list_users<'a>(&'a self) -> crate::backend::BackendFuture<'a, Vec<crate::models::User>> {
+        Box::pin(async move { ApiClient::list_users(self).await })
+    }
+    fn search_users<'a>(
+        &'a self,
+        q: &'a str,
+    ) -> crate::backend::BackendFuture<'a, Vec<crate::models::User>> {
+        Box::pin(async move { ApiClient::search_users(self, q).await })
+    }
+    fn update_user<'a>(
+        &'a self,
+        id: i64,
+        body: serde_json::Value,
+    ) -> crate::backend::BackendFuture<'a, ()> {
+        Box::pin(async move { ApiClient::update_user(self, id, body).await })
+    }
+    fn delete_user<'a>(&'a self, id: i64) -> crate::backend::BackendFuture<'a, ()> {
+        Box::pin(async move { ApiClient::delete_user(self, id).await })
+    }
+    fn create_check_in<'a>(
+        &'a self,
+        lat: f64,
+        lon: f64,
+        note: &'a str,
+        kind: &'a str,
+    ) -> crate::backend::BackendFuture<'a, ()> {
+        Box::pin(async move { ApiClient::create_check_in(self, lat, lon, note, kind).await })
+    }
+    fn list_check_ins<'a>(
+        &'a self,
+    ) -> crate::backend::BackendFuture<'a, Vec<crate::models::CheckIn>> {
+        Box::pin(async move { ApiClient::list_check_ins(self).await })
+    }
+    fn trigger_emergency<'a>(
+        &'a self,
+        lat: f64,
+        lon: f64,
+    ) -> crate::backend::BackendFuture<'a, ()> {
+        Box::pin(async move { ApiClient::trigger_emergency(self, lat, lon).await })
+    }
+    fn list_emergencies<'a>(
+        &'a self,
+    ) -> crate::backend::BackendFuture<'a, Vec<crate::models::EmergencyAlert>> {
+        Box::pin(async move { ApiClient::list_emergencies(self).await })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::validate_backend_url;

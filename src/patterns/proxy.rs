@@ -3,19 +3,23 @@
 //! The proxy sits between the application and the network, intercepting
 //! calls and returning cached or offline data when the network is
 //! unavailable. This enables the app to work offline gracefully.
+//!
+//! Accepts any [`crate::backend::Backend`] implementation (modular for changed
+//! backend architectures) while keeping convenience constructors for the REST
+//! client.
 
-use crate::api::ApiClient;
+use crate::backend::DynBackend;
 use crate::models::FriendLocation;
 use std::time::{Duration, Instant};
 
-/// Real service that makes actual API calls.
+/// Real service that makes actual API calls through the modular backend.
 pub struct RealLocationService {
-    client: ApiClient,
+    client: DynBackend,
     last_success: Option<Instant>,
 }
 
 impl RealLocationService {
-    pub fn new(client: ApiClient) -> Self {
+    pub fn new(client: DynBackend) -> Self {
         Self {
             client,
             last_success: None,
@@ -59,12 +63,17 @@ pub struct ProxyLocationService {
 }
 
 impl ProxyLocationService {
-    pub fn new(client: ApiClient) -> Self {
+    pub fn new(client: DynBackend) -> Self {
         Self {
             real_service: Some(RealLocationService::new(client)),
             cached_locations: Vec::new(),
             is_online: true,
         }
+    }
+
+    /// Convenience constructor from the concrete REST client.
+    pub fn new_rest(client: crate::api::ApiClient) -> Self {
+        Self::new(std::sync::Arc::new(client))
     }
 
     /// Force the proxy into offline mode.
@@ -163,14 +172,14 @@ mod tests {
     #[test]
     fn proxy_starts_online() {
         let client = crate::api::ApiClient::new("http://localhost:8000").unwrap();
-        let proxy = ProxyLocationService::new(client);
+        let proxy = ProxyLocationService::new_rest(client);
         assert!(proxy.is_online());
     }
 
     #[test]
     fn proxy_can_toggle_offline() {
         let client = crate::api::ApiClient::new("http://localhost:8000").unwrap();
-        let mut proxy = ProxyLocationService::new(client);
+        let mut proxy = ProxyLocationService::new_rest(client);
         proxy.set_offline();
         assert!(!proxy.is_online());
         proxy.set_online();

@@ -1,0 +1,11 @@
+# Trunk config for Pinpoint Kiosk webapp (`webk`).
+# Build: trunk build --config web/webk/Trunk.toml --release
+
+[build]
+target = "../../src/bin/pinpoint-webk.rs"
+dist = "dist"
+public_url = "/kiosk/"
+filehash = true
+
+[watch]
+ignore = ["dist"]

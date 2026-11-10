@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Pinpoint Admin (weba)</title>
+  <link data-trunk rel="rust" data-bin="pinpoint-weba" data-target-name="pinpoint_weba"/>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, sans-serif; margin: 0; background: #0b1220; color: #e5e7eb; }
+    header { padding: 1rem 1.25rem; border-bottom: 1px solid #1f2937; display:flex; gap:.75rem; align-items:center; }
+    main { max-width: 980px; margin: 0 auto; padding: 1.25rem; }
+    .card { background:#111827; border:1px solid #1f2937; border-radius:.75rem; padding:1rem; margin:.75rem 0; }
+    code,kbd { background:#0b1220; border:1px solid #374151; border-radius:.25rem; padding:.1rem .3rem; }
+    .muted { color:#9ca3af; }
+    .row { display:flex; gap:.75rem; flex-wrap:wrap; align-items:center; }
+    label { display:block; font-size:.9rem; margin:.35rem 0 .15rem; color:#cbd5e1; }
+    input, button { font: inherit; }
+    input { width:100%; max-width:420px; padding:.55rem .65rem; border-radius:.5rem; border:1px solid #374151; background:#0b1220; color:#e5e7eb; }
+    button { padding:.55rem .8rem; border-radius:.5rem; border:1px solid #374151; background:#1f2937; color:#e5e7eb; cursor:pointer; }
+    button.primary { background:#2563eb; border-color:#2563eb; }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>Pinpoint Admin</strong>
+    <span class="muted">(<code>weba</code>) — modular Rust/WASM console</span>
+  </header>
+  <main>
+    <div class="card">
+      <p>This admin console is built from the shared <code>pinpoint_desktop</code> crate and talks to the backend through the modular <code>backend::Backend</code> abstraction, so backend architecture changes are isolated to adapters/config.</p>
+      <p class="muted">Server-side authorization remains authoritative. UI role checks are convenience only (fail closed on denied responses).</p>
+    </div>
+    <div class="card" id="app">
+      <h2 style="margin-top:0">Sign in (admin)</h2>
+      <label for="email">Email</label>
+      <input id="email" autocomplete="username" placeholder="admin@example.invalid"/>
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password" placeholder="(server-validated)"/>
+      <div class="row" style="margin-top:.75rem">
+        <button class="primary" id="signin" type="button">Sign in</button>
+        <span class="muted" id="status">WASM module loading via Trunk…</span>
+      </div>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Backend config</h3>
+      <p>Backend URL: <code id="backend">(host-configured)</code>. Resolution follows app config/env; production must use HTTPS (ADR-0006).</p>
+      <p class="muted">Build: <code>trunk serve --config web/weba/Trunk.toml</code></p>
+    </div>
+  </main>
+  <script type="module">
+    document.getElementById('status').textContent = 'Ready for backend adapter wiring (Rust/WASM).';
+  </script>
+</body>
+</html>

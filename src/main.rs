@@ -7,9 +7,6 @@
 //! `--backend <url>` > `PINPOINT_BACKEND` env > per-platform default.
 
 #[cfg(not(target_arch = "wasm32"))]
-use std::sync::Arc;
-
-#[cfg(not(target_arch = "wasm32"))]
 fn print_help_and_exit() -> ! {
     eprintln!(
         "Pinpoint {} ({})\n\
@@ -68,24 +65,24 @@ fn main() {
 
     tracing_subscriber::fmt::init();
 
-    // The map is fully functional offline. We create the API client
-    // optimistically; if the backend is unreachable the app degrades to
-    // offline mode (demo friend locations, OSM navigation hand-off,
-    // no publishing/sharing). Plain HTTP is only accepted for loopback
-    // development URLs (ADR-0006).
-    let api_client = match pinpoint_desktop::api::ApiClient::new(&backend_url) {
-        Ok(client) => client,
+    // The map is fully functional offline. Build the backend via the modular
+    // factory (ADR-0006 transport policy enforced by the REST adapter). If the
+    // configured URL is rejected, fall back to the loopback default so the map
+    // still opens offline. Swapping backend architecture means changing
+    // `BackendConfig`/adding an adapter — not this call site.
+    let backend = match pinpoint_desktop::backend::build_default_backend(&backend_url) {
+        Ok(b) => b,
         Err(e) => {
             eprintln!("Backend URL {backend_url:?} rejected ({e}); starting in offline mode.");
-            // Fall back to the loopback default so the map still opens offline.
-            pinpoint_desktop::api::ApiClient::new("http://localhost:8000").unwrap_or_else(|e2| {
-                eprintln!("Cannot create API client: {e2}");
-                std::process::exit(1);
-            })
+            pinpoint_desktop::backend::build_default_backend("http://localhost:8000")
+                .unwrap_or_else(|e2| {
+                    eprintln!("Cannot create backend client: {e2}");
+                    std::process::exit(1);
+                })
         }
     };
 
-    let mut app = pinpoint_desktop::ui::PinpointAppUI::new(Arc::new(api_client), screenshot_path);
+    let mut app = pinpoint_desktop::ui::PinpointAppUI::new(backend, screenshot_path);
 
     app.set_offline_mode(true);
 

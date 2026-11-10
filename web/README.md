@@ -1,34 +1,53 @@
-# web/ — Rust/WASM client (webapp)
+# web/ — Rust/WASM clients (modular)
 
-Same `pinpoint_desktop` crate as desktop/mobile. Build the web client with
-[Trunk](https://trunk.rs/):
+Browser clients share the `pinpoint_desktop` crate and its modular backend
+abstraction (`crate::backend::{Backend, BackendConfig, DynBackend}`), so
+backend architecture changes (endpoints/auth/protocol version) are handled in
+adapters/config rather than UI code.
+
+Build with [Trunk](https://trunk.rs/):
 
 ```bash
 rustup target add wasm32-unknown-unknown
 cargo install trunk --locked
-trunk serve --release        # http://localhost:8080
-# or: trunk build --release && python -m http.server --directory dist
+
+# General web client
+trunk serve --config web/Trunk.toml --release        # http://localhost:8080
+
+# Admin console (weba)
+trunk serve --config web/weba/Trunk.toml --release
+
+# Kiosk/check-in (webk)
+trunk serve --config web/webk/Trunk.toml --release
 ```
 
 ## What's here
 
-- `index.html` — static shell (map-first landing, ODbL credit, build links).
-- `Trunk.toml` — points trunk at `src/bin/pinpoint-web.rs`.
-- `src/bin/pinpoint-web.rs` — WASM entry (`#[wasm_bindgen::start]`) +
-  native stub so desktop CI (`cargo build/test`) stays green without the
-  wasm toolchain.
+- `index.html` + `Trunk.toml` — general web shell / `src/bin/pinpoint-web.rs`.
+- `weba/` — admin console SPA shell + Trunk config / `src/bin/pinpoint-weba.rs`.
+- `webk/` — kiosk/check-in shell + Trunk config / `src/bin/pinpoint-webk.rs`.
+- `src/webapp/` — shared portable webapp modules (config, view models, admin,
+  kiosk adapter points).
+
+## Modularity / backend changes
+
+- Webapps resolve backend config through `webapp::config::WebAppConfig` and the
+  `backend` module. Add a new `BackendKind`/adapter when the backend
+  architecture changes; keep UI/view-model code stable.
+- `webk` kiosk token/share-link endpoints are isolated behind
+  `webapp::kiosk::KioskBackend` so evolving kiosk contracts don't leak into the
+  general client.
+- `weba` uses the shared `Backend` admin/user operations; server-side
+  authorization remains authoritative (UI role checks are fail-closed hints).
 
 ## Status (honest)
 
-The desktop GUI (`src/ui`, `map`, `tilepacks`) is `#[cfg(not(wasm32))]`:
-it needs `tokio` and the filesystem, which the wasm target doesn't have.
-The web client therefore ships today as the static shell above plus the
-WASM entry hook. A full egui Web UI reusing the desktop screens requires
-the `tokio` → wasm-runtime swap (spawn tasks via `wasm_bindgen_futures`,
-bookmarks in `localStorage`, no tilepacks on disk) — tracked as the next
-web step in [`docs/client-platforms.md`](../docs/client-platforms.md).
+Desktop GUI modules (`src/ui`, `map`, `tilepacks`) are `#[cfg(not(wasm32))]`.
+The wasm bins currently provide modular wiring/stubs plus HTML shells. A full
+egui web UI reusing desktop screens requires the `tokio` → wasm-runtime swap
+(`wasm_bindgen_futures`/async spawn), browser storage for bookmarks, and no
+filesystem tilepacks — tracked in [`docs/client-platforms.md`](../docs/client-platforms.md).
 
-Backend URL: `PINPOINT_BACKEND` env at runtime > per-platform default.
-In the browser, loopback `http://localhost:8000` only works when the page
-is served from loopback; production deploys must point at the gateway's
-HTTPS URL (ADR-0006 — plain HTTP off-loopback is rejected).
+Backend URL: `PINPOINT_BACKEND` / host config > per-platform default. In
+production, use HTTPS (ADR-0006); plain HTTP is only valid for loopback
+development contexts as enforced by backend adapters.

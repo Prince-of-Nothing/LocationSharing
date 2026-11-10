@@ -1,12 +1,17 @@
-use crate::api::ApiClient;
+use crate::backend::DynBackend;
 use crate::models::*;
 use crate::patterns::state::StateContext;
 use crate::security::{AuditLogger, KeyManager, RateLimiter};
 use std::sync::{Arc, Mutex};
 
+/// Core application state/logic shared by desktop/mobile clients.
+///
+/// Depends on [`DynBackend`] (the modular backend abstraction) rather than a
+/// concrete HTTP client, so changed backend architectures only require a new
+/// adapter implementation.
 pub struct PinpointApp {
     data: Arc<Mutex<AppData>>,
-    api_client: Arc<ApiClient>,
+    backend: DynBackend,
     is_loading: Arc<Mutex<bool>>,
     screenshot_path: Option<String>,
     screenshot_mode: bool,
@@ -73,7 +78,9 @@ impl PinpointApp {
         ]
     }
 
-    pub fn new(api_client: Arc<ApiClient>, screenshot_path: Option<String>) -> Self {
+    /// Create the app with any [`DynBackend`] implementation (REST v1 by default,
+    /// swappable for changed backend architectures).
+    pub fn new(backend: DynBackend, screenshot_path: Option<String>) -> Self {
         let screenshot_mode = screenshot_path.is_some();
         // Seed demo friend locations so the map is functional offline
         // before any server connection. These are example locations
@@ -88,7 +95,7 @@ impl PinpointApp {
 
         Self {
             data: Arc::new(Mutex::new(data)),
-            api_client,
+            backend,
             is_loading: Arc::new(Mutex::new(false)),
             screenshot_path,
             screenshot_mode,
@@ -105,12 +112,25 @@ impl PinpointApp {
         }
     }
 
+    /// Convenience constructor from the concrete REST client (kept for
+    /// compatibility with existing call sites).
+    pub fn new_rest(
+        api_client: Arc<crate::api::ApiClient>,
+        screenshot_path: Option<String>,
+    ) -> Self {
+        Self::new(api_client as DynBackend, screenshot_path)
+    }
+
     pub fn data(&self) -> Arc<Mutex<AppData>> {
         Arc::clone(&self.data)
     }
 
+    pub fn backend(&self) -> DynBackend {
+        Arc::clone(&self.backend)
+    }
+
     pub fn backend_url(&self) -> String {
-        self.api_client.backend_url().to_string()
+        self.backend.backend_url().to_string()
     }
 
     /// Spawn the realtime polling loop (default ≤30s, settings-configurable,
@@ -291,7 +311,7 @@ impl PinpointApp {
         self.set_loading(true);
         self.set_error(None);
 
-        let result = self.api_client.login(&email, &password).await;
+        let result = self.backend.login(&email, &password).await;
 
         self.set_loading(false);
 
@@ -334,10 +354,7 @@ impl PinpointApp {
         self.set_loading(true);
         self.set_error(None);
 
-        let result = self
-            .api_client
-            .register(&email, &password, &full_name)
-            .await;
+        let result = self.backend.register(&email, &password, &full_name).await;
 
         self.set_loading(false);
 
@@ -366,7 +383,7 @@ impl PinpointApp {
     /// UI never claims a logout that did not happen.
     pub async fn logout(&self) -> anyhow::Result<()> {
         self.set_loading(true);
-        let result = self.api_client.logout().await;
+        let result = self.backend.logout().await;
         self.set_loading(false);
 
         match result {
@@ -405,7 +422,7 @@ impl PinpointApp {
         self.set_error(None);
 
         let result = self
-            .api_client
+            .backend
             .change_password(
                 current_password.as_deref(),
                 &new_password,
@@ -467,21 +484,21 @@ impl PinpointApp {
     }
 
     pub async fn refresh_friendships(&self) -> anyhow::Result<()> {
-        let friendships = self.api_client.get_friendships().await?;
+        let friendships = self.backend.get_friendships().await?;
         let mut data = self.data.lock().unwrap();
         data.friendships = friendships;
         Ok(())
     }
 
     pub async fn refresh_shares(&self) -> anyhow::Result<()> {
-        let shares = self.api_client.get_location_shares().await?;
+        let shares = self.backend.get_location_shares().await?;
         let mut data = self.data.lock().unwrap();
         data.shares = shares;
         Ok(())
     }
 
     pub async fn refresh_friend_locations(&self) -> anyhow::Result<()> {
-        let locations = self.api_client.get_friend_locations().await?;
+        let locations = self.backend.get_friend_locations().await?;
         let mut data = self.data.lock().unwrap();
         data.locations = locations;
         Ok(())
@@ -495,7 +512,7 @@ impl PinpointApp {
         }
         self.set_loading(true);
         self.set_error(None);
-        let result = self.api_client.send_friend_request(&email).await;
+        let result = self.backend.send_friend_request(&email).await;
         self.set_loading(false);
         if result.is_ok() {
             self.audit_logger
@@ -513,7 +530,7 @@ impl PinpointApp {
 
     pub async fn respond_friendship(&self, id: i64, action: String) -> anyhow::Result<()> {
         self.set_loading(true);
-        let result = self.api_client.respond_to_friendship(id, &action).await;
+        let result = self.backend.respond_to_friendship(id, &action).await;
         self.set_loading(false);
         match &result {
             Ok(()) => {
@@ -536,7 +553,7 @@ impl PinpointApp {
     ) -> anyhow::Result<()> {
         self.set_loading(true);
         let result = self
-            .api_client
+            .backend
             .create_location_share(friendship_id, &direction, &precision)
             .await;
         self.set_loading(false);
@@ -559,7 +576,7 @@ impl PinpointApp {
     ) -> anyhow::Result<()> {
         self.set_loading(true);
         let result = self
-            .api_client
+            .backend
             .update_location_share(share_id, is_active, precision)
             .await;
         self.set_loading(false);
@@ -590,7 +607,7 @@ impl PinpointApp {
             self.set_error(Some("Rate limited — try again shortly.".to_string()));
             return Err(anyhow::anyhow!("Rate limited — try again shortly."));
         }
-        let result = self.api_client.publish_location(lat, lon, accuracy).await;
+        let result = self.backend.publish_location(lat, lon, accuracy).await;
         if let Err(e) = &result {
             self.set_error(Some(e.to_string()));
         } else {
@@ -609,13 +626,13 @@ impl PinpointApp {
 
     // ---- Maximum-feature additions ----
     pub async fn refresh_users(&self) -> anyhow::Result<()> {
-        let users = self.api_client.list_users().await?;
+        let users = self.backend.list_users().await?;
         self.data.lock().unwrap().users = users;
         Ok(())
     }
 
     pub async fn refresh_my_location(&self) -> anyhow::Result<()> {
-        match self.api_client.get_my_location().await {
+        match self.backend.get_my_location().await {
             Ok(loc) => {
                 self.data.lock().unwrap().my_location = Some(loc);
                 Ok(())
@@ -625,17 +642,17 @@ impl PinpointApp {
     }
 
     pub async fn refresh_check_ins(&self) -> anyhow::Result<()> {
-        self.data.lock().unwrap().check_ins = self.api_client.list_check_ins().await?;
+        self.data.lock().unwrap().check_ins = self.backend.list_check_ins().await?;
         Ok(())
     }
 
     pub async fn refresh_emergencies(&self) -> anyhow::Result<()> {
-        self.data.lock().unwrap().emergencies = self.api_client.list_emergencies().await?;
+        self.data.lock().unwrap().emergencies = self.backend.list_emergencies().await?;
         Ok(())
     }
 
     pub async fn delete_share(&self, share_id: i64) -> anyhow::Result<()> {
-        let result = self.api_client.delete_share(share_id).await;
+        let result = self.backend.delete_share(share_id).await;
         match result {
             Ok(()) => {
                 self.audit_logger
@@ -658,7 +675,7 @@ impl PinpointApp {
         label: Option<String>,
     ) -> anyhow::Result<()> {
         let result = self
-            .api_client
+            .backend
             .create_share_with_expiry(
                 friendship_id,
                 &direction,
@@ -677,7 +694,7 @@ impl PinpointApp {
     }
 
     pub async fn delete_friendship(&self, id: i64) -> anyhow::Result<()> {
-        let result = self.api_client.delete_friendship(id).await;
+        let result = self.backend.delete_friendship(id).await;
         match result {
             Ok(()) => {
                 self.refresh_friendships().await?;
@@ -697,10 +714,7 @@ impl PinpointApp {
         note: String,
         kind: String,
     ) -> anyhow::Result<()> {
-        let result = self
-            .api_client
-            .create_check_in(lat, lon, &note, &kind)
-            .await;
+        let result = self.backend.create_check_in(lat, lon, &note, &kind).await;
         match result {
             Ok(()) => {
                 self.audit_logger
@@ -715,7 +729,7 @@ impl PinpointApp {
     }
 
     pub async fn trigger_emergency(&self, lat: f64, lon: f64) -> anyhow::Result<()> {
-        let result = self.api_client.trigger_emergency(lat, lon).await;
+        let result = self.backend.trigger_emergency(lat, lon).await;
         match result {
             Ok(()) => {
                 self.audit_logger
@@ -745,7 +759,7 @@ impl PinpointApp {
             return Err(anyhow::anyhow!("Sign in required"));
         };
         let result = self
-            .api_client
+            .backend
             .update_user(id, serde_json::json!({ "full_name": full_name }))
             .await;
         match result {
@@ -758,7 +772,7 @@ impl PinpointApp {
     }
 
     pub async fn mfa_enroll(&self) -> anyhow::Result<()> {
-        let result = self.api_client.mfa_enroll().await;
+        let result = self.backend.mfa_enroll().await;
         match result {
             Ok((secret, _uri)) => {
                 self.data.lock().unwrap().totp_pending_secret = Some(secret);
@@ -772,7 +786,7 @@ impl PinpointApp {
     }
 
     pub async fn mfa_verify(&self, code: String) -> anyhow::Result<()> {
-        let result = self.api_client.mfa_verify(code.trim()).await;
+        let result = self.backend.mfa_verify(code.trim()).await;
         match result {
             Ok(()) => {
                 let mut data = self.data.lock().unwrap();
@@ -788,7 +802,7 @@ impl PinpointApp {
     }
 
     pub async fn mfa_disable(&self) -> anyhow::Result<()> {
-        let result = self.api_client.mfa_disable().await;
+        let result = self.backend.mfa_disable().await;
         match result {
             Ok(()) => {
                 let mut data = self.data.lock().unwrap();
@@ -804,7 +818,7 @@ impl PinpointApp {
     }
 
     pub async fn refresh_mfa_status(&self) -> anyhow::Result<()> {
-        match self.api_client.mfa_status().await {
+        match self.backend.mfa_status().await {
             Ok(enabled) => {
                 self.data.lock().unwrap().mfa_enabled = enabled;
                 Ok(())

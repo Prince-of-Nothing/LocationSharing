@@ -1,0 +1,11 @@
+# Trunk config for Pinpoint Admin webapp (`weba`).
+# Build: trunk build --config web/weba/Trunk.toml --release
+
+[build]
+target = "../../src/bin/pinpoint-weba.rs"
+dist = "dist"
+public_url = "/admin/"
+filehash = true
+
+[watch]
+ignore = ["dist"]

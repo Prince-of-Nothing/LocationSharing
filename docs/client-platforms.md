@@ -12,23 +12,31 @@ verification path.
 | Windows desktop | `src/main.rs` (`pinpoint-desktop`) | `cargo build --locked` | Builds in CI; run: `cargo run -- --backend http://localhost:8000` |
 | Linux desktop | same binary | `Dockerfile.client` (X11) + `packaging/linux/` (.deb/.desktop) | Image builds; GUI needs X11 host |
 | macOS desktop | same binary | `cargo build --locked` + `packaging/macos/` (.app via `cargo-bundle`) | Needs macOS/Xcode — not built here |
-| Android | same `src/` via `cargo-apk` | `cargo apk build --locked` (`android/`) | Scaffolding (manifest + NCSC); needs NDK/SDK |
-| iOS | same `src/` via `cargo-xcodebuild` | `cargo xcodebuild --locked` (`ios/Info.plist`) | Scaffolding; needs macOS/Xcode |
-| Web (Rust/WASM) | `src/bin/pinpoint-web.rs` + `web/` | `trunk serve --release` | Static shell + wasm hook; full egui UI pending (see below) |
+| Android | same `src/` via `cargo-apk` | `cargo apk build --locked` (`android/`) | Scaffolding (manifest + NCSC); needs NDK/SDK; modular bootstrap in `src/mobile` |
+| iOS | same `src/` via `cargo-xcodebuild` | `cargo xcodebuild --locked` (`ios/Info.plist`) | Scaffolding; needs macOS/Xcode; modular bootstrap in `src/mobile` |
+| Web (Rust/WASM) | `src/bin/pinpoint-web.rs` + `web/` | `trunk serve --config web/Trunk.toml --release` | Static shell + wasm hook; full egui UI pending (see below) |
+| Web Admin `weba` | `src/bin/pinpoint-weba.rs` + `web/weba/` | `trunk serve --config web/weba/Trunk.toml --release` | Modular admin console shell; server-side authz authoritative |
+| Web Kiosk `webk` | `src/bin/pinpoint-webk.rs` + `web/webk/` | `trunk serve --config web/webk/Trunk.toml --release` | Modular kiosk/check-in shell; token/share-link adapter points |
 
 ## Shared behavior (all platforms)
 
 - Map-first landing with offline demo pins; sign-in optional; sign-in
   screens gate Friends/Sharing/Admin/Password.
+- Backend access is modular (`src/backend/`): app/UI/webapp/mobile code depends
+  on `Backend`/`DynBackend` + `BackendConfig`/`BackendKind`, with the current
+  REST v1 contract implemented by `src/api.rs`. Changed backend architectures
+  should be handled by adding/selecting an adapter, not rewriting clients.
 - Backend URL: `--backend` > `$PINPOINT_BACKEND` > `platform::default_backend_url()`
   (`http://localhost:8000` desktop, `http://10.0.2.2:8000` Android emulator).
   Plain HTTP off-loopback is refused client-side (`api::validate_backend_url`, ADR-0006).
-- Transport: session cookie + `X-CSRF-Token` double-submit (`src/api.rs`).
+- Transport (REST v1 adapter): session cookie + `X-CSRF-Token` double-submit (`src/api.rs`).
 - Privacy: friend coordinates are never sent to Nominatim/OSRM/Overpass
   (`src/osm.rs`); OSM hand-off links only; ODbL attribution always rendered.
 - Storage: bookmarks/tilepacks under `~/.pinpoint` on desktop;
   `platform::app_data_dir()` is `None` on Android/iOS/Web → in-memory only.
   OS keychain for tokens is design-only (see `docs/security-architecture.md`).
+- Web variants: `webapp::WebAppKind::{Web,Admin,Kiosk}` share `src/webapp/*`;
+  `webk` kiosk/share-link flows are isolated behind `webapp::kiosk::KioskBackend`.
 
 ## Per-platform build/verify
 

@@ -1,30 +1,49 @@
-//! Factory Pattern — Create API clients and OSM services.
+//! Factory Pattern — Create backend clients and OSM services.
 //!
-//! Factories encapsulate object creation logic, allowing clients to create
-//! objects without knowing the concrete class. Used for creating API
-//! clients with different configurations and OSM service clients.
+//! Factories encapsulate object creation logic. Backend creation is routed
+//! through [`crate::backend`] so changed backend architectures can be selected
+//! by config without touching call sites.
 
 use crate::api::ApiClient;
+use crate::backend::{build_backend, BackendConfig, BackendKind, DynBackend};
 
-/// Factory for creating API clients.
+/// Factory for creating API clients (REST v1 concrete) and modular backends.
 pub struct ApiClientFactory;
 
 impl ApiClientFactory {
-    /// Creates a standard API client for the given backend URL.
+    /// Creates a standard REST API client for the given backend URL.
+    /// Preserved for compatibility; prefer [`Self::create_backend`] for new code.
     pub fn create(backend_url: &str) -> Result<ApiClient, String> {
         ApiClient::new(backend_url).map_err(|e| e.to_string())
     }
 
-    /// Creates an API client with a custom timeout.
-    pub fn create_with_timeout(backend_url: &str, _timeout_secs: u64) -> Result<ApiClient, String> {
+    /// Creates a REST API client with a custom timeout (timeout honored by
+    /// future adapters; current REST client keeps its default).
+    pub fn create_with_timeout(backend_url: &str, timeout_secs: u64) -> Result<ApiClient, String> {
+        let _ = timeout_secs;
         let client = ApiClient::new(backend_url).map_err(|e| e.to_string())?;
         Ok(client)
     }
 
-    /// Creates an offline-mode API client that will fail immediately on
-    /// network calls.
+    /// Creates an offline-mode REST client (loopback; calls will fail when no
+    /// local backend is running, and the app degrades to offline state).
     pub fn create_offline() -> Result<ApiClient, String> {
         ApiClient::new("http://localhost:8000").map_err(|e| e.to_string())
+    }
+
+    /// Create a modular backend selected by config (preferred extension point).
+    pub fn create_backend(config: &BackendConfig) -> Result<DynBackend, String> {
+        build_backend(config).map_err(|e| e.to_string())
+    }
+
+    /// Create the default modular REST v1 backend.
+    pub fn create_default_backend(backend_url: &str) -> Result<DynBackend, String> {
+        Self::create_backend(&BackendConfig {
+            kind: BackendKind::RestV1,
+            base_url: backend_url.to_string(),
+            timeout_secs: None,
+            options: Default::default(),
+        })
     }
 }
 

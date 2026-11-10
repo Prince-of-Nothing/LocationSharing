@@ -19,8 +19,8 @@ pub(crate) mod profile;
 pub(crate) mod sharing;
 pub(crate) mod trips;
 
-use crate::api::ApiClient;
 use crate::app::{CurrentScreen, PinpointApp};
+use crate::backend::DynBackend;
 use crate::osm::OsmClient;
 use eframe::egui::{self, Align, Color32, Direction};
 use std::sync::Arc;
@@ -163,8 +163,10 @@ pub struct PinpointAppUI {
 }
 
 impl PinpointAppUI {
-    pub fn new(api_client: Arc<ApiClient>, screenshot_path: Option<String>) -> Self {
-        let app = Arc::new(PinpointApp::new(api_client, screenshot_path));
+    /// Create the UI with a modular backend (desktop/mobile). Pass any
+    /// `DynBackend` to adapt to changed backend architectures.
+    pub fn new(backend: DynBackend, screenshot_path: Option<String>) -> Self {
+        let app = Arc::new(PinpointApp::new(backend, screenshot_path));
         PinpointApp::start_auto_refresh(Arc::clone(&app));
         Self {
             app,
@@ -203,6 +205,14 @@ impl PinpointAppUI {
             change_password_new: String::new(),
             change_password_confirm: String::new(),
         }
+    }
+
+    /// Compatibility constructor for the concrete REST client.
+    pub fn new_rest(
+        api_client: Arc<crate::api::ApiClient>,
+        screenshot_path: Option<String>,
+    ) -> Self {
+        Self::new(api_client as DynBackend, screenshot_path)
     }
 
     pub fn set_offline_mode(&mut self, offline: bool) {

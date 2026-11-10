@@ -37,6 +37,14 @@ path = "src/bin/map.rs"
 name = "pinpoint-web"
 path = "src/bin/pinpoint-web.rs"
 
+[[bin]]
+name = "pinpoint-weba"
+path = "src/bin/pinpoint-weba.rs"
+
+[[bin]]
+name = "pinpoint-webk"
+path = "src/bin/pinpoint-webk.rs"
+
 [dependencies]
 eframe = { version = "0.32", default-features = true, features = ["glow"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -72,6 +80,25 @@ tokio = { version = "1.0", default-features = false, features = ["rt-multi-threa
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = [
+  "console",
+  "Document",
+  "Element",
+  "HtmlElement",
+  "HtmlInputElement",
+  "HtmlButtonElement",
+  "Node",
+  "Window",
+  "Location",
+  "UrlSearchParams",
+  "Event",
+  "EventTarget",
+  "KeyboardEvent",
+] }
+getrandom = { version = "0.2", features = ["js"] }
+getrandom03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
 
 [dev-dependencies]
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
