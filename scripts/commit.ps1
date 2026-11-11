@@ -3,8 +3,8 @@
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File scripts/commit.ps1 -Message "feat(x): ..." -Body "details"
 #
-# Runs fmt/clippy/build/test, prepends a CHANGELOG entry stub, commits with
-# the co-author trailers from AGENTS.md. Does NOT push.
+# Runs fmt/clippy/build/test, prepends a CHANGELOG entry stub, commits.
+# Does NOT push.
 
 param(
     [Parameter(Mandatory = $true)][string]$Message,
@@ -35,18 +35,8 @@ if (Test-Path $cl) {
     }
 }
 
-$trailers = @(
-    "Co-authored-by: Mordret <blacksnake@noreply.codeberg.org>",
-    "Co-authored-by: Andrei Cliucovschi <cliucovschiandrei@gmail.com>",
-    "Co-authored-by: Pleșu Dinu <dinu.plesu@isa.utm.md>",
-    "Co-authored-by: Nedelea Dragoș <63261775+dragos-nedelea@users.noreply.github.com>",
-    "Co-authored-by: dana-r19 <200202105+dana-r19@users.noreply.github.com>",
-    "Co-authored-by: Tcacenco Nichita <nichita.tcacenco@isa.utm.md>"
-)
-
 $gitArgs = @("commit", "-m", $Message)
 if ($Body) { $gitArgs += @("-m", $Body) }
-foreach ($t in $trailers) { $gitArgs += @("-m", $t) }
 
 git add -A
 git commit @gitArgs

@@ -329,9 +329,8 @@ C:\...\gradlew.bat :app:assembleDebug
 # 2. Export APK
 C:\...\mobile\app\build\outputs\apk\debug\app-debug.apk
 
-# 3. Push commits (co-authored by 6 humans, no bots)
+# 3. Push commits (owner-authored, no co-author trailers)
 git log --format='%H %s' -1
-# Verify co-author trailers present
 
 # 4. Check docs
 cat docs/PRACTICE_STATUS.md
@@ -412,7 +411,7 @@ These credentials seed the Go API (`go run ./cmd/server`) with demo data when `S
 - **Web tiles**: Wikimedia endpoint (`maps.wikimedia.org`); CSP updated; OSM attribution visible (`MapLibreInit` sets `isAttributionEnabled = true`, `isLogoEnabled = true`).
 - **Web clients**: vanilla ES modules (`sw.js` SHELL list); `node --input-type=module --check` in CI; `CSP` in `nginx.conf` / `render.yaml` allow-listed.
 - **Android** (`mobile/README.md`, `mobile/gradle`): Kotlin/Jetpack Compose, Clean Architecture, MapLibre Native, `gradlew.bat` verified (`gradle-8.14` / `gradle-8.10.2` available); `assembleDebug` passes (`BUILD SUCCESSFUL`).
-- **Commits** (`f5af82ad`): includes 6 co-author trailers (`Co-authored-by:`) excluding bots (`qwen.ai`, `copilot`, `dependabot`); `AGENTS.md` references this.
+- **Commits** (`f5af82ad`): owner-authored; no co-author trailers (`Co-authored-by:`) for teammates or bots (`qwen.ai`, `copilot`, `dependabot`); convention defined in `AGENTS.md`.
 - **License / attribution**: `ODbL` visible on map screen; `THIRD_PARTY_NOTICES.md` includes MapLibre BSD-2; `web/THIRD_PARTY_NOTICES.md` includes OSM attribution; no Firebase/FCM SDKs.
 - **ADRs** (`docs/adr/`): `0001` (arch decisions), `0002` (product direction), `0003` (design patterns), `password-auth-with-rotating-refresh-tokens` (security), `store-latest-location-only` (privacy). Content immutable; formatting updated (Mermaid, consistent headings).
 - **Ported artifacts** (`backend/app/services/auth_service.py` etc.): not imported by current `backend/app` — kept as reference; near-duplicate module names (`services/auth_service.py` vs `services/auth_service.py` — same file, different paths in ported artifacts vs main). Not used.

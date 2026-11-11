@@ -127,5 +127,5 @@ MIT © 2026 Pinpoint
 ## Contributing
 
 Small PRs, conventional commits, docs in the same pr. Security changes need
-a regression test and a fail-closed test. Every commit is co-authored by
-the human team members (see `CONTRIBUTING.md`).
+a regression test and a fail-closed test. Commits are authored by the
+repository owner only — no co-author trailers (see `CONTRIBUTING.md`).

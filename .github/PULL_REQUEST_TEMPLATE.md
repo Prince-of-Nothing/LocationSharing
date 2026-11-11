@@ -18,7 +18,7 @@
 - [ ] `scripts/e2e.ps1` green (if backend touched)
 - [ ] `CHANGELOG.md` `[Unreleased]` updated (Added/Changed/Fixed/Removed)
 - [ ] Docs updated in the same PR
-- [ ] Co-author trailers added to every commit (see `AGENTS.md`)
+- [ ] No `Co-authored-by:` trailers on any commit (owner-only authorship, see `AGENTS.md`)
 
 ## Related
 

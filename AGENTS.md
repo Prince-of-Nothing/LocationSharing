@@ -49,18 +49,9 @@ multiplatform section); they share `src/` via `cfg(target_os)`.
 
 ## Commits
 
-Every commit is co-authored by the human team members (not bots). Add trailers on each commit:
-
-```
-Co-authored-by: Mordret <blacksnake@noreply.codeberg.org>
-Co-authored-by: Andrei Cliucovschi <cliucovschiandrei@gmail.com>
-Co-authored-by: Pleșu Dinu <dinu.plesu@isa.utm.md>
-Co-authored-by: Nedelea Dragoș <63261775+dragos-nedelea@users.noreply.github.com>
-Co-authored-by: dana-r19 <200202105+dana-r19@users.noreply.github.com>
-Co-authored-by: Tcacenco Nichita <nichita.tcacenco@isa.utm.md>
-```
-
-Exclude bots: `qwen.ai[bot]`, copilot, dependabot.
+Every commit is authored by the repository owner only. No `Co-authored-by:`
+trailers — not for teammates, not for bots (`qwen.ai[bot]`, copilot,
+dependabot).
 
 ## Module map (AI-friendly)
 
@@ -89,10 +80,10 @@ Additive seams (never rewrite): new table → migration + domain module; new scr
 - Every completed feature gets a commit (per the Commits section) and a
   one-line entry under `[Unreleased]` in `CHANGELOG.md` (Added/Changed/
   Fixed/Removed). The `scripts/commit.ps1 -Message "..."` helper does
-  both: runs the full gate, prepends a stub, commits with trailers.
+  both: runs the full gate, prepends a stub, commits.
 - When the user says "push" (or "commit and push"): run the full gate,
-  update `CHANGELOG.md`, commit with all co-author trailers, then
-  `git push` (only after the gate is green). Never push a red tree.
+  update `CHANGELOG.md`, commit, then `git push` (only after the gate is
+  green). Never push a red tree.
 - Never commit without running `cargo fmt/clippy/build/test` first.
 
 ## Docs conventions

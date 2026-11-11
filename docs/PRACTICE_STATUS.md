@@ -10,7 +10,7 @@
 | Mid Oct | Hand-rolled `JsonConverterFactory` (replaces jakewharton `retrofit2-kotlinx-serialization-converter` 1.0.0 whose `Factory`/`Serializer` are `internal`) created; `core:network/build.gradle.kts` cleaned; `ApiClient.kt` fixed; `ApiServices.kt` `FriendsLocationsResponse` import added | ✅ Compiles |
 | Late Oct | `:core:data` `SessionStore.login()` → `SessionStore.save()` (satisfies `SessionRepository` contract); `:core:map` observer interfaces corrected (`onStatus(OfflineRegionStatus?)`, `onError(String?)`, `onList(Array<OfflineRegion>?)`) | ✅ `BUILD SUCCESSFUL` (51s) |
 | Late Oct | `mobile/app/build.gradle.kts` updated: `core:network` added to app dependencies; `API_BASE_URL` updated to Render; `render.yaml` created (Go API + Python API + Web Client + Redis); `docs/practice/` structure prepared | ✅ Deployed-ready |
-| Current | `docs/PRACTICE_STATUS.md` written; `render.yaml` available; `app-debug.apk` (51 MB) exported locally; `AGENTS.md` co-author trailers (6 humans) verified; ADRs immutable (formatting only); docs conventions (Mermaid, Diátaxis) maintained | ✅ Ready for share |
+| Current | `docs/PRACTICE_STATUS.md` written; `render.yaml` available; `app-debug.apk` (51 MB) exported locally; `AGENTS.md` owner-only commit convention in force; ADRs immutable (formatting only); docs conventions (Mermaid, Diátaxis) maintained | ✅ Ready for share |
 
 ## Live Artifacts
 
