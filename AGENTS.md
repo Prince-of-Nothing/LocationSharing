@@ -54,6 +54,18 @@ Every commit is authored by the repository owner only. No `Co-authored-by:`
 trailers — not for teammates, not for bots (`qwen.ai[bot]`, copilot,
 dependabot).
 
+Prefix every subject with a type flag so history is scannable:
+
+- `[FEATURE] area: what was added` — new capability
+- `[FIX] area: what was broken` — bug/regression fix
+- `[DOCS] area: what was documented` — docs only
+- `[RELEASE] vX.Y.Z` — version bump, release notes, packaging
+
+Keep commits small and single-purpose. Do not mix a release commit with
+feature work, and do not leave a completed feature uncommitted. The release
+commit is the only one tagged `vX.Y.Z`.
+
+
 ## Module map (AI-friendly)
 
 Pinpoint is one Rust crate (`pinpoint-desktop`) serving desktop/Android/iOS/Web.
