@@ -12,6 +12,18 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [FEATURE] **Saved-place filters**: category chips derived from saved places
+  (All / cafe / pharmacy / …) with a category badge per row.
+- [FEATURE] **Per-account route history**: the last 20 routes (origin,
+  destination, stops, mode, distance/time) are stored on-device under
+  `pinpoint.v1.<userId>.routes`; click to reopen, clear separately from
+  places. Route result lists use a delegated click handler so a fresh search
+  result cannot lose its listener.
+- [FEATURE] **Route panel drag/collapse**: drag the handle to reposition on
+  desktop, or collapse to a compact summary; the map stays visible.
+- [FEATURE] **Live next-stop ETA**: during Navigate, the next stop advances
+  when within 60 m, completed nodes mark as done, and the remaining
+  distance/time is recalculated from the current fix.
 - [FEATURE] **Map appearance settings**: label size (10–18 px) and icon size
   (18–40 px) sliders, persisted on the device; pins, labels, tooltips and
   route markers follow the setting.

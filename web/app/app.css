@@ -867,3 +867,70 @@ header { height: 60px; }
 .route-next { font-size: 0.8rem; margin-bottom: 0.4rem; }
 
 #map-label-size, #map-icon-size { padding: 0; background: transparent; }
+
+.saved-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-bottom: 0.5rem;
+}
+.saved-filter {
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+.saved-filter.active { border-color: var(--accent); color: var(--accent); }
+
+.sheet-drag {
+  height: 10px;
+  margin: -0.45rem 1.4rem 0.35rem;
+  border-radius: 999px;
+  background: transparent;
+  cursor: grab;
+  position: relative;
+}
+.sheet-drag::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 3px;
+  width: 42px;
+  height: 4px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: var(--border);
+}
+.sheet-drag:active { cursor: grabbing; }
+.sheet-collapse {
+  position: absolute;
+  top: 0.35rem;
+  right: 2.45rem;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+}
+.sheet-collapse:hover { color: var(--text); border-color: var(--border); }
+.sheet.collapsed .route-field,
+.sheet.collapsed #route-stops,
+.sheet.collapsed #route-add-stop,
+.sheet.collapsed .route-avoid,
+.sheet.collapsed .route-progress,
+.sheet.collapsed #route-next,
+.sheet.collapsed .route-alternatives,
+.sheet.collapsed .route-steps,
+.sheet.collapsed .row { display: none; }
+.sheet.collapsed h2 { margin-bottom: 0.25rem; }
+.rp-node.done {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #052e1b;
+  opacity: 0.8;
+}

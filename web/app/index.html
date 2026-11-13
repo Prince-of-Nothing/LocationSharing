@@ -177,6 +177,8 @@
           </div>
 
           <div id="route-panel" class="sheet hidden" aria-live="polite">
+            <div class="sheet-drag" id="route-drag" title="Drag to move"></div>
+            <button type="button" class="sheet-collapse" id="route-collapse" aria-label="Collapse route panel">▾</button>
             <button type="button" class="sheet-close" id="route-close" aria-label="Close route">×</button>
             <h2>Route</h2>
             <div class="route-field">
@@ -249,6 +251,7 @@
 
           <div class="card">
             <h2>Saved places</h2>
+            <div id="saved-filters" class="saved-filters"></div>
             <ul id="saved-list" class="list"></ul>
             <button type="button" id="clear-saved" class="secondary">Clear saved</button>
           </div>
@@ -257,6 +260,12 @@
             <h2>Recent places</h2>
             <ul id="recent-list" class="list"></ul>
             <button type="button" id="clear-recents" class="secondary">Clear history</button>
+          </div>
+
+          <div class="card">
+            <h2>Recent routes</h2>
+            <ul id="route-history-list" class="list"></ul>
+            <button type="button" id="clear-routes" class="secondary">Clear routes</button>
           </div>
 
           <div class="card">

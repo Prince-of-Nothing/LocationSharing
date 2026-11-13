@@ -18,6 +18,7 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
   let searchController = null;
   let debounceTimer = null;
   let selected = null;
+  let currentResults = [];
   let route = {
     origin: null,
     destination: null,
@@ -29,7 +30,10 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
     via: [],
     avoid: [],
     addingStop: false,
+    stopIndex: 0,
   };
+
+  let savedFilter = "all";
 
   // --- per-account on-device storage (never leaves the browser) ------------
   function accountKey(kind) {
@@ -103,16 +107,37 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
   function renderStorage() {
     const saved = loadList("savedPlaces");
     const recents = loadList("recents");
-    savedList.innerHTML = saved.length ? "" : '<li class="muted">No saved places.</li>';
+    const categories = [...new Set(saved.map((place) => place.category || "place"))].sort();
+    if (savedFilter !== "all" && !categories.includes(savedFilter)) savedFilter = "all";
+
+    const filters = $("saved-filters");
+    filters.innerHTML = "";
+    for (const category of ["all", ...categories]) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `saved-filter${category === savedFilter ? " active" : ""}`;
+      btn.textContent = category === "all" ? "All" : category;
+      btn.addEventListener("click", () => {
+        savedFilter = category;
+        renderStorage();
+      });
+      filters.appendChild(btn);
+    }
+
+    const visible = saved.filter(
+      (place) => savedFilter === "all" || (place.category || "place") === savedFilter,
+    );
+    savedList.innerHTML = visible.length ? "" : '<li class="muted">No saved places.</li>';
     recentList.innerHTML = recents.length ? "" : '<li class="muted">No recent places.</li>';
 
-    for (const place of saved) {
+    for (const place of visible) {
       savedList.appendChild(storageRow(place, "savedPlaces"));
     }
     for (const place of recents) {
       recentList.appendChild(storageRow(place, "recents"));
     }
     updateSaveButton();
+    renderRouteHistory();
   }
 
   function storageRow(place, kind) {
@@ -134,8 +159,91 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
       );
       renderStorage();
     });
-    li.append(show, remove);
+    const badge = document.createElement("span");
+    badge.className = "badge";
+    badge.textContent = place.category || "place";
+    li.append(show, badge, remove);
     return li;
+  }
+
+  // --- route history (per account, on-device) ----------------------------
+  function loadRoutes() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(accountKey("routes")) || "[]");
+      return Array.isArray(raw)
+        ? raw.filter(
+            (entry) =>
+              entry?.from?.lat != null &&
+              entry?.to?.lat != null &&
+              Number.isFinite(Number(entry.from.lat)) &&
+              Number.isFinite(Number(entry.to.lat)),
+          )
+        : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function saveRoutes(routes) {
+    try {
+      localStorage.setItem(accountKey("routes"), JSON.stringify(routes.slice(0, 20)));
+    } catch (_) {
+      // quota/private mode
+    }
+  }
+
+  function rememberRoute(chosen) {
+    if (!route.origin || !route.destination) return;
+    const record = {
+      from: { ...route.origin },
+      to: { ...route.destination },
+      via: route.via.map((stop) => ({ ...stop })),
+      mode: route.mode,
+      distance_m: chosen.distance_m,
+      duration_s: chosen.duration_s,
+      at: Date.now(),
+    };
+    const same = (entry) =>
+      entry.from.label === record.from.label &&
+      entry.to.label === record.to.label &&
+      entry.mode === record.mode &&
+      (entry.via || []).length === record.via.length;
+    saveRoutes([record, ...loadRoutes().filter((entry) => !same(entry))]);
+    renderRouteHistory();
+  }
+
+  function renderRouteHistory() {
+    const list = $("route-history-list");
+    if (!list) return;
+    const routes = loadRoutes();
+    list.innerHTML = routes.length ? "" : '<li class="muted">No recent routes.</li>';
+    for (const entry of routes) {
+      const li = document.createElement("li");
+      const open = document.createElement("button");
+      open.type = "button";
+      open.className = "link";
+      open.textContent = `${entry.from.label || "A"} → ${entry.to.label || "B"} · ${formatDistance(entry.distance_m)} · ${formatDuration(entry.duration_s)}`;
+      open.addEventListener("click", () => openRouteHistory(entry));
+      const mode = document.createElement("span");
+      mode.className = "badge";
+      mode.textContent = entry.mode;
+      li.append(open, mode);
+      list.appendChild(li);
+    }
+  }
+
+  function openRouteHistory(entry) {
+    route.origin = { ...entry.from };
+    route.destination = { ...entry.to };
+    route.via = (entry.via || []).map((stop) => ({ ...stop }));
+    route.mode = entry.mode || "driving";
+    route.stopIndex = 0;
+    renderRouteFields();
+    document.querySelectorAll(".mode").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.mode === route.mode);
+    });
+    routePanel.classList.remove("hidden");
+    planRoute();
   }
 
   fetch("/map/capabilities")
@@ -211,6 +319,7 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
   }
 
   function renderResults(items) {
+    currentResults = items;
     results.innerHTML = "";
     if (!items.length) {
       results.innerHTML = '<div class="result muted">No places found near here.</div>';
@@ -219,6 +328,7 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "result";
+        btn.dataset.index = String(currentResults.indexOf(place));
         const name = document.createElement("span");
         name.className = "name";
         name.textContent = place.short_name || place.display_name || "Place";
@@ -227,10 +337,6 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
         const dist = Number.isFinite(place.distance_m) ? ` · ${formatDistance(place.distance_m)}` : "";
         meta.textContent = `${place.display_name || ""}${dist}`;
         btn.append(name, meta);
-        btn.addEventListener("click", () => {
-          showResults(false);
-          selectPlace(place);
-        });
         results.appendChild(btn);
       }
     }
@@ -274,6 +380,7 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
     };
     route.via = [];
     route.addingStop = false;
+    route.stopIndex = 0;
     renderRouteFields();
     routePanel.classList.remove("hidden");
     placeSheet.classList.add("hidden");
@@ -342,6 +449,8 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
       route.routes = Array.isArray(body.routes) ? body.routes : [];
       if (!route.routes.length) throw new Error("No route found between these points.");
       route.index = 0;
+      route.stopIndex = 0;
+      rememberRoute(route.routes[0]);
       renderAlternatives();
       applyRoute(0);
     } catch (err) {
@@ -387,15 +496,62 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
       .join("");
     wrap.classList.remove("hidden");
 
+    const nextIndex =
+      route.stopIndex < route.via.length ? route.stopIndex + 1 : nodes.length - 1;
+    wrap.querySelectorAll(".rp-node").forEach((node, index) => {
+      node.classList.toggle("next", index === nextIndex);
+      node.classList.toggle("done", index < nextIndex);
+    });
+
     const next = $("route-next");
-    if (route.via.length && chosen.legs?.length) {
-      const leg = chosen.legs[0];
-      next.textContent = `Next stop 1 · ${formatDistance(leg.distance_m)} · ${formatDuration(leg.duration_s)}`;
-      wrap.querySelectorAll(".rp-node")[1]?.classList.add("next");
+    if (route.stopIndex < route.via.length) {
+      const leg = chosen.legs?.[route.stopIndex];
+      next.textContent = leg
+        ? `Next stop ${route.stopIndex + 1} · ${formatDistance(leg.distance_m)} · ${formatDuration(leg.duration_s)}`
+        : `Next stop ${route.stopIndex + 1}`;
     } else {
       next.textContent = `Destination · ${formatDistance(chosen.distance_m)} · ${formatDuration(chosen.duration_s)}`;
-      wrap.querySelectorAll(".rp-node")[nodes.length - 1]?.classList.add("next");
     }
+  }
+
+  function haversineM(lat1, lon1, lat2, lon2) {
+    const r = 6371000;
+    const p1 = (lat1 * Math.PI) / 180;
+    const p2 = (lat2 * Math.PI) / 180;
+    const dp = ((lat2 - lat1) * Math.PI) / 180;
+    const dl = ((lon2 - lon1) * Math.PI) / 180;
+    const a = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+    return 2 * r * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  function updateLiveNext(fix) {
+    const chosen = route.routes[route.index];
+    if (!chosen) return;
+    const target = route.via[route.stopIndex] || route.destination;
+    if (!target) return;
+    const distance = haversineM(fix.lat, fix.lon, Number(target.lat), Number(target.lon));
+    if (route.via[route.stopIndex] && distance < 60) {
+      route.stopIndex += 1;
+      renderRouteProgress(chosen);
+    }
+    const activeTarget = route.via[route.stopIndex] || route.destination;
+    if (!activeTarget) return;
+    const remaining = haversineM(
+      fix.lat,
+      fix.lon,
+      Number(activeTarget.lat),
+      Number(activeTarget.lon),
+    );
+    const leg =
+      route.stopIndex < route.via.length
+        ? chosen.legs?.[route.stopIndex]
+        : chosen.legs?.[chosen.legs.length - 1];
+    const remainingSeconds =
+      leg && leg.distance_m > 0 ? (leg.duration_s * remaining) / leg.distance_m : null;
+    $("route-next").textContent =
+      route.stopIndex < route.via.length
+        ? `Next stop ${route.stopIndex + 1} · ${formatDistance(remaining)} · ~${formatDuration(remainingSeconds)}`
+        : `Destination · ${formatDistance(remaining)} · ~${formatDuration(remainingSeconds)}`;
   }
 
   async function shareRoute() {
@@ -579,6 +735,7 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
         mapApi.setSelfLocation(fix);
         route.origin = { lat: fix.lat, lon: fix.lon, label: "My location" };
         renderRouteFields();
+        updateLiveNext(fix);
         const chosen = route.routes[route.index];
         const step = chosen?.steps?.[0]?.text || "Following route";
         const meta = chosen
@@ -653,6 +810,17 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
     });
   });
 
+  // One delegated handler survives result re-renders (the previous
+  // per-button listeners could go stale between a search response and click).
+  results.addEventListener("click", (event) => {
+    const btn = event.target.closest("button.result");
+    if (!btn) return;
+    const place = currentResults[Number(btn.dataset.index)];
+    if (!place) return;
+    showResults(false);
+    selectPlace(place);
+  });
+
   $("place-close").addEventListener("click", hidePlace);
   $("place-directions").addEventListener("click", () => {
     if (selected) openRouteFor(selected);
@@ -712,6 +880,11 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
     renderStorage();
     setStatus("Recent places cleared for this account.");
   });
+  $("clear-routes").addEventListener("click", () => {
+    saveRoutes([]);
+    renderRouteHistory();
+    setStatus("Route history cleared for this account.");
+  });
 
   $("route-close").addEventListener("click", () => {
     clearRoutePanel();
@@ -752,6 +925,33 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
   });
 
   renderStorage();
+
+  // Drag/collapse the route panel (desktop); touch uses the bottom sheet.
+  const dragHandle = $("route-drag");
+  let panelDrag = null;
+  dragHandle.addEventListener("pointerdown", (event) => {
+    if (window.innerWidth < 760) return;
+    const rect = routePanel.getBoundingClientRect();
+    panelDrag = { startY: event.clientY, startTop: rect.top };
+    dragHandle.setPointerCapture(event.pointerId);
+  });
+  dragHandle.addEventListener("pointermove", (event) => {
+    if (!panelDrag) return;
+    const top = Math.max(
+      70,
+      Math.min(window.innerHeight - 220, panelDrag.startTop + event.clientY - panelDrag.startY),
+    );
+    routePanel.style.top = `${top}px`;
+  });
+  const endDrag = () => {
+    panelDrag = null;
+  };
+  dragHandle.addEventListener("pointerup", endDrag);
+  dragHandle.addEventListener("pointercancel", endDrag);
+  $("route-collapse").addEventListener("click", () => {
+    const collapsed = routePanel.classList.toggle("collapsed");
+    $("route-collapse").textContent = collapsed ? "▸" : "▾";
+  });
 
   return {
     onMapClick,
