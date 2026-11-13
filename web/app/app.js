@@ -3,6 +3,7 @@
 
 import { createMap } from "./map.js";
 import { initNavigation } from "./nav.js";
+import { createAdminConsole } from "./admin.js";
 
 const state = {
   csrf: null,
@@ -102,6 +103,8 @@ async function logout() {
   $("recent-list").innerHTML = "";
   show($("app-panel"), false);
   show($("session-bar"), false);
+  show($("admin-tab"), false);
+  adminConsole?.close();
   show($("recovery-panel"), false);
   $("recovery-code").textContent = "";
   show($("login-panel"), true);
@@ -113,6 +116,7 @@ async function enterApp() {
   show($("session-bar"), true);
   show($("app-panel"), true);
   $("user-email").textContent = state.user?.email || "";
+  updateAdminTab();
   ensureMap().map.invalidateSize();
   await refresh();
 }
@@ -122,6 +126,7 @@ async function refresh() {
     const me = await api("/api/v1/auth/me");
     state.user = me;
     $("user-email").textContent = me?.email || "";
+    updateAdminTab();
   } catch (_) {
     show($("app-panel"), false);
     show($("session-bar"), false);
@@ -317,6 +322,8 @@ async function logoutAll() {
   $("recent-list").innerHTML = "";
   show($("app-panel"), false);
   show($("session-bar"), false);
+  show($("admin-tab"), false);
+  adminConsole?.close();
   show($("recovery-panel"), false);
   $("recovery-code").textContent = "";
   show($("login-panel"), true);
@@ -328,6 +335,27 @@ async function logoutAll() {
 // ---------------------------------------------------------------------------
 let mapApi = null;
 let nav = null;
+let adminConsole = null;
+
+function canAdmin() {
+  return ["admin", "administrator"].includes(state.user?.role);
+}
+
+function updateAdminTab() {
+  show($("admin-tab"), canAdmin());
+  if (!canAdmin()) adminConsole?.close();
+}
+
+function ensureAdminConsole() {
+  if (!adminConsole) {
+    adminConsole = createAdminConsole({
+      api,
+      setStatus,
+      getUser: () => state.user,
+    });
+  }
+  return adminConsole;
+}
 
 function ensureMap() {
   if (mapApi) return mapApi;
@@ -459,6 +487,14 @@ $("recovery-dismiss").addEventListener("click", () => {
 
 $("logout").addEventListener("click", logout);
 $("logout-all").addEventListener("click", logoutAll);
+
+$("admin-tab").addEventListener("click", () => ensureAdminConsole().open("overview"));
+$("admin-close").addEventListener("click", () => adminConsole?.close());
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("admin-panel").classList.contains("hidden")) {
+    adminConsole?.close();
+  }
+});
 
 $("publish-form").addEventListener("submit", async (e) => {
   e.preventDefault();

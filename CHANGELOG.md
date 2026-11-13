@@ -12,6 +12,12 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [FEATURE] **Modular admin console**: role-gated Admin tab in the web client
+  with a module registry (Overview, Users, Diagnostics/Audit placeholders),
+  `/api/v1/admin/overview|users|users/:id`, safe purge that revokes sessions
+  and cascades friendships/shares/locations/check-ins/emergencies, and
+  self-demotion/self-deletion guards. Extension guide:
+  `docs/admin-console.md`.
 - [FEATURE] **Web place search and A→B routing**: same-origin
   `/map/search`, `/map/reverse`, `/map/route` proxies over `src/osm.rs`
   (validation, LRU cache, 2-permit route semaphore, `alternatives=true`),
@@ -32,6 +38,11 @@ The per-item flagged list for this release is in
 - [FEATURE] **Locate me** (explicit button, browser permission only) and
   route follow mode using `watchPosition` (preview, no voice).
 ### Fixed
+- [FIX] **User management was open to any signed-in account** (critical): the
+  existing list/create/update/delete user endpoints did not check for an
+  admin role, so a resident could raise their own role or delete accounts.
+  They now require `admin`/`administrator`; self-role/active changes are
+  refused and `/users/search` requires a session.
 - [FIX] **Navigation Start failed when geolocation was blocked**: “Navigate”
   now always enters a route-preview banner (distance/time + first step) even
   without GPS, shows a precise blocked/unavailable/timeout message with an

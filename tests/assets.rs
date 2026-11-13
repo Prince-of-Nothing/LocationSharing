@@ -121,6 +121,24 @@ async fn favicon_is_served_locally() {
 }
 
 #[tokio::test]
+async fn admin_assets_are_served() {
+    let app = pinpoint_desktop::server::router(pinpoint_desktop::server::AppState::new());
+    for path in [
+        "/admin.js",
+        "/admin/overview.js",
+        "/admin/users.js",
+        "/admin/placeholder.js",
+    ] {
+        let resp = app
+            .clone()
+            .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK, "{path}");
+    }
+}
+
+#[tokio::test]
 async fn leaflet_is_vendored_and_served() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
     let css = std::fs::read_to_string(root.join("web/app/vendor/leaflet.css"))

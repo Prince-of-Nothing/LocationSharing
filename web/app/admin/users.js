@@ -1,0 +1,131 @@
+// Admin → Users: list, search, role/active changes, safe purge.
+// All authorization is enforced by /api/v1/admin/*; this file is only a view.
+
+export const usersModule = {
+  id: "users",
+  title: "Users",
+  order: 20,
+  async mount(el, ctx) {
+    el.innerHTML = `
+      <div class="admin-toolbar">
+        <input id="admin-user-search" type="search" placeholder="Filter by email or name…" aria-label="Filter users" />
+        <button type="button" id="admin-users-refresh" class="secondary">Refresh</button>
+      </div>
+      <div id="admin-users-table"></div>`;
+    const search = el.querySelector("#admin-user-search");
+    const table = el.querySelector("#admin-users-table");
+    let users = [];
+
+    async function load() {
+      const data = await ctx.api("/api/v1/admin/users");
+      users = Array.isArray(data?.users) ? data.users : [];
+      render();
+    }
+
+    function render() {
+      const needle = search.value.trim().toLowerCase();
+      const rows = users.filter((u) => {
+        if (!needle) return true;
+        return `${u.email} ${u.full_name} ${u.role}`.toLowerCase().includes(needle);
+      });
+      if (!rows.length) {
+        table.innerHTML = '<p class="muted">No matching users.</p>';
+        return;
+      }
+      const me = ctx.getUser?.()?.id;
+      table.innerHTML = `
+        <table class="admin-table">
+          <thead>
+            <tr><th>User</th><th>Role</th><th>Active</th><th></th></tr>
+          </thead>
+          <tbody>
+            ${rows
+              .map(
+                (u) => `
+              <tr data-id="${u.id}">
+                <td>
+                  <strong>${escapeHtml(u.full_name)}</strong>
+                  <span class="muted">${escapeHtml(u.email)}</span>
+                  <span class="badge ${u.auth_method === "anonymous" ? "pending" : "accepted"}">${escapeHtml(u.auth_method)}</span>
+                </td>
+                <td>
+                  <select data-action="role" ${u.id === me ? "disabled" : ""}>
+                    ${["resident", "admin", "administrator"]
+                      .map((r) => `<option value="${r}" ${r === u.role ? "selected" : ""}>${r}</option>`)
+                      .join("")}
+                  </select>
+                </td>
+                <td>
+                  <input type="checkbox" data-action="active" ${u.is_active ? "checked" : ""} ${u.id === me ? "disabled" : ""} aria-label="Active" />
+                </td>
+                <td class="admin-actions">
+                  <button type="button" class="secondary" data-action="delete" ${u.id === me ? "disabled" : ""}>Delete</button>
+                </td>
+              </tr>`,
+              )
+              .join("")}
+          </tbody>
+        </table>`;
+    }
+
+    table.addEventListener("change", async (event) => {
+      const target = event.target;
+      const row = target.closest("tr[data-id]");
+      if (!row) return;
+      const id = Number(row.dataset.id);
+      try {
+        if (target.dataset.action === "role") {
+          await ctx.api(`/api/v1/admin/users/${id}`, { method: "PATCH", body: { role: target.value } });
+          ctx.setStatus("Role updated.");
+          await load();
+        }
+        if (target.dataset.action === "active") {
+          await ctx.api(`/api/v1/admin/users/${id}`, {
+            method: "PATCH",
+            body: { is_active: target.checked },
+          });
+          ctx.setStatus("User updated.");
+          await load();
+        }
+      } catch (err) {
+        ctx.setStatus(err.message, true);
+        await load();
+      }
+    });
+
+    table.addEventListener("click", async (event) => {
+      const target = event.target;
+      if (target.dataset.action !== "delete") return;
+      const row = target.closest("tr[data-id]");
+      if (!row) return;
+      const id = Number(row.dataset.id);
+      const user = users.find((u) => u.id === id);
+      if (!user) return;
+      const ok = window.confirm(
+        `Delete ${user.email}?\n\nThis removes the account, sessions, friendships, shares, locations, check-ins and emergencies. This cannot be undone.`,
+      );
+      if (!ok) return;
+      try {
+        await ctx.api(`/api/v1/admin/users/${id}`, { method: "DELETE" });
+        ctx.setStatus("User deleted.");
+        await load();
+      } catch (err) {
+        ctx.setStatus(err.message, true);
+      }
+    });
+
+    search.addEventListener("input", render);
+    el.querySelector("#admin-users-refresh").addEventListener("click", load);
+    await load();
+  },
+};
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }[c]));
+}

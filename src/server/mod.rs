@@ -18,6 +18,7 @@
 //!
 //! Run: `cargo run --bin pinpoint-server` (listens on 127.0.0.1:8000).
 
+mod admin_handlers;
 mod auth_handlers;
 mod handlers;
 mod locations_handlers;
@@ -145,10 +146,18 @@ pub fn router(state: AppState) -> Router {
         .merge(users_router())
         .merge(locations_router())
         .merge(map_router())
+        .merge(admin_router())
         .route("/", get(web_handlers::index))
         .route("/app.js", get(web_handlers::app_js))
         .route("/map.js", get(web_handlers::map_js))
         .route("/nav.js", get(web_handlers::nav_js))
+        .route("/admin.js", get(web_handlers::admin_js))
+        .route("/admin/overview.js", get(web_handlers::admin_overview_js))
+        .route("/admin/users.js", get(web_handlers::admin_users_js))
+        .route(
+            "/admin/placeholder.js",
+            get(web_handlers::admin_placeholder_js),
+        )
         .route("/app.css", get(web_handlers::app_css))
         .route("/favicon.svg", get(web_handlers::favicon))
         .route("/favicon.ico", get(web_handlers::favicon))
@@ -201,6 +210,18 @@ pub fn auth_router() -> Router<AppState> {
         .route("/api/v1/auth/mfa/verify", post(auth_handlers::mfa_verify))
         .route("/api/v1/auth/mfa/status", get(auth_handlers::mfa_status))
         .route("/api/v1/auth/mfa", delete(auth_handlers::mfa_disable))
+}
+
+/// Admin console routes (`/api/v1/admin/*`). Role-gated per handler so the
+/// same router can later run on a dedicated admin binary/port.
+pub fn admin_router() -> Router<AppState> {
+    Router::new()
+        .route("/api/v1/admin/overview", get(admin_handlers::overview))
+        .route("/api/v1/admin/users", get(admin_handlers::list_users))
+        .route(
+            "/api/v1/admin/users/:id",
+            patch(admin_handlers::update_user).delete(admin_handlers::delete_user),
+        )
 }
 
 /// Users + friendships service routes. Independently scalable.

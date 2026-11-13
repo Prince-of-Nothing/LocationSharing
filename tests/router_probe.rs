@@ -263,6 +263,68 @@ async fn anonymous_account_creation_and_recovery() {
 }
 
 #[tokio::test]
+async fn admin_endpoints_require_admin_role() {
+    use pinpoint_desktop::server::{router, AppState};
+
+    let state = AppState::new();
+    // Seed: 1 = administrator, 2 = alice (resident).
+    let (alice_sid, _) = state.create_session(2, "email", false).await;
+    let (admin_sid, _) = state.create_session(1, "email", false).await;
+    let app = router(state);
+
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/admin/overview")
+                .header("cookie", format!("session_id={alice_sid}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/admin/overview")
+                .header("cookie", format!("session_id={admin_sid}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn admin_delete_user_revokes_sessions() {
+    use pinpoint_desktop::server::{router, AppState};
+
+    let state = AppState::new();
+    let (admin_sid, admin_csrf) = state.create_session(1, "email", false).await;
+    let (bob_sid, _) = state.create_session(3, "email", false).await;
+    let app = router(state.clone());
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri("/api/v1/admin/users/3")
+                .header("cookie", format!("session_id={admin_sid}"))
+                .header("x-csrf-token", &admin_csrf)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert!(state.get_session(&bob_sid).await.is_none());
+    assert!(state.store.lock().unwrap().find_user_by_id(3).is_none());
+}
+
+#[tokio::test]
 async fn map_capabilities_lists_driving() {
     let app = pinpoint_desktop::server::map_router()
         .with_state(pinpoint_desktop::server::AppState::new());

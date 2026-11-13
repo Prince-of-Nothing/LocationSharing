@@ -6,12 +6,19 @@ use axum::{
 };
 use serde_json::{json, Value};
 
+use super::admin_handlers::require_admin;
 use super::handlers::{require_current_user, user_json};
 use super::state::AppState;
 use super::{error_envelope, CurrentUser, IntoResponse};
 
-/// `GET /users/` — list users (demo: all users).
-pub async fn list_users(State(state): State<AppState>) -> impl IntoResponse {
+/// `GET /users/` — admin-only private listing.
+pub async fn list_users(
+    State(state): State<AppState>,
+    cu: Option<Extension<CurrentUser>>,
+) -> impl IntoResponse {
+    if let Err(resp) = require_admin(&state, cu) {
+        return resp;
+    }
     let store = state.store.lock().unwrap();
     let users: Vec<Value> = store
         .users
@@ -27,14 +34,18 @@ pub async fn list_users(State(state): State<AppState>) -> impl IntoResponse {
             })
         })
         .collect();
-    (StatusCode::OK, Json(users))
+    (StatusCode::OK, Json(users)).into_response()
 }
 
 /// `POST /users/` (admin) — create user.
 pub async fn create_user(
     State(state): State<AppState>,
+    cu: Option<Extension<CurrentUser>>,
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
+    if let Err(resp) = require_admin(&state, cu) {
+        return resp;
+    }
     let email = body
         .get("email")
         .and_then(Value::as_str)
@@ -130,9 +141,14 @@ pub async fn get_user(State(state): State<AppState>, Path(id): Path<i64>) -> imp
 /// wipe-rewrite, this service upserts single rows).
 pub async fn update_user(
     State(state): State<AppState>,
+    cu: Option<Extension<CurrentUser>>,
     Path(id): Path<i64>,
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
+    let cu = match require_current_user(cu) {
+        Ok(cu) => cu,
+        Err(resp) => return resp,
+    };
     let full_name = body
         .get("full_name")
         .and_then(Value::as_str)
@@ -153,6 +169,20 @@ pub async fn update_user(
     }
     let is_active = body.get("is_active").and_then(Value::as_bool);
     let must_change = body.get("must_change_password").and_then(Value::as_bool);
+
+    let privileged =
+        id != cu.user_id || role.is_some() || is_active.is_some() || must_change.is_some();
+    if privileged {
+        if let Err(resp) = require_admin(&state, Some(Extension(cu.clone()))) {
+            return resp;
+        }
+        if id == cu.user_id && (role.is_some() || is_active.is_some()) {
+            return error_envelope(
+                "VALIDATION_FAILED",
+                "Use profile settings to change your own role or active state.",
+            );
+        }
+    }
     {
         let mut store = state.store.lock().unwrap();
         let user = match store.users.iter_mut().find(|u| u.id == id) {
@@ -186,7 +216,7 @@ pub async fn delete_user(
     cu: Option<Extension<CurrentUser>>,
     Path(id): Path<i64>,
 ) -> impl IntoResponse {
-    let cu = match require_current_user(cu) {
+    let cu = match require_admin(&state, cu) {
         Ok(cu) => cu,
         Err(resp) => return resp,
     };
@@ -220,8 +250,12 @@ pub async fn delete_user(
 /// `GET /users/search?q=` — substring match on email/full_name (add-friend helper).
 pub async fn search_users(
     State(state): State<AppState>,
+    cu: Option<Extension<CurrentUser>>,
     q: axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
+    if let Err(resp) = require_current_user(cu) {
+        return resp;
+    }
     let needle = q.get("q").cloned().unwrap_or_default().to_lowercase();
     let store = state.store.lock().unwrap();
     let hits: Vec<Value> = store

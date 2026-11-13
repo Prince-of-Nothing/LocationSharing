@@ -12,6 +12,10 @@ const INDEX: &str = include_str!("../../web/app/index.html");
 const APP_JS: &str = include_str!("../../web/app/app.js");
 const MAP_JS: &str = include_str!("../../web/app/map.js");
 const NAV_JS: &str = include_str!("../../web/app/nav.js");
+const ADMIN_JS: &str = include_str!("../../web/app/admin.js");
+const ADMIN_OVERVIEW_JS: &str = include_str!("../../web/app/admin/overview.js");
+const ADMIN_USERS_JS: &str = include_str!("../../web/app/admin/users.js");
+const ADMIN_PLACEHOLDER_JS: &str = include_str!("../../web/app/admin/placeholder.js");
 const APP_CSS: &str = include_str!("../../web/app/app.css");
 const FAVICON: &str = include_str!("../../web/app/favicon.svg");
 const LEAFLET_JS: &str = include_str!("../../web/app/vendor/leaflet.js");
@@ -79,6 +83,31 @@ pub async fn nav_js() -> Response {
         HeaderValue::from_static("text/javascript; charset=utf-8"),
     );
     secure(resp)
+}
+
+fn module_js(content: &'static str) -> Response {
+    let mut resp = content.into_response();
+    resp.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("text/javascript; charset=utf-8"),
+    );
+    secure(resp)
+}
+
+pub async fn admin_js() -> Response {
+    module_js(ADMIN_JS)
+}
+
+pub async fn admin_overview_js() -> Response {
+    module_js(ADMIN_OVERVIEW_JS)
+}
+
+pub async fn admin_users_js() -> Response {
+    module_js(ADMIN_USERS_JS)
+}
+
+pub async fn admin_placeholder_js() -> Response {
+    module_js(ADMIN_PLACEHOLDER_JS)
 }
 
 pub async fn app_css() -> Response {
