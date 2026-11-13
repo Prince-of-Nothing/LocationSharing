@@ -9,7 +9,29 @@ use serde_json::{json, Value};
 use super::admin_handlers::require_admin;
 use super::handlers::{require_current_user, user_json};
 use super::state::AppState;
+use super::usernames::{find_user_by_username, public_json, username_for};
 use super::{error_envelope, CurrentUser, IntoResponse};
+
+/// Friend-visible profile: real name + email are revealed only after the
+/// friendship is accepted. `role` and auth internals stay private.
+fn friend_json(u: &crate::models::User) -> Value {
+    json!({
+        "id": u.id,
+        "username": username_for(u.id),
+        "display_name": u.full_name,
+        "full_name": u.full_name,
+        "email": u.email,
+        "auth_method": u.auth_method,
+    })
+}
+
+fn not_found(code: &str, message: &str) -> axum::response::Response {
+    (
+        StatusCode::NOT_FOUND,
+        Json(json!({"error": {"code": code, "message": message}})),
+    )
+        .into_response()
+}
 
 /// `GET /users/` — admin-only private listing.
 pub async fn list_users(
@@ -26,6 +48,7 @@ pub async fn list_users(
         .map(|u| {
             json!({
                 "id": u.id,
+                "username": username_for(u.id),
                 "email": u.email,
                 "full_name": u.full_name,
                 "role": u.role,
@@ -84,6 +107,7 @@ pub async fn create_user(
         .await;
     let user = crate::models::User {
         id,
+        username: String::new(),
         email: email.clone(),
         full_name: full_name.clone(),
         role: role.clone(),
@@ -116,24 +140,75 @@ pub async fn create_user(
         .into_response()
 }
 
-/// `GET /users/{id}`.
-pub async fn get_user(State(state): State<AppState>, Path(id): Path<i64>) -> impl IntoResponse {
+/// `GET /users/{id}` — self/admin get the private record, accepted friends get
+/// the friend profile, pending contacts get the public card, everyone else
+/// gets 404 so numeric ids cannot be walked.
+pub async fn get_user(
+    State(state): State<AppState>,
+    cu: Option<Extension<CurrentUser>>,
+    Path(id): Path<i64>,
+) -> impl IntoResponse {
+    let cu = match require_current_user(cu) {
+        Ok(cu) => cu,
+        Err(resp) => return resp,
+    };
     let store = state.store.lock().unwrap();
-    match store.find_user_by_id(id) {
-        Some(u) => (
-            StatusCode::OK,
-            Json(json!({
-                "id": u.id,
-                "email": u.email,
-                "full_name": u.full_name,
-                "role": u.role,
-                "is_active": u.is_active,
-                "must_change_password": u.must_change_password,
-            })),
-        )
-            .into_response(),
-        None => error_envelope("USER_NOT_FOUND", "User not found."),
+    let Some(user) = store.find_user_by_id(id) else {
+        return not_found("USER_NOT_FOUND", "User not found.");
+    };
+    let viewer_is_admin = store
+        .find_user_by_id(cu.user_id)
+        .is_some_and(|u| matches!(u.role.as_str(), "admin" | "administrator"));
+    if cu.user_id == id || viewer_is_admin {
+        return (StatusCode::OK, Json(user_json(user))).into_response();
     }
+    let relation = store.friendships.iter().find(|f| {
+        (f.requester_id == cu.user_id && f.receiver_id == id)
+            || (f.receiver_id == cu.user_id && f.requester_id == id)
+    });
+    match relation.map(|f| f.status.as_str()) {
+        Some("accepted") => (StatusCode::OK, Json(friend_json(user))).into_response(),
+        Some("pending") => (StatusCode::OK, Json(public_json(user))).into_response(),
+        _ => not_found("USER_NOT_FOUND", "User not found."),
+    }
+}
+
+/// `GET /users/lookup?username=` — exact, case-insensitive handle lookup.
+///
+/// This is the only discovery path for non-admins: no substring, name or
+/// email search, and the response is the public card (no email/legal name).
+pub async fn lookup_user(
+    State(state): State<AppState>,
+    cu: Option<Extension<CurrentUser>>,
+    q: axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let cu = match require_current_user(cu) {
+        Ok(cu) => cu,
+        Err(resp) => return resp,
+    };
+    let wanted = q.get("username").map(String::as_str).unwrap_or("").trim();
+    if wanted.is_empty() {
+        return error_envelope("VALIDATION_FAILED", "username is required");
+    }
+    let store = state.store.lock().unwrap();
+    let Some(user) = find_user_by_username(&store.users, wanted) else {
+        return not_found("USER_NOT_FOUND", "No account with that username.");
+    };
+    let friendship_status = store
+        .friendships
+        .iter()
+        .find(|f| {
+            (f.requester_id == cu.user_id && f.receiver_id == user.id)
+                || (f.receiver_id == cu.user_id && f.requester_id == user.id)
+        })
+        .map(|f| f.status.clone())
+        .unwrap_or_default();
+    let mut card = public_json(user);
+    if let Some(obj) = card.as_object_mut() {
+        obj.insert("is_self".into(), json!(user.id == cu.user_id));
+        obj.insert("friendship_status".into(), json!(friendship_status));
+    }
+    (StatusCode::OK, Json(card)).into_response()
 }
 
 /// `PATCH /users/{id}` — real partial update (profile + admin).
@@ -247,13 +322,14 @@ pub async fn delete_user(
     (StatusCode::OK, Json(json!({"message": "User deleted."}))).into_response()
 }
 
-/// `GET /users/search?q=` — substring match on email/full_name (add-friend helper).
+/// `GET /users/search?q=` — admin-only substring search over handle/email/name.
+/// Non-admins use the exact `/users/lookup` endpoint instead.
 pub async fn search_users(
     State(state): State<AppState>,
     cu: Option<Extension<CurrentUser>>,
     q: axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
-    if let Err(resp) = require_current_user(cu) {
+    if let Err(resp) = require_admin(&state, cu) {
         return resp;
     }
     let needle = q.get("q").cloned().unwrap_or_default().to_lowercase();
@@ -263,6 +339,7 @@ pub async fn search_users(
         .iter()
         .filter(|u| {
             needle.is_empty()
+                || username_for(u.id).contains(&needle)
                 || u.email.to_lowercase().contains(&needle)
                 || u.full_name.to_lowercase().contains(&needle)
         })
@@ -271,7 +348,10 @@ pub async fn search_users(
     (StatusCode::OK, Json(hits)).into_response()
 }
 
-/// `POST /friendships/` — send friend request.
+/// `POST /friendships/` — send friend request by exact username.
+///
+/// `receiver_username` is the public path. `receiver_email` remains accepted
+/// for the desktop client (exact match only) and is never echoed in a card.
 pub async fn create_friendship(
     State(state): State<AppState>,
     cu: Option<Extension<CurrentUser>>,
@@ -281,18 +361,37 @@ pub async fn create_friendship(
         Ok(cu) => cu,
         Err(resp) => return resp,
     };
+    let receiver_username = body
+        .get("receiver_username")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .trim_start_matches('@')
+        .to_string();
     let receiver_email = body
         .get("receiver_email")
         .and_then(Value::as_str)
         .unwrap_or("");
-    if receiver_email.is_empty() {
-        return error_envelope("VALIDATION_FAILED", "receiver_email is required");
-    }
     let mut store = state.store.lock().unwrap();
-    let receiver = match store.find_user_by_email(receiver_email) {
-        Some(u) => u.clone(),
-        None => return error_envelope("USER_NOT_FOUND", "User not found."),
+    let receiver = if !receiver_username.is_empty() {
+        match find_user_by_username(&store.users, &receiver_username) {
+            Some(u) => u.clone(),
+            None => return error_envelope("USER_NOT_FOUND", "No account with that username."),
+        }
+    } else if !receiver_email.is_empty() {
+        match store.find_user_by_email(receiver_email) {
+            Some(u) => u.clone(),
+            None => return error_envelope("USER_NOT_FOUND", "User not found."),
+        }
+    } else {
+        return error_envelope(
+            "VALIDATION_FAILED",
+            "receiver_username is required (receiver_email is legacy).",
+        );
     };
+    if !receiver.is_active {
+        return error_envelope("USER_NOT_FOUND", "User not found.");
+    }
     let requester = match store.find_user_by_id(cu.user_id).cloned() {
         Some(u) => u,
         None => return error_envelope("USER_NOT_FOUND", "User not found."),
@@ -303,14 +402,27 @@ pub async fn create_friendship(
             "Cannot send a friend request to yourself.",
         );
     }
+    let existing = store.friendships.iter().any(|f| {
+        f.status != "rejected"
+            && ((f.requester_id == requester.id && f.receiver_id == receiver.id)
+                || (f.requester_id == receiver.id && f.receiver_id == requester.id))
+    });
+    if existing {
+        return error_envelope(
+            "FRIENDSHIP_EXISTS",
+            "A friendship or pending request already exists.",
+        );
+    }
     let id = store.next_friendship_id;
     store.next_friendship_id += 1;
+    // Handles, not legal names: a pending request must not reveal the
+    // requester's real name before the receiver accepts.
     let friendship = crate::models::Friendship {
         id,
         requester_id: requester.id,
         receiver_id: receiver.id,
-        requester_name: requester.full_name.clone(),
-        receiver_name: receiver.full_name.clone(),
+        requester_name: username_for(requester.id),
+        receiver_name: username_for(receiver.id),
         status: "pending".into(),
         created_at: Some("2026-11-08T12:00:00Z".into()),
         responded_at: None,

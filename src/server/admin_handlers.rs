@@ -53,6 +53,7 @@ pub(crate) fn require_admin(
 fn admin_user_json(u: &crate::models::User) -> Value {
     json!({
         "id": u.id,
+        "username": super::usernames::username_for(u.id),
         "email": u.email,
         "full_name": u.full_name,
         "role": u.role,

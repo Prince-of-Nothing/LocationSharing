@@ -41,7 +41,7 @@ enum PendingAction {
     },
     Logout,
     SendFriendRequest {
-        email: String,
+        handle: String,
     },
     RespondFriendship {
         id: i64,
@@ -132,7 +132,7 @@ pub struct PinpointAppUI {
     register_password: String,
     register_full_name: String,
     // Friends screen
-    friends_email: String,
+    friend_handle: String,
     // Sharing screen
     share_direction: String,
     share_precision: String,
@@ -189,7 +189,7 @@ impl PinpointAppUI {
             register_email: String::new(),
             register_password: String::new(),
             register_full_name: String::new(),
-            friends_email: String::new(),
+            friend_handle: String::new(),
             share_direction: "to_friend".to_string(),
             share_precision: "exact".to_string(),
             share_duration: String::new(),
@@ -249,8 +249,8 @@ impl PinpointAppUI {
                 PendingAction::Logout => {
                     let _ = app.logout().await;
                 }
-                PendingAction::SendFriendRequest { email } => {
-                    let _ = app.send_friend_request(email).await;
+                PendingAction::SendFriendRequest { handle } => {
+                    let _ = app.send_friend_request(handle).await;
                 }
                 PendingAction::RespondFriendship { id, action } => {
                     let _ = app.respond_friendship(id, action).await;

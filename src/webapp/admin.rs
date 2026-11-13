@@ -141,6 +141,7 @@ mod tests {
     fn user(role: &str, active: bool) -> User {
         User {
             id: 1,
+            username: String::new(),
             email: "admin@example.invalid".into(),
             full_name: "Admin".into(),
             role: role.into(),

@@ -350,6 +350,9 @@ mod postgres_impl {
                         mfa_last_step,
                     )| User {
                         id,
+                        // No column yet; the API layer derives the handle
+                        // from the id when it serializes the user.
+                        username: String::new(),
                         email,
                         full_name,
                         role,

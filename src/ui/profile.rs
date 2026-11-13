@@ -10,13 +10,22 @@ impl PinpointAppUI {
         ui.add_space(8.0);
         let binding = self.app.data();
         let data = binding.lock().unwrap();
-        let (email, name) = match &data.user {
-            Some(u) => (u.email.clone(), u.full_name.clone()),
-            None => ("—".to_string(), String::new()),
+        let (email, name, username) = match &data.user {
+            Some(u) => (u.email.clone(), u.full_name.clone(), u.username.clone()),
+            None => ("—".to_string(), String::new(), String::new()),
         };
         let metric = data.settings.metric;
         drop(data);
         ui.label(format!("Signed in as: {email}"));
+        if !username.is_empty() {
+            ui.horizontal(|ui| {
+                ui.label(format!("Public username: @{username}"));
+                if ui.button("Copy").clicked() {
+                    ui.ctx().copy_text(username.clone());
+                }
+            });
+            ui.label("Share this handle so friends can add you; names and emails stay private.");
+        }
         ui.group(|ui| {
             ui.label(RichText::new("Display name").size(14.0).strong());
             ui.add(

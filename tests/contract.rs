@@ -108,6 +108,7 @@ async fn unsafe_requests_send_csrf_double_submit() {
 
     let body: serde_json::Value = serde_json::from_str(&post.body).expect("json body");
     assert_eq!(body["receiver_email"], "bob@example.com");
+    assert_eq!(body["receiver_username"], "bob@example.com");
 }
 
 #[tokio::test]

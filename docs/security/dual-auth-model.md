@@ -123,6 +123,35 @@ Both auth models use the **same session machinery** (see
 - `mfa_pending` applies only to identity sessions (anonymous accounts have no
   TOTP by default; MFA can be added later if an identity is linked).
 
+## 3.2 Public identity: generated usernames
+
+Every account — anonymous or identity-linked — gets a stable public handle
+derived from its numeric id, e.g. `calm-otter-42`
+(`src/server/usernames.rs`). The id suffix guarantees uniqueness without a
+schema change, and the handle is calculated on read, so existing rows need no
+backfill.
+
+| Visibility | Fields | Who can see it |
+|---|---|---|
+| Public card | `username`, `display_name` (= username), `auth_method` | Any signed-in user who knows the exact handle |
+| Friend profile | public card + `full_name`, `email` | Accepted friends only |
+| Private record | + `id`, `role`, `is_active`, `must_change_password` | The account itself and admins |
+
+Rules enforced server-side:
+
+- **Exact-match lookup only.** `GET /api/v1/users/lookup?username=` matches the
+  whole handle, case-insensitively; there is no substring, real-name or email
+  search for non-admins. `/api/v1/users/search` is admin-only.
+- **Numeric IDs are not walkable.** `GET /api/v1/users/{id}` returns 401 when
+  signed out, the private record for self/admin, the friend profile for
+  accepted friends, the public card for a pending request, and 404 otherwise.
+- **Pending requests carry handles, not legal names** (`requester_name` /
+  `receiver_name` in the friendship rows), so accepting is what reveals the
+  real name and email.
+- **Friend requests accept `receiver_username`.** The legacy exact
+  `receiver_email` path remains for the desktop client; both resolve to the
+  same account and never echo the email back to the requester.
+
 ## 4. API surface
 
 | Method | Path | Model | Status |
@@ -130,6 +159,8 @@ Both auth models use the **same session machinery** (see
 | POST | `/api/v1/auth/anonymous` | A | ✅ implemented (returns one-time recovery code) |
 | POST | `/api/v1/auth/anonymous/verify` | A | ⬜ pending (device challenge-response) |
 | POST | `/api/v1/auth/anonymous/recover` | A | ✅ implemented (rotates the code) |
+| GET | `/api/v1/users/lookup?username=` | A/B | ✅ implemented (exact handle → public card) |
+| POST | `/api/v1/friendships/` | A/B | ✅ implemented (`receiver_username`, legacy email) |
 | POST | `/api/v1/auth/link` | A→B | ⬜ pending |
 | POST | `/api/v1/auth/unlink` | B→A | ⬜ pending (optional) |
 | POST | `/api/v1/auth/magic-link` | B | ⬜ pending |

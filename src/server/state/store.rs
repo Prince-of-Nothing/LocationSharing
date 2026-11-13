@@ -79,6 +79,7 @@ impl Store {
         }
         let admin = User {
             id: self.next_user_id,
+            username: String::new(),
             email: "admin@example.com".into(),
             full_name: "Administrator".into(),
             role: "administrator".into(),
@@ -101,6 +102,7 @@ impl Store {
         self.next_user_id += 1;
         let alice = User {
             id: self.next_user_id,
+            username: String::new(),
             email: "alice@example.com".into(),
             full_name: "Alice Example".into(),
             role: "resident".into(),
@@ -123,6 +125,7 @@ impl Store {
         self.next_user_id += 1;
         let bob = User {
             id: self.next_user_id,
+            username: String::new(),
             email: "bob@example.com".into(),
             full_name: "Bob Example".into(),
             role: "resident".into(),

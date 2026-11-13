@@ -60,6 +60,7 @@ impl AppState {
             store.next_user_id = store.next_user_id.max(id + 1);
             store.users.push(User {
                 id,
+                username: String::new(),
                 email,
                 full_name,
                 role,

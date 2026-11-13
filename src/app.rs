@@ -37,7 +37,7 @@ pub enum PendingMutation {
         id: i64,
     },
     SendFriendRequest {
-        email: String,
+        identifier: String,
     },
     RespondFriendship {
         id: i64,
@@ -475,8 +475,8 @@ impl PinpointApp {
                 self.refresh_friendships().await?;
                 self.refresh_shares().await?;
             }
-            PendingMutation::SendFriendRequest { email } => {
-                self.backend.send_friend_request(email).await?;
+            PendingMutation::SendFriendRequest { identifier } => {
+                self.backend.send_friend_request(identifier).await?;
                 self.refresh_friendships().await?;
             }
             PendingMutation::RespondFriendship { id, action } => {
@@ -806,26 +806,42 @@ impl PinpointApp {
         Ok(())
     }
 
-    pub async fn send_friend_request(&self, email: String) -> anyhow::Result<()> {
-        let v = crate::security::validation::validate_email(&email);
-        if !v.is_valid() {
-            self.set_error(Some(v.errors.join("; ")));
-            return Err(anyhow::anyhow!(v.errors.join("; ")));
+    pub async fn send_friend_request(&self, identifier: String) -> anyhow::Result<()> {
+        let identifier = identifier.trim().trim_start_matches('@').to_string();
+        if identifier.is_empty() {
+            self.set_error(Some("Enter a username or email.".to_string()));
+            return Err(anyhow::anyhow!("Enter a username or email."));
+        }
+        if identifier.contains('@') {
+            let v = crate::security::validation::validate_email(&identifier);
+            if !v.is_valid() {
+                self.set_error(Some(v.errors.join("; ")));
+                return Err(anyhow::anyhow!(v.errors.join("; ")));
+            }
+        } else if identifier.len() > 64
+            || !identifier
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-')
+        {
+            self.set_error(Some(
+                "Usernames look like calm-otter-42 (letters, digits, dashes).".to_string(),
+            ));
+            return Err(anyhow::anyhow!("Invalid username."));
         }
         self.set_loading(true);
         self.set_error(None);
-        let result = self.backend.send_friend_request(&email).await;
+        let result = self.backend.send_friend_request(&identifier).await;
         self.set_loading(false);
         if result.is_ok() {
             self.audit_logger
-                .log_event("friends", "send_request", Some(&email), "success");
+                .log_event("friends", "send_request", Some(&identifier), "success");
             if let Err(e) = self.refresh_friendships().await {
                 self.set_error(Some(e.to_string()));
             }
         } else {
             self.audit_logger
-                .log_event("friends", "send_request", Some(&email), "failure");
-            self.queue_mutation(PendingMutation::SendFriendRequest { email });
+                .log_event("friends", "send_request", Some(&identifier), "failure");
+            self.queue_mutation(PendingMutation::SendFriendRequest { identifier });
             self.set_error(Some(format!(
                 "All backends unavailable — queued for sync ({} pending)",
                 self.pending_mutation_count()

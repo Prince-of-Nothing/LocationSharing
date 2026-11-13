@@ -107,6 +107,7 @@ async function logout() {
   show($("app-panel"), false);
   show($("session-bar"), false);
   show($("admin-tab"), false);
+  $("user-handle").textContent = "";
   adminConsole?.close();
   show($("recovery-panel"), false);
   $("recovery-code").textContent = "";
@@ -118,7 +119,7 @@ async function enterApp() {
   show($("login-panel"), false);
   show($("session-bar"), true);
   show($("app-panel"), true);
-  $("user-email").textContent = state.user?.email || "";
+  renderIdentity();
   updateAdminTab();
   ensureMap().map.invalidateSize();
   if (!sharing) {
@@ -132,11 +133,17 @@ async function enterApp() {
   await refresh();
 }
 
+function renderIdentity() {
+  $("user-email").textContent = state.user?.email || "";
+  const handle = state.user?.username;
+  $("user-handle").textContent = handle ? `@${handle}` : "";
+}
+
 async function refresh() {
   try {
     const me = await api("/api/v1/auth/me");
     state.user = me;
-    $("user-email").textContent = me?.email || "";
+    renderIdentity();
     updateAdminTab();
   } catch (_) {
     show($("app-panel"), false);
@@ -341,6 +348,7 @@ async function logoutAll() {
   show($("app-panel"), false);
   show($("session-bar"), false);
   show($("admin-tab"), false);
+  $("user-handle").textContent = "";
   adminConsole?.close();
   show($("recovery-panel"), false);
   $("recovery-code").textContent = "";
@@ -430,10 +438,28 @@ async function publish(lat, lon) {
   }
 }
 
-async function sendFriendRequest(email) {
+async function sendFriendRequest(username) {
+  const handle = String(username || "").trim().replace(/^@/, "");
+  if (!handle) {
+    setStatus("Enter a username.", true);
+    return;
+  }
   try {
-    await api("/api/v1/friendships/", { method: "POST", body: { receiver_email: email } });
-    setStatus("Friend request sent.");
+    const found = await api(`/api/v1/users/lookup?username=${encodeURIComponent(handle)}`);
+    if (found?.is_self) {
+      setStatus("That is your own username.", true);
+      return;
+    }
+    if (found?.friendship_status === "accepted") {
+      setStatus(`@${handle} is already a friend.`);
+      return;
+    }
+    if (found?.friendship_status === "pending") {
+      setStatus(`A request with @${handle} is already pending.`);
+      return;
+    }
+    await api("/api/v1/friendships/", { method: "POST", body: { receiver_username: handle } });
+    setStatus(`Friend request sent to @${handle}.`);
     await refresh();
   } catch (e) {
     setStatus(e.message, true);
@@ -528,7 +554,7 @@ $("publish-form").addEventListener("submit", async (e) => {
 
 $("friend-form").addEventListener("submit", async (e) => {
   e.preventDefault();
-  await sendFriendRequest($("friend-email").value.trim());
+  await sendFriendRequest($("friend-username").value.trim());
 });
 
 $("locate-button").addEventListener("click", async () => {

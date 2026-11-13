@@ -24,6 +24,7 @@ mod handlers;
 mod locations_handlers;
 mod migrations;
 mod state;
+mod usernames;
 mod users_handlers;
 mod web_handlers;
 
@@ -240,6 +241,7 @@ pub fn users_router() -> Router<AppState> {
                 .patch(users_handlers::update_user)
                 .delete(users_handlers::delete_user),
         )
+        .route("/api/v1/users/lookup", get(users_handlers::lookup_user))
         .route("/api/v1/users/search", get(users_handlers::search_users))
         .route(
             "/api/v1/friendships/",

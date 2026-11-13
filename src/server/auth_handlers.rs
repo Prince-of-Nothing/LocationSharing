@@ -14,6 +14,7 @@ use super::{error_envelope, CurrentUser, IntoResponse};
 fn user_json(u: &crate::models::User) -> Value {
     json!({
         "id": u.id,
+        "username": super::usernames::username_for(u.id),
         "email": u.email,
         "full_name": u.full_name,
         "role": u.role,
@@ -205,6 +206,7 @@ pub async fn register(
         store.next_user_id += 1;
         let user = crate::models::User {
             id,
+            username: String::new(),
             email: email.clone(),
             full_name: full_name.clone(),
             role: "resident".into(),
@@ -624,6 +626,7 @@ pub async fn anonymous(
         store.next_user_id += 1;
         let user = crate::models::User {
             id,
+            username: String::new(),
             // Unroutable by design: an anonymous account has no email inbox.
             email: format!("anon-{id}@device.pinpoint.invalid"),
             full_name: device_name,

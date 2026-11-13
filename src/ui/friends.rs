@@ -102,15 +102,16 @@ impl PinpointAppUI {
             ui.label(RichText::new("Add Friend").size(14.0).strong());
             ui.add_space(4.0);
             ui.add(
-                egui::TextEdit::singleline(&mut self.friends_email)
-                    .hint_text("Email")
-                    .desired_width(150.0),
+                egui::TextEdit::singleline(&mut self.friend_handle)
+                    .hint_text("Username (calm-otter-42) or email")
+                    .desired_width(220.0),
             );
+            ui.label("Usernames are exact-match; badges shown here are handles.");
             ui.add_space(8.0);
-            if ui.button("Send Request").clicked() && !self.friends_email.trim().is_empty() {
+            if ui.button("Send Request").clicked() && !self.friend_handle.trim().is_empty() {
                 self.spawn_action(
                     PendingAction::SendFriendRequest {
-                        email: self.friends_email.clone(),
+                        handle: self.friend_handle.clone(),
                     },
                     ctx,
                 );

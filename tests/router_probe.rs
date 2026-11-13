@@ -223,6 +223,12 @@ async fn anonymous_account_creation_and_recovery() {
     let code = json["recovery_code"].as_str().unwrap().to_string();
     assert!(code.len() >= 32, "recovery code must be high-entropy");
     assert_eq!(json["user"]["auth_method"], "anonymous");
+    let handle = json["user"]["username"].as_str().expect("public handle");
+    let user_id = json["user"]["id"].as_i64().expect("id");
+    assert!(
+        handle.ends_with(&format!("-{user_id}")),
+        "handle must carry the unique id suffix"
+    );
 
     // Recover with the code: a fresh session + a rotated code.
     let body = serde_json::json!({ "recovery_code": code }).to_string();
@@ -322,6 +328,162 @@ async fn admin_delete_user_revokes_sessions() {
     assert_eq!(resp.status(), StatusCode::OK);
     assert!(state.get_session(&bob_sid).await.is_none());
     assert!(state.store.lock().unwrap().find_user_by_id(3).is_none());
+}
+
+#[tokio::test]
+async fn usernames_are_exact_lookup_and_profiles_are_private() {
+    use pinpoint_desktop::server::{router, AppState};
+
+    let state = AppState::new();
+    // Seed: 1 = administrator ("brave-badger-1"), 2 = Alice
+    // ("bright-badger-2"), 3 = Bob ("calm-badger-3"); Alice and Bob are
+    // accepted friends.
+    let (alice_sid, alice_csrf) = state.create_session(2, "email", false).await;
+    let (bob_sid, _) = state.create_session(3, "email", false).await;
+    let (admin_sid, _) = state.create_session(1, "email", false).await;
+    let app = router(state);
+
+    // Exact handle -> public card only, plus the viewer's relation.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/users/lookup?username=bright-badger-2")
+                .header("cookie", format!("session_id={bob_sid}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(json["username"], "bright-badger-2");
+    assert_eq!(json["friendship_status"], "accepted");
+    assert!(json.get("email").is_none(), "email must stay private");
+    assert!(
+        json.get("full_name").is_none(),
+        "legal name must stay private"
+    );
+
+    // Prefixes do not resolve: discovery is exact-match only.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/users/lookup?username=bright")
+                .header("cookie", format!("session_id={bob_sid}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+
+    // Accepted friends see the friend profile.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/users/2")
+                .header("cookie", format!("session_id={bob_sid}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(json["email"], "alice@example.com");
+    assert_eq!(json["full_name"], "Alice Example");
+    assert!(json.get("role").is_none(), "role is not friend-visible");
+
+    // Walking numeric ids cannot reach an unrelated account.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/users/1")
+                .header("cookie", format!("session_id={bob_sid}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+
+    // Signed-out lookup fails closed.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/users/lookup?username=bright-badger-2")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+    // Admins retain the private record.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/users/2")
+                .header("cookie", format!("session_id={admin_sid}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // Friend requests resolve handles and store handles, not legal names.
+    let body = serde_json::json!({ "receiver_username": "brave-badger-1" }).to_string();
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/friendships/")
+                .header("cookie", format!("session_id={alice_sid}"))
+                .header("x-csrf-token", &alice_csrf)
+                .header("content-type", "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(json["requester_name"], "bright-badger-2");
+    assert_eq!(json["receiver_name"], "brave-badger-1");
+
+    // Duplicate requests are rejected instead of stacking rows.
+    let body = serde_json::json!({ "receiver_username": "@BRAVE-BADGER-1" }).to_string();
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/friendships/")
+                .header("cookie", format!("session_id={alice_sid}"))
+                .header("x-csrf-token", &alice_csrf)
+                .header("content-type", "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]

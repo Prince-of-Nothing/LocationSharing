@@ -13,6 +13,7 @@
       <h1>Pinpoint</h1>
       <div id="session-bar" class="hidden">
         <span id="user-email" class="muted"></span>
+        <span id="user-handle" class="muted" title="Your public username — share it so friends can find you"></span>
         <button id="admin-tab" type="button" class="hidden">Admin</button>
         <button id="logout" type="button">Sign out</button>
       </div>
@@ -245,7 +246,8 @@
             <h2>Friends</h2>
             <ul id="friends-list" class="list"></ul>
             <form id="friend-form">
-              <label>Friend email <input id="friend-email" type="email" required /></label>
+              <label>Friend username <input id="friend-username" type="text" placeholder="calm-otter-42" autocomplete="off" required /></label>
+              <p class="muted">Exact username only — names and emails are not searchable.</p>
               <button type="submit">Send request</button>
             </form>
           </div>

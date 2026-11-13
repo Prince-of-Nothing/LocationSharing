@@ -11,6 +11,12 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+### Added
+- [FEATURE] **Generated public usernames and private profiles**: every account
+  gets a stable handle such as `calm-otter-42`; friends add each other by exact
+  username, pending requests show handles only, and real names/emails are
+  revealed to accepted friends. Numeric user IDs are no longer walkable and
+  free-text user search is admin-only.
 
 ## [1.1.0] - 2026-11-13
 ### Added
