@@ -6,7 +6,7 @@ Friendship does not grant access to anyone's location: each person explicitly
 chooses who can see them, at what precision, and for how long. Every share can
 be revoked, and recipients can see whether a location is fresh or stale.
 
-**Current release: [1.2.0](./RELEASE_NOTES.md)** — thesis demo, not
+**Current release: [1.2.1](./RELEASE_NOTES.md)** — thesis demo, not
 production-hardened. See the functional-state matrix and per-item
 `[FEATURE]` / `[FIX]` flags in the release notes.
 
@@ -35,12 +35,14 @@ production-hardened. See the functional-state matrix and per-item
 - **Privacy** — no trackers, no analytics, no raw IP storage, no IP/WebRTC
   geolocation; local-only web assets (no Google Fonts/CDNs); ODbL attribution
   everywhere.
+- **Postgres persistence** — migrations 1–15, verified against live Postgres 16:
+  a registered user and published location survived a server restart, and the
+  split diagnostics/admin ports shared sessions, reports and audit rows.
 - **OSM self-hosting** — `PINPOINT_TILE_URL`, `PINPOINT_NOMINATIM_URL`,
   `PINPOINT_OSRM_URL`, `PINPOINT_OVERPASS_URL`; public providers are demo
   fallbacks only.
 
-**Still pending:** Postgres write-through for API-created users/locations,
-OAuth/passkeys/magic links, and Android/iOS builds. See
+**Still pending:** OAuth/passkeys/magic links and Android/iOS builds. See
 [`ROADMAP.md`](./ROADMAP.md) and [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ---
@@ -80,7 +82,7 @@ no wildcard); HTTPS remains the default everywhere else.
 
 ### Release artifact
 
-Unzip `dist/pinpoint-1.2.0-windows-x64.zip`, run `pinpoint-server.exe`, open
+Unzip `dist/pinpoint-1.2.1-windows-x64.zip`, run `pinpoint-server.exe`, open
 `http://127.0.0.1:8080/`.
 
 ---

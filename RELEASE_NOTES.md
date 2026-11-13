@@ -1,15 +1,31 @@
-# Pinpoint 1.2.0 — Release Notes
+# Pinpoint 1.2.1 — Release Notes
 
-**Released:** 2026-11-13 · **Version:** `1.2.0` (from `1.1.0`) ·
-**Status:** thesis demo — navigation, identity privacy, diagnostics and demo
-clients are in place.
+**Released:** 2026-11-14 · **Version:** `1.2.1` (from `1.2.0`) ·
+**Status:** thesis demo — navigation, identity privacy, diagnostics, demo
+clients and ZAP baseline hardening are in place.
 
-**Artifact:** `dist/pinpoint-1.2.0-windows-x64.zip` — combined server, desktop,
+**Artifact:** `dist/pinpoint-1.2.1-windows-x64.zip` — combined server, desktop,
 auth/users/locations/map/diag/admin services, the headless demo client, web
 assets and docs. SHA-256 in `dist/SHA256SUMS.txt` and inside the archive.
 
 Flags: `[FEATURE]` new capability · `[FIX]` bug fix · `[SECURITY]` hardening ·
 `[DOCS]` documentation · `[INFRA]` build/deploy.
+
+---
+
+## 0. 1.2.1 patch
+
+- **ZAP baseline hardening:** every web response now sets
+  `Permissions-Policy`, `Cross-Origin-Embedder-Policy`,
+  `Cross-Origin-Opener-Policy` and `Cross-Origin-Resource-Policy`.
+  The re-scan is **0 high / 0 medium / 0 low**; the remaining notices are
+  informational (intentional `no-store` on HTML, modern-web-app hint). Raw
+  evidence: `docs/evidence/zap-baseline.html|json|md`; summary:
+  `docs/evidence/zap-baseline-1.2.1.md`.
+- **Caching:** static JS/CSS use `no-cache` (revalidate); HTML keeps
+  `no-store`.
+- **Test robustness:** OS-keychain tests skip cleanly when Windows returns
+  `ERROR_NO_SUCH_LOGON_SESSION` (headless/sessionless runs).
 
 ---
 
@@ -29,7 +45,7 @@ Flags: `[FEATURE]` new capability · `[FIX]` bug fix · `[SECURITY]` hardening �
 | **Audit trail** | ✅ | Role/active changes, account deletions and report triage in `pinpoint_admin_audit`; ids/handles only, no email or coordinates |
 | **Alice/Bob containers** | ✅ | `pinpoint-demo-client` logs in through the API and publishes real locations on an interval; compose profile `demo` |
 | **Desktop client** | ✅ | Map, OSM search/routing/POIs, bookmarks, check-ins, emergency, offline packs; shows the user's public handle and accepts handles or emails for friend requests |
-| **Storage** | ⚠️ Partial | Schema/migrations 1–15; Postgres write-through paths wired; live Postgres run pending (Docker daemon unavailable in this environment) |
+| **Storage** | ✅ | Schema/migrations 1–15 applied against live Postgres 16; new users and locations persisted across a server restart; split ports share sessions/reports/audit |
 | **OSM self-host** | ⚠️ Config | `PINPOINT_*_URL` overrides wired; public providers are demo fallbacks |
 | **Mobile / WASM** | ⚠️ Scaffold | Android/iOS/WASM not built in this release |
 | **Privacy** | ✅ | No trackers/IPs, local assets, explicit consent, self-host-first OSM, user-initiated diagnostics |
@@ -41,11 +57,11 @@ Flags: `[FEATURE]` new capability · `[FIX]` bug fix · `[SECURITY]` hardening �
 - Walk/bike routing requires self-hosted OSRM profiles; avoid options require
   a self-hosted profile with exclusions.
 - Navigation is a preview with live next-stop; no off-route auto-reroute.
-- Postgres persistence is implemented but was not exercised against a live
-  database in this environment; the in-memory demo path is verified.
+- Postgres persistence was verified against a live Postgres 16 instance,
+  including migrations 1–15, restart survival and shared split-port sessions.
 - ZAP scan, Android APK (NDK/JDK 21) and iOS (macOS/Xcode) remain external.
-- Compose config is validated; images were not built here because the Docker
-  daemon was not running.
+- Compose config is validated and the existing stack runs; the new 1.2.0
+  images were not rebuilt in this environment.
 
 ---
 
@@ -76,6 +92,8 @@ Flags: `[FEATURE]` new capability · `[FIX]` bug fix · `[SECURITY]` hardening �
   its email in the audit trail.
 
 ### `[SECURITY]`
+- ZAP baseline re-scan: 0 high / 0 medium / 0 low; COOP/COEP/CORP and
+  Permissions-Policy headers set on every web response.
 - Argon2id; hashed sessions; strict CSP; local assets; admin role gates.
 - No raw IP/UA storage; diagnostics explicitly exclude location and device
   identifiers; audit is ids/handles only; OSM calls never carry user/friend
@@ -156,12 +174,18 @@ $env:PINPOINT_OVERPASS_URL = "https://overpass.example.com/api/interpreter"
   8006 health 200, unauthenticated admin 401.
 - Demo client: logged in as `@bright-badger-2`, published through
   `/locations/me`, and a friend read back the fresh `updated_at`.
+- Postgres 16: migrations 13–15 applied; a new user (`@coral-badger-5`) and
+  published location survived a server restart; one login on 8080 authorized
+  the admin API on 8006 with the shared session; a report ingested on 8005
+  appeared in the 8006 list, was triaged, and wrote an audit row.
+- ZAP 2.17.0 baseline: **0 high / 0 medium / 0 low**, 4 informational; raw
+  reports archived under `docs/evidence/`.
 - Compose: `docker compose config --quiet` ✅, 11 services including
   diag/admin/alice/bob.
 
 ## 5. Next
 
-1. Live Postgres verification of migrations 1–15 + write-through.
-2. ZAP baseline scan and fixes.
-3. Android APK (NDK + JDK 21) and iOS build on macOS.
+1. Authenticated ZAP active scan (seeded session + context).
+2. Android APK (NDK + JDK 21) and iOS build on macOS.
+3. Rebuild the 1.2.x compose images and run the full gateway/demo profile.
 4. Final thesis report / demo script.

@@ -40,20 +40,23 @@ Living document. PRs welcome; see `CONTRIBUTING.md`.
 - [ ] Mobile/390 px polish pass and keyboard-only audit
 - [ ] Turn-by-turn follow screen with voice (v1.2)
 
-## v1.2 — Real demo clients
+## v1.2 — Real demo clients (shipped 1.2.0)
 
-- Replace the hardcoded Alice/Bob seed with `alice`/`bob` **client
+- [x] Replace the hardcoded Alice/Bob seed with `alice`/`bob` **client
   containers** that register, befriend, share and publish through the API
-- `docker compose --profile demo` brings up the gateway + both clients
-- Optional movement simulation and a `--headless` demo client binary
+- [x] `docker compose --profile demo` brings up the gateway + both clients
+- [x] Optional movement simulation and a `--headless` demo client binary
+- [x] Diagnostics service on 8005, admin API on 8006, append-only audit
 
 ## Hardening & verification
 
-- Postgres write-through for users/friendships/locations (demo path is still
-  in-memory)
+- [x] Postgres write-through for users/friendships/locations, verified against
+  live Postgres 16 across restart, plus shared split-port sessions/reports
 - Rate limiting on login, `/auth/anonymous` and recovery (keyed HMAC, no IPs)
 - Anonymous device challenge-response (`/auth/anonymous/verify`, Ed25519)
-- ZAP baseline + active scan, archived evidence
+- [x] ZAP baseline: 0 high / 0 medium / 0 low after the security-header patch;
+  evidence in `docs/evidence/zap-baseline-1.2.1.md` (authenticated active scan
+  still pending)
 - Android APK (needs NDK + JDK 21) and WASM build (Trunk) in CI
 - Final LaTeX report + thesis defense artefacts
 
