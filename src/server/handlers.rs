@@ -26,9 +26,12 @@ pub(crate) fn require_current_user(
 }
 
 pub(crate) fn is_expired(expires_at: &Option<String>) -> bool {
-    match expires_at {
+    match expires_at
+        .as_deref()
+        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+    {
+        Some(at) => at.with_timezone(&chrono::Utc) < chrono::Utc::now(),
         None => false,
-        Some(s) => s.as_str() < "2026-11-08T12:00:00Z", // demo clock: seed date is the floor
     }
 }
 
@@ -57,7 +60,7 @@ pub(crate) fn share_json(s: &crate::models::LocationShare) -> Value {
     })
 }
 
-/// Health check — verifies database connectivity when Postgres is configured,
+/// Health check - verifies database connectivity when Postgres is configured,
 /// otherwise reports in-memory demo mode.
 pub async fn health(State(state): State<AppState>) -> (StatusCode, Json<Value>) {
     let mut checks = serde_json::Map::new();
@@ -90,7 +93,7 @@ pub async fn health(State(state): State<AppState>) -> (StatusCode, Json<Value>) 
     (StatusCode::OK, Json(Value::Object(checks)))
 }
 
-/// Sync status — reports replication freshness for monitoring replica health.
+/// Sync status - reports replication freshness for monitoring replica health.
 /// `last_persist_at` is the last successful `persist()` timestamp; clients and
 /// load balancers can use this to detect stale replicas.
 pub async fn sync_status(State(state): State<AppState>) -> Json<Value> {
@@ -113,4 +116,20 @@ pub async fn sync_status(State(state): State<AppState>) -> Json<Value> {
         "last_persist_age_secs": age_secs,
         "fresh": age_secs <= 10,
     }))
+}
+
+#[cfg(test)]
+mod expiry_tests {
+    use super::is_expired;
+
+    #[test]
+    fn past_expiry_is_expired_even_after_seed_date() {
+        assert!(is_expired(&Some("2026-11-12T00:00:00Z".into())));
+    }
+
+    #[test]
+    fn future_and_missing_expiry_are_not_expired() {
+        assert!(!is_expired(&Some("2099-01-01T00:00:00Z".into())));
+        assert!(!is_expired(&None));
+    }
 }

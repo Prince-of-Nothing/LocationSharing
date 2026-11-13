@@ -12,6 +12,11 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [FEATURE] **Per-friend sharing controls**: every accepted friend gets a
+  “Sharing” sheet with an on/off switch, precision (`exact` / `approximate` /
+  `city_only`) and duration presets (1 h, 8 h, 24 h, 7 days, until turned
+  off); creating is an upsert per friendship+direction, and “Stop sharing”
+  takes effect immediately.
 - [FEATURE] **Modular admin console**: role-gated Admin tab in the web client
   with a module registry (Overview, Users, Diagnostics/Audit placeholders),
   `/api/v1/admin/overview|users|users/:id`, safe purge that revokes sessions
@@ -38,6 +43,14 @@ The per-item flagged list for this release is in
 - [FEATURE] **Locate me** (explicit button, browser permission only) and
   route follow mode using `watchPosition` (preview, no voice).
 ### Fixed
+- [FIX] **Share expiry used a hardcoded seed date** (`2026-11-08`), so a share
+  created for 1 hour never expired in the demo. Expiry now parses RFC 3339
+  and compares against the real UTC clock; `duration_hours=0` means “until
+  turned off”.
+- [FIX] **Admin user list could be stale on a replica** started before new
+  accounts were created elsewhere: `/api/v1/admin/overview` and
+  `/api/v1/admin/users` refresh from Postgres before reading and label the
+  view “all accounts, including anonymous and never-signed-in users”.
 - [FIX] **User management was open to any signed-in account** (critical): the
   existing list/create/update/delete user endpoints did not check for an
   admin role, so a resident could raise their own role or delete accounts.

@@ -15,7 +15,7 @@ export const overviewModule = {
       ["Diagnostics", data.diagnostics],
     ];
     el.innerHTML = `
-      <p class="muted">Pinpoint ${escapeHtml(data.version || "")} · in-memory view when no database is configured.</p>
+      <p class="muted">All accounts, including anonymous and never-signed-in users. Pinpoint ${escapeHtml(data.version || "")} · in-memory view when no database is configured.</p>
       <div class="admin-cards">
         ${cards
           .map(

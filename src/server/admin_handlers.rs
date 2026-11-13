@@ -70,6 +70,8 @@ pub async fn overview(
     if let Err(resp) = require_admin(&state, cu) {
         return resp;
     }
+    // A replica may have started before accounts were created elsewhere.
+    state.refresh_from_db().await;
     let (users, active, friendships, shares) = {
         let store = state.store.lock().unwrap();
         (
@@ -103,6 +105,7 @@ pub async fn list_users(
     if let Err(resp) = require_admin(&state, cu) {
         return resp;
     }
+    state.refresh_from_db().await;
     let store = state.store.lock().unwrap();
     let users: Vec<Value> = store.users.iter().map(admin_user_json).collect();
     (StatusCode::OK, Json(json!({ "users": users }))).into_response()
