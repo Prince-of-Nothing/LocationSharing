@@ -37,6 +37,8 @@ const CSP: &str = "default-src 'self'; img-src 'self' data:; script-src 'self'; 
 style-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; \
 frame-ancestors 'none'; form-action 'self'; object-src 'none'; manifest-src 'self'";
 
+const PERMISSIONS_POLICY: &str = "geolocation=(self), camera=(), microphone=(), payment=(), usb=()";
+
 fn secure(mut resp: Response) -> Response {
     let headers = resp.headers_mut();
     headers.insert(
@@ -52,12 +54,32 @@ fn secure(mut resp: Response) -> Response {
         header::CONTENT_SECURITY_POLICY,
         HeaderValue::from_static(CSP),
     );
-    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    headers.insert(
+        header::HeaderName::from_static("permissions-policy"),
+        HeaderValue::from_static(PERMISSIONS_POLICY),
+    );
+    headers.insert(
+        header::HeaderName::from_static("cross-origin-embedder-policy"),
+        HeaderValue::from_static("require-corp"),
+    );
+    headers.insert(
+        header::HeaderName::from_static("cross-origin-opener-policy"),
+        HeaderValue::from_static("same-origin"),
+    );
+    headers.insert(
+        header::HeaderName::from_static("cross-origin-resource-policy"),
+        HeaderValue::from_static("same-origin"),
+    );
+    // Static modules may be revalidated; HTML overrides this with no-store.
+    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
     resp
 }
 
 pub async fn index() -> Response {
-    secure(Html(INDEX).into_response())
+    let mut resp = secure(Html(INDEX).into_response());
+    resp.headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    resp
 }
 
 pub async fn app_js() -> Response {

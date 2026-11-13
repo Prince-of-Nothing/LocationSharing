@@ -1,6 +1,6 @@
 [package]
 name = "pinpoint-desktop"
-version = "1.2.0"
+version = "1.2.1"
 edition = "2021"
 description = "Privacy-first location-sharing platform in pure Rust: multiplatform client + API server (desktop + Android + iOS, OSM maps)"
 publish = false
@@ -119,6 +119,9 @@ web-sys = { version = "0.3", features = [
 ] }
 getrandom = { version = "0.2", features = ["js"] }
 getrandom03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
+# getrandom 0.4 is pulled by aes-gcm/argon2 on the wasm targets; its wasm
+# backend is opt-in and must be enabled explicitly for `cargo check`.
+getrandom04 = { package = "getrandom", version = "0.4", features = ["wasm_js"] }
 
 [dev-dependencies]
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
