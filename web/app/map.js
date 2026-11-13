@@ -32,6 +32,8 @@ export function createMap({ element, center, zoom, onClick }) {
 
   const friendLayer = L.layerGroup().addTo(map);
   let selectedMarker = null;
+  let selfMarker = null;
+  let selfAccuracy = null;
   let routeLayer = null;
 
   function initial(name) {
@@ -113,6 +115,55 @@ export function createMap({ element, center, zoom, onClick }) {
     map.fitBounds(L.latLngBounds(points), { padding: [48, 48], maxZoom: 16 });
   }
 
+  function setSelfLocation(fix, { fly = false } = {}) {
+    const lat = Number(fix?.lat ?? fix?.latitude);
+    const lon = Number(fix?.lon ?? fix?.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+    const accuracy = Number(fix?.accuracy ?? fix?.accuracy_m ?? 0);
+
+    if (selfMarker) map.removeLayer(selfMarker);
+    if (selfAccuracy) map.removeLayer(selfAccuracy);
+
+    if (Number.isFinite(accuracy) && accuracy > 0 && accuracy < 5000) {
+      selfAccuracy = L.circle([lat, lon], {
+        radius: accuracy,
+        color: "#34d399",
+        weight: 1,
+        opacity: 0.5,
+        fillColor: "#34d399",
+        fillOpacity: 0.08,
+        interactive: false,
+        className: "self-accuracy",
+      }).addTo(map);
+    }
+
+    const selfIcon = L.divIcon({
+      className: "pin-self",
+      html: '<span class="pin-dot"></span><span class="pin-label">You</span>',
+      iconSize: [0, 0],
+    });
+    selfMarker = L.marker([lat, lon], {
+      icon: selfIcon,
+      keyboard: false,
+      zIndexOffset: 1000,
+    }).addTo(map);
+
+    if (fly) {
+      map.flyTo([lat, lon], Math.max(map.getZoom(), 15), { duration: 0.6 });
+    }
+  }
+
+  function clearSelfLocation() {
+    if (selfMarker) {
+      map.removeLayer(selfMarker);
+      selfMarker = null;
+    }
+    if (selfAccuracy) {
+      map.removeLayer(selfAccuracy);
+      selfAccuracy = null;
+    }
+  }
+
   function locate() {
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
@@ -121,10 +172,13 @@ export function createMap({ element, center, zoom, onClick }) {
       }
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          const lat = pos.coords.latitude;
-          const lon = pos.coords.longitude;
-          map.flyTo([lat, lon], Math.max(map.getZoom(), 15), { duration: 0.6 });
-          resolve({ lat, lon });
+          const fix = {
+            lat: pos.coords.latitude,
+            lon: pos.coords.longitude,
+            accuracy: pos.coords.accuracy,
+          };
+          setSelfLocation(fix, { fly: true });
+          resolve(fix);
         },
         () => reject(new Error("Location permission denied — search instead.")),
         { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 },
@@ -136,6 +190,8 @@ export function createMap({ element, center, zoom, onClick }) {
     map,
     setFriendMarkers,
     setSelectedPlace,
+    setSelfLocation,
+    clearSelfLocation,
     drawRoute,
     clearRoute,
     fitRoute,

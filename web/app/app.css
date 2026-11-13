@@ -570,3 +570,50 @@ header { height: 60px; }
   font-weight: 600;
 }
 .list .mini:hover { color: var(--danger); border-color: var(--danger); }
+
+/* Current-position marker (only after explicit locate / follow) */
+.pin-self { background: none; border: 0; }
+.pin-self .pin-dot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #2dd4bf;
+  border: 3px solid #f8fafc;
+  box-shadow: 0 0 0 6px rgba(45, 212, 191, 0.28);
+}
+.pin-self .pin-dot::after {
+  content: "";
+  position: absolute;
+  inset: -9px;
+  border-radius: 50%;
+  border: 2px solid rgba(52, 211, 153, 0.55);
+  animation: pinpoint-pulse 2.2s ease-out infinite;
+}
+.pin-self .pin-label {
+  position: absolute;
+  left: 0;
+  top: 13px;
+  transform: translateX(-50%);
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.78);
+  color: #e5e7eb;
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.self-accuracy {
+  stroke-dasharray: 4 4;
+}
+@keyframes pinpoint-pulse {
+  0% { transform: scale(0.65); opacity: 0.9; }
+  70% { transform: scale(1.25); opacity: 0; }
+  100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pin-self .pin-dot::after { animation: none; opacity: 0.35; }
+}

@@ -32,6 +32,10 @@ The per-item flagged list for this release is in
 - [FEATURE] **Locate me** (explicit button, browser permission only) and
   route follow mode using `watchPosition` (preview, no voice).
 ### Fixed
+- [FIX] **No “you are here” marker after locating**: the locate button only
+  flew the map to the GPS fix. It now draws a pulsing “You” marker plus a
+  dashed accuracy circle (also updated during route follow mode) and clears
+  it on logout.
 - [FIX] **Cross-account saved-place flash**: switching accounts without a
   reload could briefly show the previous account’s saved places; the drawer
   is cleared on logout and re-rendered from the current account’s keys.

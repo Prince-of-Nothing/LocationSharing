@@ -397,11 +397,13 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
     stopFollowing();
     route.watchId = navigator.geolocation.watchPosition(
       (pos) => {
-        route.origin = {
+        const fix = {
           lat: pos.coords.latitude,
           lon: pos.coords.longitude,
-          label: "My location",
+          accuracy: pos.coords.accuracy,
         };
+        mapApi.setSelfLocation(fix);
+        route.origin = { lat: fix.lat, lon: fix.lon, label: "My location" };
         renderRouteFields();
       },
       () => setStatus("Location permission denied — routing from map centre.", true),
