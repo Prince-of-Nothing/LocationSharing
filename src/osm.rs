@@ -16,9 +16,53 @@
 use serde::Deserialize;
 use std::time::{Duration, Instant};
 
-pub const NOMINATIM_BASE: &str = "https://nominatim.openstreetmap.org";
-pub const OSRM_BASE: &str = "https://router.project-osrm.org";
-pub const OVERPASS_BASE: &str = "https://overpass-api.de/api/interpreter";
+/// Public demo endpoints (defaults only). Production must point the
+/// `PINPOINT_*_URL` env vars at **self-hosted** services — see
+/// `docs/maps/self-hosted-osm.md` and ADR-0011.
+pub const PUBLIC_NOMINATIM: &str = "https://nominatim.openstreetmap.org";
+pub const PUBLIC_OSRM: &str = "https://router.project-osrm.org";
+pub const PUBLIC_OVERPASS: &str = "https://overpass-api.de/api/interpreter";
+
+fn env_url(name: &str, default: &str) -> String {
+    std::env::var(name)
+        .ok()
+        .map(|v| v.trim().trim_end_matches('/').to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| default.to_string())
+}
+
+/// Active Nominatim base: `PINPOINT_NOMINATIM_URL` or the public demo.
+pub fn nominatim_base() -> String {
+    env_url("PINPOINT_NOMINATIM_URL", PUBLIC_NOMINATIM)
+}
+
+/// Active OSRM base: `PINPOINT_OSRM_URL` or the public demo.
+pub fn osrm_base() -> String {
+    env_url("PINPOINT_OSRM_URL", PUBLIC_OSRM)
+}
+
+/// Mode-specific OSRM base. Driving always falls back to [`osrm_base`];
+/// foot/bike require their own self-hosted instance because the public demo
+/// only serves a car profile (a `/foot` request silently returns car geometry).
+pub fn osrm_base_for(mode: TravelMode) -> Option<String> {
+    match mode {
+        TravelMode::Driving => Some(osrm_base()),
+        TravelMode::Foot => env_optional("PINPOINT_OSRM_FOOT_URL"),
+        TravelMode::Bike => env_optional("PINPOINT_OSRM_BIKE_URL"),
+    }
+}
+
+fn env_optional(name: &str) -> Option<String> {
+    std::env::var(name)
+        .ok()
+        .map(|v| v.trim().trim_end_matches('/').to_string())
+        .filter(|v| !v.is_empty())
+}
+
+/// Active Overpass interpreter URL: `PINPOINT_OVERPASS_URL` or the public demo.
+pub fn overpass_url() -> String {
+    env_url("PINPOINT_OVERPASS_URL", PUBLIC_OVERPASS)
+}
 
 const USER_AGENT: &str = "PinpointRust/0.1.0 (privacy-first OSM client)";
 
@@ -265,7 +309,8 @@ impl OsmClient {
         };
         self.throttle().await;
         let url = format!(
-            "{NOMINATIM_BASE}/search?q={}&format=jsonv2&limit=8&addressdetails=1&bounded=0&viewbox=26.5,48.5,30.0,45.5&accept-language=ro,ru,en",
+            "{}/search?q={}&format=jsonv2&limit=8&addressdetails=1&bounded=0&viewbox=26.5,48.5,30.0,45.5&accept-language=ro,ru,en",
+            nominatim_base(),
             urlencoding(&biased)
         );
         let items: Vec<NominatimItem> = self.http.get(&url).send().await?.json().await?;
@@ -280,22 +325,62 @@ impl OsmClient {
     pub async fn reverse(&self, latitude: f64, longitude: f64) -> anyhow::Result<SearchPlace> {
         self.throttle().await;
         let url = format!(
-            "{NOMINATIM_BASE}/reverse?lat={latitude}&lon={longitude}&format=jsonv2&zoom=16"
+            "{}/reverse?lat={latitude}&lon={longitude}&format=jsonv2&zoom=16",
+            nominatim_base()
         );
         let item: NominatimItem = self.http.get(&url).send().await?.json().await?;
         Ok(item.into_place())
     }
 
-    /// OSRM route (driving/foot/bike).
+    /// OSRM route (driving/foot/bike) using the single demo base.
+    /// Desktop parity: public OSRM ignores the profile, so this remains the
+    /// legacy path; the web proxy uses `route_alternatives` with per-mode URLs.
     pub async fn route(
         &self,
         from: (f64, f64),
         to: (f64, f64),
         mode: TravelMode,
     ) -> anyhow::Result<Route> {
+        self.route_alternatives_at(&osrm_base(), from, to, mode)
+            .await?
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("No route found between these points."))
+    }
+
+    /// Web routing with up to three alternatives, using the mode-specific
+    /// self-hosted URL when configured (see [`osrm_base_for`]).
+    pub async fn route_alternatives(
+        &self,
+        from: (f64, f64),
+        to: (f64, f64),
+        mode: TravelMode,
+    ) -> anyhow::Result<Vec<Route>> {
+        let base = osrm_base_for(mode).ok_or_else(|| {
+            anyhow::anyhow!(
+                "The {} routing profile is not configured. Set {}.",
+                mode.profile(),
+                match mode {
+                    TravelMode::Driving => "PINPOINT_OSRM_URL",
+                    TravelMode::Foot => "PINPOINT_OSRM_FOOT_URL",
+                    TravelMode::Bike => "PINPOINT_OSRM_BIKE_URL",
+                }
+            )
+        })?;
+        self.route_alternatives_at(&base, from, to, mode).await
+    }
+
+    async fn route_alternatives_at(
+        &self,
+        base: &str,
+        from: (f64, f64),
+        to: (f64, f64),
+        mode: TravelMode,
+    ) -> anyhow::Result<Vec<Route>> {
         // Coords are lon,lat;lon,lat (OSRM convention).
         let url = format!(
-            "{OSRM_BASE}/route/v1/{}/{:.6},{:.6};{:.6},{:.6}?overview=full&geometries=polyline&steps=true",
+            "{}/route/v1/{}/{:.6},{:.6};{:.6},{:.6}?overview=full&geometries=polyline&steps=true&alternatives=true",
+            base,
             mode.profile(),
             from.1,
             from.0,
@@ -306,30 +391,7 @@ impl OsmClient {
         if resp.code != "Ok" || resp.routes.is_empty() {
             anyhow::bail!("No route found between these points.");
         }
-        let r = resp.routes.into_iter().next().unwrap();
-        let points = decode_polyline(&r.geometry);
-        let summary = r
-            .legs
-            .first()
-            .map(|l| l.summary.clone())
-            .unwrap_or_default();
-        let steps: Vec<RouteStep> = r
-            .legs
-            .into_iter()
-            .flat_map(|leg| leg.steps)
-            .map(|s| RouteStep {
-                text: step_text(&s),
-                distance_m: s.distance,
-                duration_s: s.duration,
-            })
-            .collect();
-        Ok(Route {
-            points,
-            distance_m: r.distance,
-            duration_s: r.duration,
-            steps,
-            summary,
-        })
+        Ok(resp.routes.into_iter().map(route_from_osrm).collect())
     }
 
     /// Overpass POI around a centre (one query per call).
@@ -351,7 +413,7 @@ impl OsmClient {
         );
         let resp: OverpassResponse = self
             .http
-            .post(OVERPASS_BASE)
+            .post(overpass_url())
             .header("Content-Type", "application/x-www-form-urlencoded")
             .body(format!("data={}", urlencoding(&query)))
             .send()
@@ -398,6 +460,32 @@ impl Default for OsmClient {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+fn route_from_osrm(r: OsrmRoute) -> Route {
+    let points = decode_polyline(&r.geometry);
+    let summary = r
+        .legs
+        .first()
+        .map(|l| l.summary.clone())
+        .unwrap_or_default();
+    let steps: Vec<RouteStep> = r
+        .legs
+        .into_iter()
+        .flat_map(|leg| leg.steps)
+        .map(|s| RouteStep {
+            text: step_text(&s),
+            distance_m: s.distance,
+            duration_s: s.duration,
+        })
+        .collect();
+    Route {
+        points,
+        distance_m: r.distance,
+        duration_s: r.duration,
+        steps,
+        summary,
+    }
+}
 
 fn urlencoding(s: &str) -> String {
     // Minimal percent-encoding (unreserved + space as %20). Keeps us
@@ -478,6 +566,54 @@ fn step_text(step: &OsrmStep) -> String {
     format!("{verb}{name}")
 }
 
+/// Render a route as a GPX 1.1 track (with ODbL attribution embedded).
+pub fn route_to_gpx(route: &Route, name: &str) -> String {
+    let safe = xml_escape(name);
+    let mut trkpts = String::new();
+    for (lat, lon) in &route.points {
+        trkpts.push_str(&format!(
+            "      <trkpt lat=\"{lat:.6}\" lon=\"{lon:.6}\"></trkpt>\n"
+        ));
+    }
+    format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+<gpx version=\"1.1\" creator=\"Pinpoint\" xmlns=\"http://www.topografix.com/GPX/1/1\">\n\
+  <metadata>\n\
+    <name>{safe}</name>\n\
+    <desc>Route from Pinpoint — map data © OpenStreetMap contributors (ODbL)</desc>\n\
+  </metadata>\n\
+  <trk>\n\
+    <name>{safe}</name>\n\
+    <trkseg>\n\
+{trkpts}    </trkseg>\n\
+  </trk>\n\
+</gpx>\n"
+    )
+}
+
+/// Write a route GPX file under `<app_data_dir>/exports/` and return its path.
+pub fn export_route_gpx(route: &Route, name: &str) -> anyhow::Result<std::path::PathBuf> {
+    let base = crate::platform::app_data_dir()
+        .ok_or_else(|| anyhow::anyhow!("no writable app data dir on this platform"))?;
+    let dir = base.join("exports");
+    std::fs::create_dir_all(&dir)?;
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let path = dir.join(format!("route_{stamp}.gpx"));
+    std::fs::write(&path, route_to_gpx(route, name))?;
+    Ok(path)
+}
+
+fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
 pub fn poi_fragment(id: &str) -> Option<&'static str> {
     match id {
         "food" => Some(
@@ -547,5 +683,22 @@ mod tests {
     #[test]
     fn urlencoding_handles_spaces() {
         assert_eq!(urlencoding("Chisinau cafe"), "Chisinau%20cafe");
+    }
+
+    #[test]
+    fn route_gpx_has_trackpoints_and_escaped_name() {
+        use super::{route_to_gpx, Route};
+        let route = Route {
+            points: vec![(47.0105, 28.8638), (47.0205, 28.8738)],
+            distance_m: 1200.0,
+            duration_s: 900.0,
+            steps: vec![],
+            summary: "Main".into(),
+        };
+        let gpx = route_to_gpx(&route, "Cafe & <Bar>");
+        assert!(gpx.contains("<gpx version=\"1.1\""));
+        assert!(gpx.contains("<trkpt lat=\"47.010500\" lon=\"28.863800\">"));
+        assert!(gpx.contains("Cafe &amp; &lt;Bar&gt;"));
+        assert!(gpx.contains("OpenStreetMap contributors"));
     }
 }
