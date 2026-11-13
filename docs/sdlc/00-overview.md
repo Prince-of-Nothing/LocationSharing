@@ -59,3 +59,16 @@ maps, search, routing, POI browse, bookmarks and offline packs over
 - New to the project: 01 → 03 → 07 → 08.
 - Implementing: 06 → 07 → 09 → 11.
 - Operating / reviewing: 10 → 12 → 14 → 15.
+
+## SDLC model
+
+Pinpoint is built with the **spiral model** — a type of iterative-incremental
+model. Each turn of the spiral runs four stages (goal elaboration → risk
+analysis & prototyping → development of an interim version → planning the next
+turn) and delivers a minimal finished version of the product, so risk gets
+constant attention and the customer sees the product throughout. The full
+spiral plan (turns S0–S6), exit criteria, pros/cons and critical path live in
+[17-spiral-execution-plan.md](17-spiral-execution-plan.md).
+The `docs/sdlc/00–16` set is the requirement/design/verification backbone that
+each turn consumes and extends; `15-traceability-matrix.md` is the
+requirement→test contract.

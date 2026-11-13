@@ -43,7 +43,38 @@ Semantic Versioning. This is a pre-1.0 (thesis MVP) project.
 - `weba` admin console and `webk` kiosk check-in clients — planned
 - Project governance docs: CONTRIBUTING, CODE_OF_CONDUCT, docs/{PROJECT, ROADMAP,
   ARCHITECTURE, SECURITY, PRIVACY, TESTING, DEPLOYMENT, GLOSSARY}, LICENSE template
-
+- OS keychain integration (`src/security/keychain.rs`): unified `Keychain`
+  trait with `OsKeychain` (Windows Credential Manager / macOS Keychain /
+  Linux Secret Service via the `keyring` crate) and `FileKeychain`
+  fallback. `KeyManager` now persists its active key through
+  `Keychain::load_or_generate`; `PinpointApp::new` opens the
+  best-available keychain via `keychain::open_default`. Closes the
+  "OS keychain for bookmark keys" hardening item.
+- Spiral execution plan (`docs/sdlc/17-…`): model statement, turns S0–S6
+  (Foundation → OSM parity → Security → Reliability → Multiplatform/mobile →
+  Verification → Deployment/report), four stages per turn (goal elaboration,
+  risk analysis & prototyping, interim version, next-turn planning), exit
+  criteria, pros/cons + mitigations, and the critical path to completion.
+- Interactive Slippy tile canvas (`src/map.rs`, `src/tilepacks.rs`,
+  `src/ui/map.rs`): Web Mercator projection (`latlon_to_world_px` /
+  `world_px_to_latlon`), drag-to-pan, scroll/`+`/`-` zoom (`z2..=z18`),
+  on-disk PNG tile texture rendering from `~/.pinpoint/tiles/{z}/{x}/{y}.png`,
+  in-app **"Download current area pack"** button with multi-source ODbL
+  fallback (CARTO → Wikimedia → CARTO Voyager), and clickable ODbL
+  `https://www.openstreetmap.org/copyright` attribution.
+- E2E location encryption + OS keychain publish wiring (`src/app.rs`):
+  derives per-user `e2e_location_key` on login/register, persists it in the
+  OS keychain, encrypts published locations with AES-256-GCM before sending,
+  and wipes key material on logout.
+- Real GPS publish + dual mobile apps (`src/platform.rs`, `src/mobile/mod.rs`,
+  `mobile/`, `android/`, `ios/`): `EnvOrFileGpsProvider` (`PINPOINT_GPS_FIX`
+  or `gps_fix.json`), **"📍 Use GPS"** button on the Map screen, `geo:` and
+  `pinpoint://` mobile deep-link parser, `[package.metadata.android]` for
+  `cargo-apk`, and the clean Kotlin/Jetpack Compose Android app in `mobile/`
+  alongside the Rust mobile client.
+- Bookmarks GeoJSON export/import (`src/bookmarks.rs`, `src/ui/bookmarks.rs`):
+  RFC 7946 `FeatureCollection` export/import with fail-closed coordinate
+  validation and one-click clipboard copy.
 ### Changed
 - Rust desktop client: bumped `eframe` 0.30 → 0.32, moving the Linux
   accessibility stack off `quick-xml 0.30.0` (RUSTSEC-2026-0194,

@@ -9,14 +9,29 @@ verification path.
 
 | Client | Entry | Build | Status |
 |---|---|---|---|
-| Windows desktop | `src/main.rs` (`pinpoint-desktop`) | `cargo build --locked` | Builds in CI; run: `cargo run -- --backend http://localhost:8000` |
+| Windows desktop | `src/main.rs` (`pinpoint-desktop`) | `cargo build --locked` | Builds in CI; interactive Slippy canvas + offline packs + OS keychain; run: `cargo run -- --backend http://localhost:8000` |
 | Linux desktop | same binary | `Dockerfile.client` (X11) + `packaging/linux/` (.deb/.desktop) | Image builds; GUI needs X11 host |
-| macOS desktop | same binary | `cargo build --locked` + `packaging/macos/` (.app via `cargo-bundle`) | Needs macOS/Xcode — not built here |
-| Android | same `src/` via `cargo-apk` | `cargo apk build --locked` (`android/`) | Scaffolding (manifest + NCSC); needs NDK/SDK; modular bootstrap in `src/mobile` |
-| iOS | same `src/` via `cargo-xcodebuild` | `cargo xcodebuild --locked` (`ios/Info.plist`) | Scaffolding; needs macOS/Xcode; modular bootstrap in `src/mobile` |
-| Web (Rust/WASM) | `src/bin/pinpoint-web.rs` + `web/` | `trunk serve --config web/Trunk.toml --release` | Static shell + wasm hook; full egui UI pending (see below) |
+| macOS desktop | same binary | `cargo build --locked` + `packaging/macos/` (.app via `cargo-bundle`) | Builds in CI (`client-macos`); GUI needs macOS |
+| Android (Rust) | same `src/` via `cargo-apk` | `cargo apk build --locked` (`android/`, `[package.metadata.android]`) | Bootstrap + `geo:`/`pinpoint://` deep-link + GPS provider in `src/mobile`; APK build needs NDK/SDK |
+| Android (Kotlin) | `mobile/` (`org.pinpoint.mobile.MainActivity`) | `cd mobile && ./gradlew :app:assembleDebug` | Jetpack Compose + MapLibre + Keystore `SessionStore` + Clean Architecture (`:core:*`, `:feature:*`); build needs JDK 17 + Android SDK |
+| iOS (Rust) | same `src/` via `cargo-xcodebuild` | `cargo xcodebuild --locked` (`ios/Info.plist`) | Bootstrap + deep-link + GPS provider in `src/mobile`; build needs macOS/Xcode |
+| Web (Rust/WASM) | `src/bin/pinpoint-web.rs` + `web/` | `trunk serve --config web/Trunk.toml --release` | Static shell + wasm hook (`cargo check --target wasm32-unknown-unknown` in CI) |
 | Web Admin `weba` | `src/bin/pinpoint-weba.rs` + `web/weba/` | `trunk serve --config web/weba/Trunk.toml --release` | Modular admin console shell; server-side authz authoritative |
 | Web Kiosk `webk` | `src/bin/pinpoint-webk.rs` + `web/webk/` | `trunk serve --config web/webk/Trunk.toml --release` | Modular kiosk/check-in shell; token/share-link adapter points |
+
+## Mobile strategy (dual apps)
+
+- Two distinct mobile clients are developed in parallel:
+  - **Kotlin/Android** (`mobile/`, Jetpack Compose) — Android-first.
+  - **Rust** (`android/` + `ios/`, `cargo-apk`/`cargo-xcodebuild`) —
+    Android + iOS from the same crate.
+- Both consume the same backend contract (`src/api.rs`, REST v1). Build
+  the Rust mobile targets on a host with the NDK/Xcode; the Kotlin app
+  builds with JDK 17 + Android SDK.
+
+## Tooling
+
+- Efficient AI-assisted development: see `docs/antigravity-guide.md`.
 
 ## Shared behavior (all platforms)
 
@@ -34,7 +49,8 @@ verification path.
   (`src/osm.rs`); OSM hand-off links only; ODbL attribution always rendered.
 - Storage: bookmarks/tilepacks under `~/.pinpoint` on desktop;
   `platform::app_data_dir()` is `None` on Android/iOS/Web → in-memory only.
-  OS keychain for tokens is design-only (see `docs/security-architecture.md`).
+  OS keychain for keys/tokens is wired via `src/security/keychain.rs`
+  (`OsKeychain` on desktop; `FileKeychain` fallback).
 - Web variants: `webapp::WebAppKind::{Web,Admin,Kiosk}` share `src/webapp/*`;
   `webk` kiosk/share-link flows are isolated behind `webapp::kiosk::KioskBackend`.
 
@@ -62,7 +78,7 @@ cargo run -- --backend http://localhost:8000
 - `.app`: `cargo bundle --release --format app` (`[package.metadata.bundle]`).
 - iOS: `cargo xcodebuild --locked` (`ios/Info.plist`).
 
-### Android
+### Android (Rust — `cargo-apk`)
 
 ```bash
 rustup target add aarch64-linux-android
@@ -72,6 +88,16 @@ adb install target/aarch64-linux-android/debug/pinpoint-debug.apk
 ```
 
 Cleartext is allowlisted only for `10.0.2.2`/`localhost` (`android/network_security_config.xml`).
+
+### Android (Kotlin — Jetpack Compose + MapLibre)
+
+```bash
+cd mobile
+./gradlew :app:assembleDebug
+adb install app/build/outputs/apk/debug/app-debug.apk
+```
+
+Clean Architecture modules (`:core:domain`, `:core:network`, `:core:data`, `:core:map`, `:feature:auth`, `:feature:map`, `:feature:friends`, `:feature:sharing`) talking to the same `/api/v1/*` contract.
 
 ### iOS
 

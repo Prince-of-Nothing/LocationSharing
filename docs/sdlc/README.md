@@ -34,6 +34,7 @@ Pinpoint does **not** copy those products; it adopts the same OSM data
 | 14 | [14-risk-register-and-assumptions.md](14-risk-register-and-assumptions.md) | Risks, issues, assumptions, dependencies |
 | 15 | [15-traceability-matrix.md](15-traceability-matrix.md) | Requirement → design → code → evidence |
 | 16 | [16-glossary-and-references.md](16-glossary-and-references.md) | Glossary, OSM references, ADRs |
+| 17 | [17-spiral-execution-plan.md](17-spiral-execution-plan.md) | Spiral model, turns S0–S6, four stages per turn, exit criteria, critical path |
 
 ## Conventions
 
@@ -50,3 +51,4 @@ Pinpoint does **not** copy those products; it adopts the same OSM data
 2. 06 → 09 for *how* it is built (including all OSM integration).
 3. 10 → 12 for *how it stays safe and shipped*.
 4. 13 → 16 for operations, risks, traceability and terms.
+5. **17** for the execution model and spiral plan (S0–S6).

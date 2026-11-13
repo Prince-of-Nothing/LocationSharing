@@ -27,7 +27,7 @@ pub mod validation;
 pub use audit::{AuditEvent, AuditLogger};
 pub use e2e::{decrypt_location, derive_location_key, encrypt_location};
 pub use encryption::{AesGcmEncryption, EncryptionKey, KeyManager};
-pub use keychain::{FileKeychain, Keychain};
+pub use keychain::{open_default, FileKeychain, Keychain, OsKeychain, MASTER_KEY_NAME};
 pub use mfa::{generate_secret, otpauth_uri, totp, verify_totp};
 pub use password::{hash_password, verify_password};
 pub use rate_limit::{RateLimitResult, RateLimiter};

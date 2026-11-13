@@ -1,17 +1,19 @@
 //! OS keychain integration for secure secret storage.
 //!
 //! Provides a unified [`Keychain`] trait with platform-specific backends:
-//! - Windows: Credential Manager (future)
-//! - macOS: Keychain Services (future)
-//! - Linux: Secret Service API (future)
+//! - Windows: Credential Manager
+//! - macOS: Keychain Services
+//! - Linux: Secret Service API
 //! - Fallback: [`FileKeychain`] — AES-256-GCM encrypted file in the app data
 //!   directory, works on all platforms.
 //!
 //! Used to store E2E encryption keys, OAuth tokens, and other sensitive
-//! material so users don't need to re-enter passwords every session.
+//! material so users don't need to re-enter passwords every session. The
+//! native backends are backed by the `keyring` crate; see
+//! `docs/security/e2e-mfa-design.md` for the design note.
 
-use anyhow::{bail, Result};
 use aead::{Aead, KeyInit};
+use anyhow::{bail, Result};
 use rand::RngCore;
 use std::path::PathBuf;
 
@@ -118,20 +120,128 @@ impl Keychain for FileKeychain {
     }
 }
 
+/// Credential-store service name used for every Pinpoint entry.
+const SERVICE: &str = "pinpoint";
+
 /// OS-native keychain backend.
 ///
 /// On Windows this wraps Credential Manager; on macOS, Keychain Services;
-/// on Linux, the Secret Service API. On platforms where a native backend
-/// is not yet implemented, constructing an `OsKeychain` returns an error
-/// and callers should fall back to [`FileKeychain`].
-pub enum OsKeychain {}
+/// on Linux, the Secret Service API. On platforms without a native backend
+/// (Android/iOS/WebAssembly) [`OsKeychain::open`] returns an error and
+/// callers should fall back to [`FileKeychain`].
+pub struct OsKeychain {
+    #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+    service: String,
+}
 
 impl OsKeychain {
-    /// Attempt to open the OS-native keychain. Returns an error on
-    /// platforms where no native backend is implemented yet.
+    /// Attempt to open the OS-native keychain. Returns an error when the
+    /// platform store is unavailable (for example headless Linux without a
+    /// Secret Service) so callers can fall back to [`FileKeychain`].
     pub fn open() -> Result<Box<dyn Keychain>> {
-        bail!("OS-native keychain not implemented on this platform; use FileKeychain");
+        #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+        {
+            // `Entry::new` fails closed with `NoDefaultStore` when the
+            // platform credential store could not be initialized.
+            keyring::Entry::new(SERVICE, "probe")?;
+            Ok(Box::new(Self {
+                service: SERVICE.to_string(),
+            }))
+        }
+        #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+        {
+            bail!("OS-native keychain not available on this platform; use FileKeychain");
+        }
     }
+}
+
+#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+impl Keychain for OsKeychain {
+    fn set(&self, key_name: &str, value: &[u8], overwrite: bool) -> Result<()> {
+        let entry = keyring::Entry::new(&self.service, key_name)
+            .map_err(|e| anyhow::anyhow!("keychain open: {e}"))?;
+        if !overwrite {
+            match entry.get_secret() {
+                Ok(_) => bail!("keychain item already exists: {key_name}"),
+                Err(keyring::Error::NoEntry) => {}
+                Err(e) => return Err(anyhow::anyhow!("keychain lookup: {e}")),
+            }
+        }
+        entry
+            .set_secret(value)
+            .map_err(|e| anyhow::anyhow!("keychain store: {e}"))?;
+        Ok(())
+    }
+
+    fn get(&self, key_name: &str) -> Result<Vec<u8>> {
+        let entry = keyring::Entry::new(&self.service, key_name)
+            .map_err(|e| anyhow::anyhow!("keychain open: {e}"))?;
+        entry
+            .get_secret()
+            .map_err(|e| anyhow::anyhow!("keychain read: {e}"))
+    }
+
+    fn delete(&self, key_name: &str) -> Result<()> {
+        let entry = keyring::Entry::new(&self.service, key_name)
+            .map_err(|e| anyhow::anyhow!("keychain open: {e}"))?;
+        match entry.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(e) => Err(anyhow::anyhow!("keychain delete: {e}")),
+        }
+    }
+
+    fn contains(&self, key_name: &str) -> Result<bool> {
+        let entry = keyring::Entry::new(&self.service, key_name)
+            .map_err(|e| anyhow::anyhow!("keychain open: {e}"))?;
+        match entry.get_secret() {
+            Ok(_) => Ok(true),
+            Err(keyring::Error::NoEntry) => Ok(false),
+            Err(e) => Err(anyhow::anyhow!("keychain lookup: {e}")),
+        }
+    }
+}
+
+/// Name of the master key entry stored in the keychain.
+pub const MASTER_KEY_NAME: &str = "master_key";
+
+/// Open the best available keychain for this platform.
+///
+/// Prefers the OS-native store ([`OsKeychain`]); when it is unavailable
+/// (headless Linux, platforms without a native backend) and `dir` is
+/// writable, falls back to [`FileKeychain`]. The fallback master key is
+/// generated once and stored in `dir/master.key` with owner-only
+/// permissions on Unix. Returns an error when neither is possible.
+pub fn open_default(dir: Option<PathBuf>) -> Result<Box<dyn Keychain>> {
+    if let Ok(kc) = OsKeychain::open() {
+        return Ok(kc);
+    }
+    let dir = match dir {
+        Some(d) => d,
+        None => bail!("no OS keychain available and no writable app data dir"),
+    };
+    let master_key = load_or_create_master_key(&dir.join("master.key"))?;
+    Ok(Box::new(FileKeychain::new(dir, master_key)?))
+}
+
+/// Load the fallback master key from `path`, generating and persisting a
+/// fresh 256-bit key on first use.
+fn load_or_create_master_key(path: &std::path::Path) -> Result<[u8; 32]> {
+    if let Ok(bytes) = std::fs::read(path) {
+        if bytes.len() == 32 {
+            let mut key = [0u8; 32];
+            key.copy_from_slice(&bytes);
+            return Ok(key);
+        }
+    }
+    let mut key = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut key);
+    std::fs::write(path, key).map_err(|e| anyhow::anyhow!("write master key: {e}"))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+    }
+    Ok(key)
 }
 
 #[cfg(test)]
@@ -181,12 +291,49 @@ mod tests {
         // Raw file should not contain plaintext.
         let path = kc.entry_path("sensitive");
         let raw = std::fs::read(&path).unwrap();
-        assert!(!raw.contains(b"top-secret-plaintext"));
+        let needle = b"top-secret-plaintext";
+        assert!(!raw.windows(needle.len()).any(|w| w == needle));
 
         // But decryption recovers it.
         let val = kc.get("sensitive").unwrap();
         assert_eq!(val, b"top-secret-plaintext");
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn os_keychain_round_trip() {
+        // Only runs on platforms with a native store (Windows/macOS/Linux).
+        let kc = match OsKeychain::open() {
+            Ok(kc) => kc,
+            Err(_) => return,
+        };
+        let name = format!("pinpoint-test-{}", std::process::id());
+        let _ = kc.delete(&name);
+        kc.set(&name, b"os-secret-value", false).unwrap();
+        assert!(kc.contains(&name).unwrap());
+        let val = kc.get(&name).unwrap();
+        assert_eq!(val, b"os-secret-value");
+        // Overwrite without flag fails.
+        assert!(kc.set(&name, b"new", false).is_err());
+        // Overwrite with flag succeeds.
+        kc.set(&name, b"new", true).unwrap();
+        assert_eq!(kc.get(&name).unwrap(), b"new");
+        kc.delete(&name).unwrap();
+        assert!(!kc.contains(&name).unwrap());
+        assert!(kc.get(&name).is_err());
+    }
+
+    #[test]
+    fn open_default_returns_a_usable_keychain() {
+        let dir = std::env::temp_dir().join(format!("pinpoint-default-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let name = format!("default-{}", std::process::id());
+        let kc = open_default(Some(dir.clone())).unwrap();
+        let _ = kc.delete(&name);
+        kc.set(&name, b"v", false).unwrap();
+        assert_eq!(kc.get(&name).unwrap(), b"v");
+        kc.delete(&name).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

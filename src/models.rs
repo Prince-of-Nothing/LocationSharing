@@ -272,6 +272,14 @@ pub struct AppData {
     pub totp_pending_secret: Option<String>,
     /// Whether the signed-in user's account has MFA enabled (from login/status).
     pub mfa_enabled: bool,
+    /// Interactive map zoom level (2..=18; 0 means uninitialized → defaults to 13).
+    pub map_zoom: u8,
+    /// Interactive map center latitude (defaults to Chișinău 47.0105 when 0.0).
+    pub map_center_lat: f64,
+    /// Interactive map center longitude (defaults to Chișinău 28.8638 when 0.0).
+    pub map_center_lon: f64,
+    /// Most recent E2E-encrypted location payload produced on this device.
+    pub last_e2e_location_ciphertext: Option<String>,
 }
 
 #[cfg(test)]

@@ -157,10 +157,12 @@ impl AesGcmEncryption {
     }
 }
 
-/// Manages encryption keys with in-memory storage and optional persistence.
+/// Manages encryption keys with in-memory storage and optional persistence
+/// via an OS keychain / [`crate::security::keychain::FileKeychain`].
 pub struct KeyManager {
     current_key: Mutex<Option<EncryptionKey>>,
     key_store: Mutex<std::collections::HashMap<String, EncryptionKey>>,
+    keychain: Option<Box<dyn crate::security::Keychain>>,
 }
 
 impl KeyManager {
@@ -168,7 +170,36 @@ impl KeyManager {
         Self {
             current_key: Mutex::new(None),
             key_store: Mutex::new(std::collections::HashMap::new()),
+            keychain: None,
         }
+    }
+
+    /// Create a `KeyManager` that persists its active key through `keychain`.
+    pub fn with_keychain(keychain: Box<dyn crate::security::Keychain>) -> Self {
+        Self {
+            current_key: Mutex::new(None),
+            key_store: Mutex::new(std::collections::HashMap::new()),
+            keychain: Some(keychain),
+        }
+    }
+
+    /// Load the persisted key from the keychain, or generate and persist a
+    /// new one when none exists (or the keychain is unavailable). Returns
+    /// the active key, if any.
+    pub fn load_or_generate(&self) -> Option<EncryptionKey> {
+        let kc = self.keychain.as_ref()?;
+        const KEY_NAME: &str = crate::security::keychain::MASTER_KEY_NAME;
+        if let Ok(bytes) = kc.get(KEY_NAME) {
+            if bytes.len() == 32 {
+                if let Ok(key) = EncryptionKey::from_bytes(&bytes) {
+                    *self.current_key.lock().unwrap() = Some(key.clone());
+                    return Some(key);
+                }
+            }
+        }
+        let key = self.generate_key();
+        let _ = kc.set(KEY_NAME, key.as_bytes(), true);
+        Some(key)
     }
 
     /// Generates a new random key and sets it as current.
@@ -182,6 +213,13 @@ impl KeyManager {
         {
             let mut current = self.current_key.lock().unwrap();
             *current = Some(key.clone());
+        }
+        if let Some(kc) = &self.keychain {
+            let _ = kc.set(
+                crate::security::keychain::MASTER_KEY_NAME,
+                key.as_bytes(),
+                true,
+            );
         }
         key
     }
@@ -211,6 +249,25 @@ impl KeyManager {
             .lock()
             .unwrap()
             .insert(key_id.to_string(), key);
+    }
+
+    /// Persist a named secret in the backing OS/file keychain (no-op if no keychain).
+    pub fn persist_secret(&self, name: &str, value: &[u8]) {
+        if let Some(kc) = &self.keychain {
+            let _ = kc.set(name, value, true);
+        }
+    }
+
+    /// Load a named secret from the backing OS/file keychain, if present.
+    pub fn load_secret(&self, name: &str) -> Option<Vec<u8>> {
+        self.keychain.as_ref()?.get(name).ok()
+    }
+
+    /// Delete a named secret from the backing OS/file keychain.
+    pub fn delete_secret(&self, name: &str) {
+        if let Some(kc) = &self.keychain {
+            let _ = kc.delete(name);
+        }
     }
 }
 
@@ -316,5 +373,36 @@ mod tests {
 
         // Invalid location
         assert!(!validate_location(200.0, -87.6323, None).is_valid());
+    }
+
+    #[test]
+    fn key_manager_persists_with_file_keychain() {
+        let dir = std::env::temp_dir().join(format!("pinpoint-km-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let kc =
+            Box::new(crate::security::keychain::FileKeychain::new(dir.clone(), [7u8; 32]).unwrap());
+        let km = KeyManager::with_keychain(kc);
+        let key = km
+            .load_or_generate()
+            .expect("load_or_generate returns a key");
+        // A second manager over the same keychain loads the same key.
+        let kc2 =
+            Box::new(crate::security::keychain::FileKeychain::new(dir.clone(), [7u8; 32]).unwrap());
+        let km2 = KeyManager::with_keychain(kc2);
+        let key2 = km2
+            .load_or_generate()
+            .expect("load_or_generate returns a key");
+        assert_eq!(key.as_bytes(), key2.as_bytes());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn key_manager_without_keychain_generates_in_memory() {
+        let km = KeyManager::new();
+        assert!(km.current_key().is_none());
+        let key = km.generate_key();
+        assert!(km.current_key().is_some());
+        assert_eq!(km.current_key().unwrap().as_bytes(), key.as_bytes());
     }
 }

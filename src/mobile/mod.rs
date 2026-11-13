@@ -39,3 +39,134 @@ pub fn mobile_backend_config() -> BackendConfig {
 pub fn mobile_backend_label(cfg: &BackendConfig) -> String {
     format!("{:?}@{}", cfg.kind, cfg.base_url)
 }
+
+/// Touch-friendly viewport metrics for mobile screens (Android / iOS).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MobileViewportProfile {
+    pub pixels_per_point: f32,
+    pub min_tap_target_pt: f32,
+    pub portrait_default: bool,
+}
+
+impl Default for MobileViewportProfile {
+    fn default() -> Self {
+        Self {
+            pixels_per_point: 2.0,
+            min_tap_target_pt: 44.0,
+            portrait_default: true,
+        }
+    }
+}
+
+/// Mobile OS lifecycle events bridged from Android `Activity` / iOS `UIApplication`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MobileLifecycleEvent {
+    Resumed,
+    Paused,
+    LowMemory,
+    BackPressed,
+}
+
+/// Parsed mobile deep link (`geo:lat,lon` or `pinpoint://<screen>`).
+#[derive(Debug, Clone, PartialEq)]
+pub enum MobileDeepLink {
+    /// Standard RFC 5870 `geo:lat,lon` (optional `?q=label`) navigation intent.
+    Geo {
+        latitude: f64,
+        longitude: f64,
+        label: Option<String>,
+    },
+    /// App-internal route (`pinpoint://map`, `pinpoint://emergency`, etc.).
+    Screen(crate::app::CurrentScreen),
+}
+
+impl MobileDeepLink {
+    /// Parse a `geo:` or `pinpoint://` URI fail-closed. Out-of-range
+    /// coordinates or unknown screens return `None`.
+    pub fn parse(uri: &str) -> Option<Self> {
+        let s = uri.trim();
+        if let Some(rest) = s.strip_prefix("geo:") {
+            let (coords_part, query_part) = match rest.split_once('?') {
+                Some((c, q)) => (c, Some(q)),
+                None => (rest, None),
+            };
+            let coords_only = coords_part.split(';').next().unwrap_or(coords_part);
+            let mut it = coords_only.split(',');
+            let lat = it.next()?.trim().parse::<f64>().ok()?;
+            let lon = it.next()?.trim().parse::<f64>().ok()?;
+            if !crate::security::validation::validate_location(lat, lon, None).is_valid() {
+                return None;
+            }
+            let label = query_part.and_then(|q| {
+                q.split('&')
+                    .find_map(|kv| kv.strip_prefix("q="))
+                    .map(|v| v.replace('+', " "))
+                    .filter(|v| !v.trim().is_empty())
+            });
+            return Some(Self::Geo {
+                latitude: lat,
+                longitude: lon,
+                label,
+            });
+        }
+        if let Some(rest) = s.strip_prefix("pinpoint://") {
+            let slug = rest.trim_matches('/').split('?').next().unwrap_or("");
+            let screen = match slug {
+                "map" => crate::app::CurrentScreen::Map,
+                "friends" => crate::app::CurrentScreen::Friends,
+                "sharing" => crate::app::CurrentScreen::Sharing,
+                "places" => crate::app::CurrentScreen::Places,
+                "bookmarks" | "saved" => crate::app::CurrentScreen::Bookmarks,
+                "trips" => crate::app::CurrentScreen::Trips,
+                "emergency" => crate::app::CurrentScreen::Emergency,
+                "profile" => crate::app::CurrentScreen::Profile,
+                _ => return None,
+            };
+            return Some(Self::Screen(screen));
+        }
+        None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::CurrentScreen;
+
+    #[test]
+    fn mobile_launch_config_defaults_to_offline_first() {
+        let cfg = MobileLaunchConfig::default();
+        assert!(cfg.offline_first);
+        let label = mobile_backend_label(&cfg.backend);
+        assert!(label.contains('@'));
+    }
+
+    #[test]
+    fn geo_deep_link_parses_and_validates_coordinates() {
+        let link = MobileDeepLink::parse("geo:47.0105,28.8638?q=Chisinau+Center").unwrap();
+        assert_eq!(
+            link,
+            MobileDeepLink::Geo {
+                latitude: 47.0105,
+                longitude: 28.8638,
+                label: Some("Chisinau Center".to_string()),
+            }
+        );
+        // Invalid coordinates fail closed.
+        assert!(MobileDeepLink::parse("geo:147.0,28.8").is_none());
+        assert!(MobileDeepLink::parse("geo:not,numbers").is_none());
+    }
+
+    #[test]
+    fn pinpoint_scheme_routes_to_screens() {
+        assert_eq!(
+            MobileDeepLink::parse("pinpoint://emergency"),
+            Some(MobileDeepLink::Screen(CurrentScreen::Emergency))
+        );
+        assert_eq!(
+            MobileDeepLink::parse("pinpoint://saved"),
+            Some(MobileDeepLink::Screen(CurrentScreen::Bookmarks))
+        );
+        assert!(MobileDeepLink::parse("pinpoint://unknown").is_none());
+    }
+}

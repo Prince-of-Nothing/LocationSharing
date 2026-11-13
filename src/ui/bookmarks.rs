@@ -11,7 +11,14 @@ impl PinpointAppUI {
         let list = store.list();
         self.app.data().lock().unwrap().bookmarks_count = list.len();
         ui.group(|ui| {
-            ui.label(format!("{} saved", list.len()));
+            ui.horizontal(|ui| {
+                ui.label(format!("{} saved", list.len()));
+                if !list.is_empty() && ui.small_button("Copy GeoJSON").clicked() {
+                    ctx.copy_text(store.to_geojson());
+                    self.app
+                        .set_notice(Some("Copied bookmarks GeoJSON to clipboard.".to_string()));
+                }
+            });
             for b in &list {
                 ui.horizontal(|ui| {
                     ui.label(format!(

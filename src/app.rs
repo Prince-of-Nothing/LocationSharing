@@ -114,6 +114,9 @@ pub struct PinpointApp {
     rate_limiter: Arc<Mutex<RateLimiter>>,
     audit_logger: Arc<AuditLogger>,
     key_manager: Arc<KeyManager>,
+    /// Per-user E2E location encryption key (`e2e$<salt>$<iters>$<key>`),
+    /// derived on login/register and persisted in the OS keychain.
+    e2e_location_key: Arc<Mutex<Option<String>>>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
@@ -179,8 +182,20 @@ impl PinpointApp {
             ..Default::default()
         };
 
-        let key_manager = KeyManager::new();
-        let _ = key_manager.generate_key();
+        // Persist the active encryption key in the OS keychain when one is
+        // available (Windows Credential Manager / macOS Keychain / Linux
+        // Secret Service), falling back to an in-memory key otherwise.
+        let key_manager =
+            match crate::security::keychain::open_default(crate::platform::app_data_dir()) {
+                Ok(kc) => KeyManager::with_keychain(kc),
+                Err(_) => KeyManager::new(),
+            };
+        if key_manager.load_or_generate().is_none() {
+            let _ = key_manager.generate_key();
+        }
+        let persisted_e2e_key = key_manager
+            .load_secret("e2e_location_key")
+            .and_then(|b| String::from_utf8(b).ok());
 
         Self {
             data: Arc::new(Mutex::new(data)),
@@ -199,6 +214,7 @@ impl PinpointApp {
             rate_limiter: Arc::new(Mutex::new(RateLimiter::with_defaults())),
             audit_logger: Arc::new(AuditLogger::with_console()),
             key_manager: Arc::new(key_manager),
+            e2e_location_key: Arc::new(Mutex::new(persisted_e2e_key)),
         }
     }
 
@@ -309,6 +325,33 @@ impl PinpointApp {
 
     pub fn key_manager(&self) -> Arc<KeyManager> {
         Arc::clone(&self.key_manager)
+    }
+
+    /// Returns the active E2E location encryption key (`e2e$<salt>$<iters>$<key>`), if any.
+    pub fn e2e_location_key(&self) -> Option<String> {
+        self.e2e_location_key.lock().unwrap().clone()
+    }
+
+    /// Derive a per-user E2E location key from `password`, store it in memory,
+    /// and persist it in the OS/file keychain via `KeyManager`.
+    pub fn activate_e2e_location_key(&self, password: &str) -> String {
+        let key = crate::security::e2e::derive_location_key(password);
+        self.key_manager
+            .persist_secret("e2e_location_key", key.as_bytes());
+        *self.e2e_location_key.lock().unwrap() = Some(key.clone());
+        key
+    }
+
+    /// Encrypt `(lat, lon, accuracy)` with the active E2E location key.
+    pub fn encrypt_my_location(&self, lat: f64, lon: f64, accuracy: f64) -> Option<String> {
+        let key = self.e2e_location_key()?;
+        crate::security::e2e::encrypt_location(&key, lat, lon, accuracy)
+    }
+
+    /// Decrypt an E2E location payload using the active E2E location key.
+    pub fn decrypt_location_payload(&self, ciphertext: &str) -> Option<(f64, f64, f64)> {
+        let key = self.e2e_location_key()?;
+        crate::security::e2e::decrypt_location(&key, ciphertext)
     }
 
     pub fn is_signed_in(&self) -> bool {
@@ -566,6 +609,7 @@ impl PinpointApp {
             Ok(user) => {
                 self.audit_logger
                     .log_event("auth", "login", Some(&email), "success");
+                self.activate_e2e_location_key(&password);
                 self.set_offline_mode(false);
                 self.apply_signed_in(user);
                 if self.current_screen() == CurrentScreen::Map {
@@ -609,6 +653,7 @@ impl PinpointApp {
             Ok(user) => {
                 self.audit_logger
                     .log_event("auth", "register", Some(&email), "success");
+                self.activate_e2e_location_key(&password);
                 self.set_offline_mode(false);
                 self.apply_signed_in(user);
                 if self.current_screen() == CurrentScreen::Map {
@@ -637,6 +682,8 @@ impl PinpointApp {
             Ok(()) => {
                 self.audit_logger
                     .log_event("auth", "logout", None, "success");
+                *self.e2e_location_key.lock().unwrap() = None;
+                self.key_manager.delete_secret("e2e_location_key");
                 let fresh = AppData {
                     locations: Self::demo_locations(),
                     ..Default::default()
@@ -876,6 +923,20 @@ impl PinpointApp {
         result
     }
 
+    /// Publish the device's current GPS fix (if any). Returns an error
+    /// when no GPS provider is available (desktop / unsupported target)
+    /// or the fix cannot be obtained, so callers can fall back to a
+    /// manual location.
+    pub async fn publish_my_location(&self) -> anyhow::Result<()> {
+        match crate::platform::default_gps_provider().current_position() {
+            Some((lat, lon, accuracy)) => self.publish_location(lat, lon, accuracy).await,
+            None => {
+                self.set_error(Some("No GPS fix available.".to_string()));
+                Err(anyhow::anyhow!("No GPS fix available."))
+            }
+        }
+    }
+
     pub async fn publish_location(&self, lat: f64, lon: f64, accuracy: f64) -> anyhow::Result<()> {
         let v = crate::security::validation::validate_location(lat, lon, Some(accuracy));
         if !v.is_valid() {
@@ -891,6 +952,14 @@ impl PinpointApp {
         {
             self.set_error(Some("Rate limited — try again shortly.".to_string()));
             return Err(anyhow::anyhow!("Rate limited — try again shortly."));
+        }
+        // Produce client-side AES-256-GCM E2E ciphertext before publishing
+        // whenever an E2E location key is active (derived at login/register
+        // or restored from the OS keychain).
+        if let Some(ciphertext) = self.encrypt_my_location(lat, lon, accuracy) {
+            self.data.lock().unwrap().last_e2e_location_ciphertext = Some(ciphertext);
+            self.audit_logger
+                .log_event("location", "e2e_encrypt", None, "success");
         }
         let result = self.backend.publish_location(lat, lon, accuracy).await;
         match result {

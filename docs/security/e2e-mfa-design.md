@@ -21,8 +21,16 @@ Goal: server stores only ciphertext; friends decrypt with per-friendship keys.
 
 ## 3. OS keychain for bookmark keys
 
-- `KeyManager` currently in-memory; move active key into OS keychain via `keyring` crate (DPAPI/Security.framework/Keystore) behind `platform.rs` cfg.
-- Fallback: derived key from user password (PBKDF2) with salt in `bookmarks.json` header — only when keychain unavailable.
+- **Implemented.** `src/security/keychain.rs` provides a unified `Keychain`
+  trait with `OsKeychain` (Windows Credential Manager / macOS Keychain /
+  Linux Secret Service via the `keyring` crate) and a `FileKeychain`
+  fallback (AES-256-GCM, file-backed master key). `KeyManager` now
+  persists its active key through `Keychain::load_or_generate`, and
+  `PinpointApp::new` opens the best-available keychain via
+  `keychain::open_default`. See `src/security/encryption.rs`.
+- Fallback: derived key from user password (PBKDF2) with salt in
+  `bookmarks.json` header — still pending for platforms without any
+  keychain (currently in-memory).
 
 ## 4. Threat-model deltas
 

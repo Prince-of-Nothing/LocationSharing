@@ -11,7 +11,7 @@ Start here. Every doc is Markdown (Mermaid for diagrams). See also the root
 - **Architecture:** [`docs/architecture-data-domains.md`](architecture-data-domains.md) · [`docs/design-principles.md`](design-principles.md) · [`docs/principles-matrix.md`](principles-matrix.md) · [`docs/service-discovery.md`](service-discovery.md) · [`docs/redundancy.md`](redundancy.md) · [`docs/postgres-ha.md`](postgres-ha.md)
 - **Clients:** [`docs/client-platforms.md`](client-platforms.md) · [`docs/docker-deployment.md`](docker-deployment.md) · [`docs/docker-podman.md`](docker-podman.md) · [`docs/gap-acceptance.md`](gap-acceptance.md)
 - **Security:** `docs/security/` (architecture, threat model, incident response) · `docs/evidence/` (ZAP)
-- **SDLC:** `docs/sdlc/00–16` · **UML:** `docs/uml/01–15` · **ADRs:** `docs/adr/`
+- **SDLC:** `docs/sdlc/00–17` (17 = spiral execution plan) · **UML:** `docs/uml/01–15` · **ADRs:** `docs/adr/`
 
 ## Module map (for humans and AI agents)
 
@@ -25,7 +25,7 @@ src/
   ui/                    auth, map, friends, sharing, places, bookmarks, trips,
                          emergency, profile, admin
   osm.rs                 Nominatim / OSRM / Overpass (friend coords NEVER sent)
-  map.rs                 pin rendering + OSM hand-off + ODbL credit
+  map.rs                 interactive Slippy canvas + pins + OSM hand-off + ODbL credit
   models.rs              serde domain models + pure math (haversine, bearing, freshness)
   platform.rs            all cfg(target_os) branches
   bookmarks.rs           on-device JSON store
@@ -67,5 +67,5 @@ docker compose config --quiet
 
 ## Last verified
 
-2026-11-10: fmt 0, clippy 0, **110 lib + 10 contract + 4 router**, e2e
+2026-11-12: fmt 0, clippy 0, **153 lib + 10 contract + 5 router**, e2e
 38/38 at scale 1, migrations 1–12, HA overlay valid.

@@ -79,6 +79,12 @@ zeroize = "1.7"
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1.0", default-features = false, features = ["rt-multi-thread", "time", "net", "macros"] }
 
+# OS keychain: Windows Credential Manager / macOS Keychain / Linux Secret
+# Service (see src/security/keychain.rs). Mobile/Web targets keep the
+# FileKeychain / in-memory fallback.
+[target.'cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))'.dependencies]
+keyring = "4"
+
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
@@ -137,3 +143,12 @@ copyright = "MIT © 2026 Pinpoint"
 # NSLocationWhenInUseUsageDescription etc. are optional: publish/share is
 # manual lat/lon today; GPS requires the same entitlements as Android/iOS
 # (see ios/Info.plist NSLocation* keys).
+
+# Android APK packaging (`cargo apk build --locked`, see `android/`).
+[package.metadata.android]
+package = "com.pinpoint.desktop"
+apk_name = "pinpoint"
+manifest = "android/AndroidManifest.xml"
+min_sdk_version = 26
+target_sdk_version = 35
+build_targets = ["aarch64-linux-android"]

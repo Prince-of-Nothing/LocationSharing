@@ -108,6 +108,12 @@ enum PendingAction {
     UpdateProfile {
         full_name: String,
     },
+    PublishGpsLocation,
+    DownloadTilePack {
+        center_lat: f64,
+        center_lon: f64,
+        zoom: u8,
+    },
     RefreshAll,
 }
 
@@ -377,6 +383,31 @@ impl PinpointAppUI {
                 }
                 PendingAction::UpdateProfile { full_name } => {
                     let _ = app.update_profile(full_name).await;
+                }
+                PendingAction::PublishGpsLocation => {
+                    let _ = app.publish_my_location().await;
+                }
+                PendingAction::DownloadTilePack {
+                    center_lat,
+                    center_lon,
+                    zoom,
+                } => {
+                    let delta = 0.02;
+                    let z = zoom.clamp(10, 15);
+                    let xy = crate::tilepacks::bbox_tiles(
+                        center_lat - delta,
+                        center_lon - delta,
+                        center_lat + delta,
+                        center_lon + delta,
+                        z,
+                    );
+                    let triples: Vec<(u32, u32, u32)> =
+                        xy.into_iter().map(|(x, y)| (z as u32, x, y)).collect();
+                    let (ok, skipped, failed) =
+                        crate::tilepacks::download_pack(&triples, None).await;
+                    app.set_notice(Some(format!(
+                        "Offline tile pack (z{z}): {ok} downloaded, {skipped} cached, {failed} failed."
+                    )));
                 }
                 PendingAction::RefreshAll => {
                     let _ = app.refresh_all().await;

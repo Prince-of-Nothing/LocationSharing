@@ -48,31 +48,36 @@ impl PinpointAppUI {
                 );
             });
             ui.add_space(4.0);
-            if ui.button(i18n::t(lang, key::PUBLISH)).clicked() {
-                match (
-                    self.publish_lat.trim().parse::<f64>(),
-                    self.publish_lon.trim().parse::<f64>(),
-                ) {
-                    (Ok(lat), Ok(lon))
-                        if (-90.0..=90.0).contains(&lat) && (-180.0..=180.0).contains(&lon) =>
-                    {
-                        self.spawn_action(
-                            PendingAction::PublishLocation {
-                                lat,
-                                lon,
-                                accuracy: 10.0,
-                            },
-                            ctx,
-                        );
-                    }
-                    _ => {
-                        self.app.set_error(Some(
-                            "Enter a valid latitude (-90..90) and longitude (-180..180)"
-                                .to_string(),
-                        ));
+            ui.horizontal(|ui| {
+                if ui.button(i18n::t(lang, key::PUBLISH)).clicked() {
+                    match (
+                        self.publish_lat.trim().parse::<f64>(),
+                        self.publish_lon.trim().parse::<f64>(),
+                    ) {
+                        (Ok(lat), Ok(lon))
+                            if (-90.0..=90.0).contains(&lat) && (-180.0..=180.0).contains(&lon) =>
+                        {
+                            self.spawn_action(
+                                PendingAction::PublishLocation {
+                                    lat,
+                                    lon,
+                                    accuracy: 10.0,
+                                },
+                                ctx,
+                            );
+                        }
+                        _ => {
+                            self.app.set_error(Some(
+                                "Enter a valid latitude (-90..90) and longitude (-180..180)"
+                                    .to_string(),
+                            ));
+                        }
                     }
                 }
-            }
+                if ui.button("📍 Use GPS").clicked() {
+                    self.spawn_action(PendingAction::PublishGpsLocation, ctx);
+                }
+            });
         });
 
         ui.add_space(8.0);
@@ -191,6 +196,34 @@ impl PinpointAppUI {
         let binding = self.app.data();
         let mut data = binding.lock().unwrap();
         map::render_map(ui, &mut data);
+        let (center_lat, center_lon, zoom) =
+            (data.map_center_lat, data.map_center_lon, data.map_zoom);
+        let locations: Vec<FriendLocation> = data.locations.clone();
+        drop(data);
+
+        ui.add_space(6.0);
+        ui.group(|ui| {
+            ui.horizontal(|ui| {
+                let bytes = crate::tilepacks::packs_size();
+                ui.label(
+                    RichText::new(format!(
+                        "Offline map packs: {:.1} KB cached",
+                        bytes as f64 / 1024.0
+                    ))
+                    .size(12.0),
+                );
+                if ui.button("⬇ Download current area pack").clicked() {
+                    self.spawn_action(
+                        PendingAction::DownloadTilePack {
+                            center_lat,
+                            center_lon,
+                            zoom,
+                        },
+                        ctx,
+                    );
+                }
+            });
+        });
 
         ui.add_space(8.0);
 
@@ -202,8 +235,6 @@ impl PinpointAppUI {
                     .strong(),
             );
             ui.add_space(4.0);
-            let locations: Vec<FriendLocation> = data.locations.clone();
-            drop(data);
             if locations.is_empty() {
                 ui.label(i18n::t(lang, key::NO_LOCATIONS));
             } else {

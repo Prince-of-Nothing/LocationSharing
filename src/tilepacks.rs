@@ -10,14 +10,60 @@ use std::time::Duration;
 
 use crate::platform;
 
+pub const TILE_SIZE: f64 = 256.0;
+
 /// Slippy tile for `(lat, lon)` at zoom `z` (Web Mercator, OSM standard).
 pub fn latlon_to_tile(lat: f64, lon: f64, z: u8) -> (u32, u32) {
     let n = 1u32 << z;
-    let lat_r = lat.to_radians();
+    let lat_r = lat.clamp(-85.0511, 85.0511).to_radians();
     let x = n as f64 * (lon + 180.0) / 360.0;
     let y = n as f64 * (1.0 - (lat_r.tan() + 1.0 / lat_r.cos()).ln() / std::f64::consts::PI) / 2.0;
     let max = n.saturating_sub(1);
     ((x.floor() as u32).min(max), (y.floor() as u32).min(max))
+}
+
+/// Northwest `(lat, lon)` corner of Slippy tile `(x, y)` at zoom `z`.
+pub fn tile_to_latlon(x: u32, y: u32, z: u8) -> (f64, f64) {
+    let n = (1u32 << z) as f64;
+    let lon = x as f64 / n * 360.0 - 180.0;
+    let lat_rad = (std::f64::consts::PI * (1.0 - 2.0 * y as f64 / n))
+        .sinh()
+        .atan();
+    (lat_rad.to_degrees(), lon)
+}
+
+/// Convert `(lat, lon)` to global Web Mercator pixel coordinates at zoom `z`
+/// (256 px per tile).
+pub fn latlon_to_world_px(lat: f64, lon: f64, z: u8) -> (f64, f64) {
+    let scale = TILE_SIZE * ((1u32 << z) as f64);
+    let lat_r = lat.clamp(-85.0511, 85.0511).to_radians();
+    let x = (lon + 180.0) / 360.0 * scale;
+    let y = (1.0 - (lat_r.tan() + 1.0 / lat_r.cos()).ln() / std::f64::consts::PI) / 2.0 * scale;
+    (x, y)
+}
+
+/// Inverse of [`latlon_to_world_px`]: global pixel `(px, py)` at zoom `z` to `(lat, lon)`.
+pub fn world_px_to_latlon(px: f64, py: f64, z: u8) -> (f64, f64) {
+    let scale = TILE_SIZE * ((1u32 << z) as f64);
+    let lon = (px / scale * 360.0 - 180.0).clamp(-180.0, 180.0);
+    let n = std::f64::consts::PI - 2.0 * std::f64::consts::PI * (py / scale);
+    let lat = n.sinh().atan().to_degrees().clamp(-85.0511, 85.0511);
+    (lat, lon)
+}
+
+/// On-disk path for a cached tile `tiles/{z}/{x}/{y}.png`, if it exists.
+pub fn cached_tile_path(z: u8, x: u32, y: u32) -> Option<PathBuf> {
+    let base = platform::app_data_dir()?;
+    let file = base
+        .join("tiles")
+        .join(z.to_string())
+        .join(x.to_string())
+        .join(format!("{y}.png"));
+    if file.exists() {
+        Some(file)
+    } else {
+        None
+    }
 }
 
 /// Inclusive tile range covering `[(min_lat, min_lon), (max_lat, max_lon)]` at `z`.
@@ -43,10 +89,25 @@ pub fn bbox_tiles(
 
 pub const PACK_TILE_CAP: usize = 4096;
 pub const CARTO_BASE: &str = "https://a.basemaps.cartocdn.com/dark_all";
+pub const WIKIMEDIA_BASE: &str = "https://maps.wikimedia.org/osm-intl";
+pub const CARTO_VOYAGER_BASE: &str = "https://a.basemaps.cartocdn.com/rastertiles/voyager";
+
+/// Candidate ODbL-compliant tile URLs for `(z, x, y)` in fallback order.
+/// Never uses `tile.openstreetmap.org` (OSMF policy).
+pub fn tile_candidate_urls(z: u32, x: u32, y: u32) -> Vec<String> {
+    let key_param = match std::env::var("CARTO_API_KEY") {
+        Ok(k) if !k.trim().is_empty() => format!("?apikey={}", k.trim()),
+        _ => String::new(),
+    };
+    vec![
+        format!("{CARTO_BASE}/{z}/{x}/{y}.png{key_param}"),
+        format!("{WIKIMEDIA_BASE}/{z}/{x}/{y}.png"),
+        format!("{CARTO_VOYAGER_BASE}/{z}/{x}/{y}.png{key_param}"),
+    ]
+}
 
 /// CARTO now requires an API key (free: https://carto.com/basemaps/apikey).
-/// Operators set `CARTO_API_KEY`; otherwise keyless requests are attempted
-/// (upstream decides). Test-time packs use the no-key path.
+/// Operators set `CARTO_API_KEY`; otherwise fallback ODbL sources are tried.
 /// Download `tiles` (z/x/y triples, from [`bbox_tiles`] or a bookmark) into
 /// `tiles/{z}/{x}/{y}.png` under the app data dir. Skips files already
 /// present (resume-safe). Returns (downloaded, skipped, failed).
@@ -81,26 +142,31 @@ pub async fn download_pack(
         if i > 0 {
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
-        let key_param = match std::env::var("CARTO_API_KEY") {
-            Ok(k) if !k.trim().is_empty() => format!("?apikey={}", k.trim()),
-            _ => String::new(),
-        };
-        let url = format!("{CARTO_BASE}/{z}/{x}/{y}.png{key_param}");
-        match client.get(&url).send().await {
-            Ok(resp) if resp.status().is_success() => match resp.bytes().await {
-                Ok(body) => {
-                    if std::fs::create_dir_all(&dir).is_err() {
-                        failed += 1;
-                        continue;
-                    }
-                    match std::fs::write(&file, body) {
-                        Ok(()) => ok += 1,
-                        Err(_) => failed += 1,
+        let mut fetched_bytes = None;
+        for url in tile_candidate_urls(*z, *x, *y) {
+            if let Ok(resp) = client.get(&url).send().await {
+                if resp.status().is_success() {
+                    if let Ok(body) = resp.bytes().await {
+                        if !body.is_empty() {
+                            fetched_bytes = Some(body);
+                            break;
+                        }
                     }
                 }
-                Err(_) => failed += 1,
-            },
-            _ => failed += 1,
+            }
+        }
+        match fetched_bytes {
+            Some(body) => {
+                if std::fs::create_dir_all(&dir).is_err() {
+                    failed += 1;
+                    continue;
+                }
+                match std::fs::write(&file, body) {
+                    Ok(()) => ok += 1,
+                    Err(_) => failed += 1,
+                }
+            }
+            None => failed += 1,
         }
     }
     (ok, skipped, failed)
@@ -140,7 +206,10 @@ fn walk_files(dir: &std::path::Path) -> Result<Vec<PathBuf>, std::io::Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::{bbox_tiles, latlon_to_tile};
+    use super::{
+        bbox_tiles, latlon_to_tile, latlon_to_world_px, tile_candidate_urls, tile_to_latlon,
+        world_px_to_latlon,
+    };
 
     #[test]
     fn slippy_origin() {
@@ -161,5 +230,26 @@ mod tests {
         let a = bbox_tiles(41.88, -87.63, 41.89, -87.62, 12);
         let b = bbox_tiles(41.89, -87.62, 41.88, -87.63, 12);
         assert_eq!(a.len(), b.len());
+    }
+
+    #[test]
+    fn world_px_round_trip() {
+        let (lat, lon) = (47.0105, 28.8638);
+        let (px, py) = latlon_to_world_px(lat, lon, 13);
+        let (lat2, lon2) = world_px_to_latlon(px, py, 13);
+        assert!((lat - lat2).abs() < 1e-5, "lat {lat} vs {lat2}");
+        assert!((lon - lon2).abs() < 1e-5, "lon {lon} vs {lon2}");
+        let (tx, ty) = latlon_to_tile(lat, lon, 13);
+        let (nw_lat, nw_lon) = tile_to_latlon(tx, ty, 13);
+        assert!(nw_lat >= lat && nw_lon <= lon);
+    }
+
+    #[test]
+    fn candidate_urls_are_odbl_and_never_osmf() {
+        let urls = tile_candidate_urls(13, 4752, 2880);
+        assert!(urls.len() >= 2);
+        for u in &urls {
+            assert!(!u.contains("tile.openstreetmap.org"));
+        }
     }
 }

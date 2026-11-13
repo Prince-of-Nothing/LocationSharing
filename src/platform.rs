@@ -134,6 +134,101 @@ fn home_dir() -> Option<std::path::PathBuf> {
         .map(std::path::PathBuf::from)
 }
 
+/// GPS / location provider abstraction used by mobile targets (and a
+/// desktop fallback that reports "no fix"). Mobile backends implement
+/// this behind `cfg(target_os)`; the desktop fallback always returns
+/// `None` so `PinpointApp::publish_my_location` degrades gracefully.
+pub trait GpsProvider: Send + Sync {
+    /// Returns `(latitude, longitude, accuracy_m)` for the current fix,
+    /// or `None` when no fix is available.
+    fn current_position(&self) -> Option<(f64, f64, f64)>;
+}
+
+/// Desktop fallback: there is no GPS hardware, so no fix is ever produced.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct NoFixGps;
+
+impl GpsProvider for NoFixGps {
+    fn current_position(&self) -> Option<(f64, f64, f64)> {
+        None
+    }
+}
+
+/// Parse a GPS fix string in either CSV (`"lat,lon"` or `"lat,lon,accuracy"`)
+/// or JSON (`{"latitude":..,"longitude":..,"accuracy":..}`) format.
+/// Validates coordinates fail-closed (`-90..=90`, `-180..=180`, accuracy `> 0`).
+pub fn parse_gps_fix(raw: &str) -> Option<(f64, f64, f64)> {
+    let s = raw.trim();
+    if s.is_empty() {
+        return None;
+    }
+    let (lat, lon, acc) = if s.starts_with('{') {
+        let v: serde_json::Value = serde_json::from_str(s).ok()?;
+        let lat = v
+            .get("latitude")
+            .or_else(|| v.get("lat"))
+            .and_then(|x| x.as_f64())?;
+        let lon = v
+            .get("longitude")
+            .or_else(|| v.get("lon"))
+            .and_then(|x| x.as_f64())?;
+        let acc = v
+            .get("accuracy")
+            .or_else(|| v.get("acc"))
+            .and_then(|x| x.as_f64())
+            .unwrap_or(10.0);
+        (lat, lon, acc)
+    } else {
+        let parts: Vec<&str> = s.split(',').collect();
+        if parts.len() < 2 || parts.len() > 3 {
+            return None;
+        }
+        let lat = parts[0].trim().parse::<f64>().ok()?;
+        let lon = parts[1].trim().parse::<f64>().ok()?;
+        let acc = parts
+            .get(2)
+            .and_then(|p| p.trim().parse::<f64>().ok())
+            .unwrap_or(10.0);
+        (lat, lon, acc)
+    };
+    if !crate::security::validation::validate_location(lat, lon, Some(acc)).is_valid() {
+        return None;
+    }
+    Some((lat, lon, acc))
+}
+
+/// Cross-platform GPS provider that reads a fix from:
+/// 1. `PINPOINT_GPS_FIX` environment variable (`"lat,lon,acc"` or JSON), or
+/// 2. `<app_data_dir>/gps_fix.json` written by mobile platform bridges
+///    (Android LocationManager / iOS CoreLocation) or dev tools.
+///
+/// Returns `None` when no valid fix is present.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct EnvOrFileGpsProvider;
+
+impl GpsProvider for EnvOrFileGpsProvider {
+    fn current_position(&self) -> Option<(f64, f64, f64)> {
+        if let Ok(raw) = std::env::var("PINPOINT_GPS_FIX") {
+            if let Some(fix) = parse_gps_fix(&raw) {
+                return Some(fix);
+            }
+        }
+        if let Some(dir) = app_data_dir() {
+            if let Ok(raw) = std::fs::read_to_string(dir.join("gps_fix.json")) {
+                if let Some(fix) = parse_gps_fix(&raw) {
+                    return Some(fix);
+                }
+            }
+        }
+        None
+    }
+}
+
+/// Best-available GPS provider for the current platform.
+pub fn default_gps_provider() -> Box<dyn GpsProvider> {
+    Box::new(EnvOrFileGpsProvider)
+}
+
 /// Human-readable build identity for About screens / diagnostics.
 pub fn build_identity() -> String {
     format!(
@@ -170,5 +265,26 @@ mod tests {
         // and always returns a non-empty URL.
         let url = backend_url_from_env_or_default();
         assert!(!url.is_empty(), "backend URL must never be empty");
+    }
+
+    #[test]
+    fn parse_gps_fix_csv_and_json() {
+        use super::parse_gps_fix;
+        assert_eq!(
+            parse_gps_fix("47.0105, 28.8638, 12.5"),
+            Some((47.0105, 28.8638, 12.5))
+        );
+        assert_eq!(
+            parse_gps_fix("47.0105,28.8638"),
+            Some((47.0105, 28.8638, 10.0))
+        );
+        assert_eq!(
+            parse_gps_fix(r#"{"latitude":47.0105,"longitude":28.8638,"accuracy":8.0}"#),
+            Some((47.0105, 28.8638, 8.0))
+        );
+        // Out-of-range coordinates rejected fail-closed.
+        assert!(parse_gps_fix("120.0, 28.0").is_none());
+        assert!(parse_gps_fix("47.0, 220.0").is_none());
+        assert!(parse_gps_fix("garbage").is_none());
     }
 }

@@ -231,8 +231,9 @@ rate_limited_reports_retry_after
 
 ### Limitations (honest)
 
-- The key lives on the same device as the ciphertext. Device theft with key access still breaks confidentiality. For high-assurance, store the key in OS keychain (Windows Credential Manager, macOS Keychain, Android Keystore) — documented as a hardening step, not yet implemented.
-- `KeyManager` does not persist keys yet (in-memory only). Persisting requires OS keychain integration.
+- The key lives on the same device as the ciphertext. Device theft with key access still breaks confidentiality. The key is persisted in the OS keychain (Windows Credential Manager / macOS Keychain / Linux Secret Service via `keyring`) — see `src/security/keychain.rs`; platforms without a keychain fall back to an in-memory key.
+- `KeyManager` persists its active key through the keychain via
+  `KeyManager::load_or_generate` (see `src/security/encryption.rs`).
 
 ### Tests
 
@@ -352,7 +353,7 @@ This satisfies OSMF Usage Policies and prevents OSM services from becoming a loc
 ### Recommended
 
 - [ ] Put the Go backend behind TLS (Caddy/nginx reverse proxy).
-- [ ] Store the OS keychain for bookmark encryption keys.
+- [x] Store the OS keychain for bookmark encryption keys (see `src/security/keychain.rs`).
 - [ ] Enable `RequestSigner` for location publishing (server-side verification).
 - [ ] Set `reauth_after_seconds` on sessions for sensitive actions.
 - [ ] Monitor audit logs for `login failure` spikes and `CSRF_FAILED` errors.

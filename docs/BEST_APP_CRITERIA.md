@@ -13,9 +13,9 @@ Goal `have the best app ever` is only met when ALL criteria below hold. Status v
 - [x] Typed migration history: `src/server/migrations.rs` (v1..v10, `pinpoint_schema_migrations` version table, transactional, idempotent; legacy DDL converges by recording versions)
 - [x] Store convergence: `refresh_from_db()` after each `persist()` tick (5s) — cross-service reads converge without restarts
 - [ ] Normalized DB residual: superuser kept as bootstrap/migration operator only (documented above); revoke fully when prod runs migrations under a migrate-only role.
-- [ ] Tile proxy code-complete (CARTO + TTL cache + attribution) — **live 200 blocked**: CARTO now requires a free API key (`CARTO_API_KEY` env plumbed; route works, upstream 403s keyless from this egress); tile gate passes on 502-guidance
+- [x] Tile proxy code-complete (CARTO + Wikimedia + OpenFreeMap multi-source ODbL fallback + TTL cache + attribution)
 - [x] HTTPS live: self-signed `:8443/health` → `{"tls":"on"}`, HSTS/CSP/nosniff/DENY, HTTP→HTTPS 301, login over TLS hits MFA gate
-- [ ] E2E encryption + OS-keychain (design only, `docs/security/e2e-mfa-design.md`)
+- [x] E2E encryption + OS-keychain (`src/security/e2e.rs` + `src/security/keychain.rs`, wired on login/register/publish, `docs/security/e2e-mfa-design.md`)
 
 ## B. Features (all screens render offline-safe)
 - [x] 10 screens: Map, Friends, Sharing (+expiry/delete), Places (OSRM/Overpass/reverse), Saved, Trips, Emergency, Profile, Admin, Password
@@ -30,7 +30,7 @@ Goal `have the best app ever` is only met when ALL criteria below hold. Status v
 - [x] `docker compose up --build` → 6 services healthy (2 replicas each), gateway :8000
 - [x] `scripts/e2e.ps1` → **38/38 at scale 1** (`--scale ...=1`); scale 2 is eventually consistent (≤5s persist→refresh) and verified by the failover drill + `X-Upstream`/`/registry` (see `docs/redundancy.md`, `docs/gap-acceptance.md`)
 - [ ] OWASP ZAP active scan clean (Z-6/Z-7) — baseline checklist in `docs/evidence/zap-scan-report.md`, full ZAP GUI run pending
-- [ ] No `tile.openstreetmap.org` tile URLs in code (OSMF policy, CI `map-qa.yml` grep)
+- [x] No `tile.openstreetmap.org` tile URLs in code (OSMF policy, CI `map-qa.yml` grep) + `openstreetmap.org/copyright` ODbL attribution in `src/map.rs`
 
 ## D. Docs (DSA)
 - [x] Threat model (STRIDE/DREAD/PASTA, attack tree) + incident response plan + OWASP requirements

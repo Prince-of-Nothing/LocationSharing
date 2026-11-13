@@ -68,6 +68,73 @@ impl BookmarkStore {
         self.persist(&next);
     }
 
+    /// Export all saved bookmarks as an RFC 7946 GeoJSON `FeatureCollection`
+    /// (`coordinates: [longitude, latitude]`).
+    pub fn to_geojson(&self) -> String {
+        let features: Vec<serde_json::Value> = self
+            .list()
+            .into_iter()
+            .map(|b| {
+                serde_json::json!({
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [b.longitude, b.latitude],
+                    },
+                    "properties": {
+                        "id": b.id,
+                        "name": b.name,
+                        "note": b.note,
+                        "category": b.category,
+                        "created_at": b.created_at,
+                    }
+                })
+            })
+            .collect();
+        serde_json::to_string_pretty(&serde_json::json!({
+            "type": "FeatureCollection",
+            "features": features,
+        }))
+        .unwrap_or_else(|_| r#"{"type":"FeatureCollection","features":[]}"#.to_string())
+    }
+
+    /// Import bookmarks from an RFC 7946 GeoJSON `FeatureCollection`.
+    /// Validates every coordinate pair fail-closed; returns the number of
+    /// imported places.
+    pub fn import_geojson(&self, raw: &str) -> Result<usize, String> {
+        let doc: serde_json::Value =
+            serde_json::from_str(raw).map_err(|e| format!("Invalid GeoJSON: {e}"))?;
+        let features = doc
+            .get("features")
+            .and_then(|f| f.as_array())
+            .ok_or_else(|| "GeoJSON missing 'features' array".to_string())?;
+        let mut count = 0usize;
+        for f in features {
+            let coords = f
+                .get("geometry")
+                .and_then(|g| g.get("coordinates"))
+                .and_then(|c| c.as_array());
+            let Some(coords) = coords else { continue };
+            if coords.len() < 2 {
+                continue;
+            }
+            let (Some(lon), Some(lat)) = (coords[0].as_f64(), coords[1].as_f64()) else {
+                continue;
+            };
+            if !crate::security::validation::validate_location(lat, lon, None).is_valid() {
+                continue;
+            }
+            let name = f
+                .get("properties")
+                .and_then(|p| p.get("name"))
+                .and_then(|n| n.as_str())
+                .unwrap_or("Imported place");
+            self.add(name, lat, lon);
+            count += 1;
+        }
+        Ok(count)
+    }
+
     fn persist(&self, list: &[Bookmark]) {
         let Some(path) = &self.path else { return };
         if let Some(parent) = path.parent() {
@@ -110,5 +177,30 @@ mod tests {
         store.remove(&list[0].id.clone());
         assert!(store.list().is_empty());
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn geojson_export_import_round_trip() {
+        let dir1 = std::env::temp_dir().join(format!("pinpoint-bm-gj1-{}", std::process::id()));
+        let dir2 = std::env::temp_dir().join(format!("pinpoint-bm-gj2-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir1);
+        let _ = std::fs::remove_dir_all(&dir2);
+        let store1 = BookmarkStore::new(Some(dir1.clone()));
+        store1.add("Valea Morilor", 47.0022, 28.8180);
+        let gj = store1.to_geojson();
+        assert!(gj.contains("FeatureCollection"));
+        assert!(gj.contains("Valea Morilor"));
+
+        let store2 = BookmarkStore::new(Some(dir2.clone()));
+        let imported = store2.import_geojson(&gj).unwrap();
+        assert_eq!(imported, 1);
+        let list2 = store2.list();
+        assert_eq!(list2.len(), 1);
+        assert_eq!(list2[0].name, "Valea Morilor");
+        assert!((list2[0].latitude - 47.0022).abs() < 1e-6);
+        assert!((list2[0].longitude - 28.8180).abs() < 1e-6);
+
+        let _ = std::fs::remove_dir_all(dir1);
+        let _ = std::fs::remove_dir_all(dir2);
     }
 }

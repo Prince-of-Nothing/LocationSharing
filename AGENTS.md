@@ -12,8 +12,9 @@
   `platform` (all `cfg(target_os)`), `bookmarks` (on-device JSON).
 - `tests/contract.rs` pins the wire contract. CI `rust` job runs
   fmt/clippy/build/test/audit.
-- Docs in `docs/` (arc42 + Diátaxis + ADRs; SDLC set `docs/sdlc/00–16`;
-  UML `docs/uml/01–15`). Contribution rules in `CONTRIBUTING.md`.
+- Docs in `docs/` (arc42 + Diátaxis + ADRs; SDLC set `docs/sdlc/00–17`
+  incl. the spiral execution plan; UML `docs/uml/01–15`).
+  Contribution rules in `CONTRIBUTING.md`.
 
 ## Archive (`archive/` — NOT built)
 
