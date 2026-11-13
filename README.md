@@ -6,7 +6,7 @@ Friendship does not grant access to anyone's location: each person explicitly
 chooses who can see them, at what precision, and for how long. Every share can
 be revoked, and recipients can see whether a location is fresh or stale.
 
-**Current release: [1.1.0](./RELEASE_NOTES.md)** — thesis demo, not
+**Current release: [1.2.0](./RELEASE_NOTES.md)** — thesis demo, not
 production-hardened. See the functional-state matrix and per-item
 `[FEATURE]` / `[FIX]` flags in the release notes.
 
@@ -80,7 +80,7 @@ no wildcard); HTTPS remains the default everywhere else.
 
 ### Release artifact
 
-Unzip `dist/pinpoint-1.1.0-windows-x64.zip`, run `pinpoint-server.exe`, open
+Unzip `dist/pinpoint-1.2.0-windows-x64.zip`, run `pinpoint-server.exe`, open
 `http://127.0.0.1:8080/`.
 
 ---

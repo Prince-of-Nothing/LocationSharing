@@ -11,6 +11,8 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+
+## [1.2.0] - 2026-11-13
 ### Added
 - [FEATURE] **Headless Alice/Bob demo clients**: `pinpoint-demo-client` signs in
   through the API and publishes locations on an interval, so the demo runs the
