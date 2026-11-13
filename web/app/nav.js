@@ -564,7 +564,8 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
       .slice(0, 10)
       .map((step, index) => `${index + 1}. ${step.text}`)
       .join("\n");
-    const text = `Pinpoint route: ${route.origin?.label || "A"} → ${route.destination?.label || "B"}\n${formatDistance(chosen.distance_m)} · ${formatDuration(chosen.duration_s)}\n${steps}`;
+    const google = googleRouteUrl();
+    const text = `Pinpoint route: ${route.origin?.label || "A"} → ${route.destination?.label || "B"}\n${formatDistance(chosen.distance_m)} · ${formatDuration(chosen.duration_s)}\n${steps}${google ? `\n${google}` : ""}`;
     try {
       if (navigator.share) {
         await navigator.share({ title: "Pinpoint route", text });
@@ -576,9 +577,196 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
       setStatus("Route shared.");
     } catch (err) {
       if (err?.name !== "AbortError") {
-        setStatus("Clipboard blocked — use Export GPX instead.", true);
+        setStatus("Clipboard blocked — use GPX or KML export instead.", true);
       }
     }
+  }
+
+  function placeName(place) {
+    return place.short_name || place.display_name || "Place";
+  }
+
+  function googlePlaceUrl(place) {
+    return `https://www.google.com/maps/search/?api=1&query=${Number(place.latitude)},${Number(place.longitude)}`;
+  }
+
+  function organicPlaceUrl(place) {
+    const name = encodeURIComponent(placeName(place));
+    return `https://omaps.app/map?v=1&ll=${Number(place.latitude)},${Number(place.longitude)}&n=${name}`;
+  }
+
+  // Magic Earth: magicearth://?show_on_map&lat=..&lon=..&name=..&zoom=..
+  function magicPlaceUrl(place) {
+    const name = encodeURIComponent(placeName(place));
+    return `magicearth://?show_on_map&lat=${Number(place.latitude)}&lon=${Number(place.longitude)}&name=${name}&zoom=16`;
+  }
+
+  // Magic Earth routes support one destination only (no origin/waypoints).
+  function magicRouteUrl() {
+    if (!route.destination) return null;
+    const mode = {
+      driving: "drive_to",
+      foot: "walk_to",
+      bike: "bike_to",
+    }[route.mode] || "drive_to";
+    const android = /Android/i.test(navigator.userAgent);
+    const flag = android ? `get_directions&${mode}` : mode;
+    return `magicearth://?${flag}&lat=${Number(route.destination.lat)}&lon=${Number(route.destination.lon)}`;
+  }
+
+  function googleRouteUrl() {
+    if (!route.origin || !route.destination) return null;
+    const mode = { driving: "driving", foot: "walking", bike: "bicycling" }[route.mode] || "driving";
+    const params = new URLSearchParams({
+      api: "1",
+      origin: `${route.origin.lat},${route.origin.lon}`,
+      destination: `${route.destination.lat},${route.destination.lon}`,
+      travelmode: mode,
+    });
+    if (route.via.length) {
+      params.set(
+        "waypoints",
+        route.via.map((stop) => `${stop.lat},${stop.lon}`).join("|"),
+      );
+    }
+    return `https://www.google.com/maps/dir/?${params}`;
+  }
+
+  function organicRouteUrl() {
+    if (!route.origin || !route.destination) return null;
+    const mode = { driving: "drive", foot: "pedestrian", bike: "bicycle" }[route.mode] || "drive";
+    const parts = [
+      `origin=${route.origin.lat},${route.origin.lon}`,
+      `origin_name=${encodeURIComponent(route.origin.label || "Origin")}`,
+      `destination=${route.destination.lat},${route.destination.lon}`,
+      `destination_name=${encodeURIComponent(route.destination.label || "Destination")}`,
+      `mode=${mode}`,
+    ];
+    if (route.via.length) {
+      parts.push(`waypoints=${route.via.map((stop) => `${stop.lat},${stop.lon}`).join("|")}`);
+      parts.push(
+        `waypoint_names=${route.via.map((_, i) => encodeURIComponent(`Stop ${i + 1}`)).join("|")}`,
+      );
+    }
+    return `https://omaps.app/v2/dir?${parts.join("&")}`;
+  }
+
+  function openExternal(url) {
+    if (!url) {
+      setStatus("No target available.", true);
+      return;
+    }
+    if (!/^https?:/i.test(url)) {
+      // Native schemes (magicearth:, geo:, om:) go through an anchor so the
+      // browser hands off to the installed app instead of a popup.
+      const link = document.createElement("a");
+      link.href = url;
+      link.rel = "noopener";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      return;
+    }
+    window.open(url, "_blank", "noopener");
+  }
+
+  function downloadFile(name, mime, content) {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function downloadGpx() {
+    const chosen = route.routes[route.index];
+    if (!chosen?.points?.length) {
+      setStatus("Plan a route first.", true);
+      return;
+    }
+    const points = chosen.points
+      .map(([lat, lon]) => `<trkpt lat="${Number(lat).toFixed(6)}" lon="${Number(lon).toFixed(6)}"></trkpt>`)
+      .join("");
+    const gpx = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Pinpoint" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><name>Pinpoint route</name><trkseg>${points}</trkseg></trk>
+</gpx>`;
+    downloadFile("pinpoint-route.gpx", "application/gpx+xml", gpx);
+    setStatus("GPX exported.");
+  }
+
+  function downloadKml() {
+    const chosen = route.routes[route.index];
+    if (!chosen?.points?.length) {
+      setStatus("Plan a route first.", true);
+      return;
+    }
+    const line = chosen.points
+      .map(([lat, lon]) => `${Number(lon).toFixed(6)},${Number(lat).toFixed(6)},0`)
+      .join(" ");
+    const marks = [];
+    if (route.origin) marks.push({ name: "A", ...route.origin });
+    route.via.forEach((stop, index) => marks.push({ name: `Stop ${index + 1}`, ...stop }));
+    if (route.destination) marks.push({ name: "B", ...route.destination });
+    const placemarks = marks
+      .map(
+        (mark) =>
+          `<Placemark><name>${xmlEscape(mark.name)}</name><Point><coordinates>${Number(mark.lon).toFixed(6)},${Number(mark.lat).toFixed(6)},0</coordinates></Point></Placemark>`,
+      )
+      .join("");
+    const kml = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document>
+  <name>Pinpoint route</name>${placemarks}
+  <Placemark><name>Route</name><LineString><coordinates>${line}</coordinates></LineString></Placemark>
+</Document></kml>`;
+    downloadFile("pinpoint-route.kml", "application/vnd.google-earth.kml+xml", kml);
+    setStatus("KML exported — import in Magic Earth, Organic Maps or Google My Maps.");
+  }
+
+  function downloadGeoJson() {
+    const chosen = route.routes[route.index];
+    if (!chosen?.points?.length) {
+      setStatus("Plan a route first.", true);
+      return;
+    }
+    const features = [];
+    const pushPoint = (name, lat, lon) =>
+      features.push({
+        type: "Feature",
+        properties: { name },
+        geometry: { type: "Point", coordinates: [Number(lon), Number(lat)] },
+      });
+    if (route.origin) pushPoint("A", route.origin.lat, route.origin.lon);
+    route.via.forEach((stop, index) => pushPoint(`Stop ${index + 1}`, stop.lat, stop.lon));
+    if (route.destination) pushPoint("B", route.destination.lat, route.destination.lon);
+    features.push({
+      type: "Feature",
+      properties: { name: "Pinpoint route" },
+      geometry: {
+        type: "LineString",
+        coordinates: chosen.points.map(([lat, lon]) => [Number(lon), Number(lat)]),
+      },
+    });
+    downloadFile(
+      "pinpoint-route.geojson",
+      "application/geo+json",
+      JSON.stringify({ type: "FeatureCollection", features }, null, 2),
+    );
+    setStatus("GeoJSON exported.");
+  }
+
+  function xmlEscape(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&apos;",
+    }[c]));
   }
 
   function renderAlternatives() {
@@ -855,6 +1043,15 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
     const url = `https://www.openstreetmap.org/?mlat=${selected.latitude}&mlon=${selected.longitude}#map=16/${selected.latitude}/${selected.longitude}`;
     window.open(url, "_blank", "noopener");
   });
+  $("place-google").addEventListener("click", () => {
+    if (selected) openExternal(googlePlaceUrl(selected));
+  });
+  $("place-organic").addEventListener("click", () => {
+    if (selected) openExternal(organicPlaceUrl(selected));
+  });
+  $("place-magic").addEventListener("click", () => {
+    if (selected) openExternal(magicPlaceUrl(selected));
+  });
   $("place-save").addEventListener("click", () => {
     if (!selected) return;
     const record = placeRecord(selected);
@@ -912,6 +1109,22 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
   });
   $("route-gpx").addEventListener("click", downloadGpx);
   $("route-share").addEventListener("click", shareRoute);
+  $("route-kml").addEventListener("click", downloadKml);
+  $("route-geojson").addEventListener("click", downloadGeoJson);
+  $("route-google").addEventListener("click", () => openExternal(googleRouteUrl()));
+  $("route-organic").addEventListener("click", () => openExternal(organicRouteUrl()));
+  $("route-magic").addEventListener("click", () => {
+    if (!route.destination) {
+      setStatus("Plan a route first.", true);
+      return;
+    }
+    if (route.via.length) {
+      setStatus("Magic Earth links support one destination — downloading KML for stops…");
+      downloadKml();
+      return;
+    }
+    openExternal(magicRouteUrl());
+  });
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {

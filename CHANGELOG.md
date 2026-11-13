@@ -12,6 +12,11 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [FEATURE] **Export and hand-off to other maps**: place/route links for
+  Google Maps and Organic Maps, Magic Earth `magicearth://` links
+  (destination-only; multi-stop falls back to KML), plus KML and GeoJSON
+  exports alongside GPX. All are user-initiated; no third-party scripts or
+  tracking.
 - [FEATURE] **Saved-place filters**: category chips derived from saved places
   (All / cafe / pharmacy / …) with a category badge per row.
 - [FEATURE] **Per-account route history**: the last 20 routes (origin,
