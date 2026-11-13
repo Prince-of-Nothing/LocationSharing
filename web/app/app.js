@@ -1,0 +1,507 @@
+// Pinpoint web UI — ES module, same-origin, no third-party code.
+// Talks to /api/v1 with the session cookie + X-CSRF-Token double-submit.
+
+import { createMap } from "./map.js";
+import { initNavigation } from "./nav.js";
+
+const state = {
+  csrf: null,
+  user: null,
+  map: { lat: 47.0105, lon: 28.8638, zoom: 13 },
+  locations: [],
+};
+
+const $ = (id) => document.getElementById(id);
+
+function show(el, visible) {
+  el.classList.toggle("hidden", !visible);
+}
+
+function setStatus(text, isError = false) {
+  const el = $("status");
+  el.textContent = text || "";
+  el.classList.toggle("error", isError);
+}
+
+async function api(path, { method = "GET", body } = {}) {
+  const headers = { Accept: "application/json" };
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  if (state.csrf && method !== "GET") headers["X-CSRF-Token"] = state.csrf;
+  const res = await fetch(path, {
+    method,
+    headers,
+    credentials: "include",
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  // Any authenticated response may re-arm the CSRF token (e.g. /auth/me
+  // after a reload); the cookie itself is HttpOnly and unreadable to JS.
+  const headerToken = res.headers.get("X-CSRF-Token");
+  if (headerToken) state.csrf = headerToken;
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const msg = err?.error?.message || `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  if (res.status === 204) return null;
+  return res.json().catch(() => null);
+}
+
+function captureCsrf(res, body) {
+  const header = res.headers.get("X-CSRF-Token");
+  const token = body?.csrf_token || header;
+  if (token) state.csrf = token;
+}
+
+// ---------------------------------------------------------------------------
+// Auth
+// ---------------------------------------------------------------------------
+async function login(email, password) {
+  const res = await fetch("/api/v1/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ email, password }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body?.error?.message || `Login failed (HTTP ${res.status})`);
+  captureCsrf(res, body);
+  state.user = body.user;
+  await enterApp();
+}
+
+async function register(email, password, fullName) {
+  const res = await fetch("/api/v1/auth/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ email, password, full_name: fullName }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body?.error?.message || `Registration failed (HTTP ${res.status})`);
+  captureCsrf(res, body);
+  state.user = body.user;
+  await enterApp();
+}
+
+async function logout() {
+  try {
+    await api("/api/v1/auth/logout", { method: "POST" });
+  } catch (_) {
+    // best effort; local state is cleared regardless
+  }
+  state.user = null;
+  state.csrf = null;
+  state.locations = [];
+  mapApi?.clearRoute();
+  $("place-sheet").classList.add("hidden");
+  $("route-panel").classList.add("hidden");
+  $("search-results").classList.add("hidden");
+  $("saved-list").innerHTML = "";
+  $("recent-list").innerHTML = "";
+  show($("app-panel"), false);
+  show($("session-bar"), false);
+  show($("recovery-panel"), false);
+  $("recovery-code").textContent = "";
+  show($("login-panel"), true);
+  setStatus("Signed out.");
+}
+
+async function enterApp() {
+  show($("login-panel"), false);
+  show($("session-bar"), true);
+  show($("app-panel"), true);
+  $("user-email").textContent = state.user?.email || "";
+  ensureMap().map.invalidateSize();
+  await refresh();
+}
+
+async function refresh() {
+  try {
+    const me = await api("/api/v1/auth/me");
+    state.user = me;
+    $("user-email").textContent = me?.email || "";
+  } catch (_) {
+    show($("app-panel"), false);
+    show($("session-bar"), false);
+    show($("login-panel"), true);
+    return;
+  }
+  const [friendships, shares, locations, sessions] = await Promise.all([
+    api("/api/v1/friendships/").catch(() => []),
+    api("/api/v1/locations/shares").catch(() => []),
+    api("/api/v1/locations/friends").catch(() => []),
+    api("/api/v1/auth/sessions").catch(() => ({ sessions: [] })),
+  ]);
+  state.locations = Array.isArray(locations) ? locations : [];
+  renderFriends(Array.isArray(friendships) ? friendships : []);
+  renderShares(Array.isArray(shares) ? shares : []);
+  renderLocations(state.locations);
+  renderSessions(Array.isArray(sessions?.sessions) ? sessions.sessions : []);
+  updateMap();
+  nav?.refreshStorage();
+}
+
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
+function renderFriends(items) {
+  const ul = $("friends-list");
+  ul.innerHTML = "";
+  if (!items.length) {
+    ul.innerHTML = '<li class="muted">No friendships yet.</li>';
+    return;
+  }
+  for (const f of items) {
+    const li = document.createElement("li");
+    const incoming = f.receiver_id === state.user?.id && f.status === "pending";
+    li.innerHTML = `<span>${escapeHtml(f.requester_name)} → ${escapeHtml(f.receiver_name)}</span>
+      <span class="badge ${f.status}">${escapeHtml(f.status)}</span>`;
+    if (incoming) {
+      const accept = document.createElement("button");
+      accept.textContent = "Accept";
+      accept.onclick = () => respond(f.id, "accept");
+      const reject = document.createElement("button");
+      reject.textContent = "Reject";
+      reject.className = "secondary";
+      reject.onclick = () => respond(f.id, "reject");
+      li.append(accept, reject);
+    }
+    ul.appendChild(li);
+  }
+}
+
+function renderShares(items) {
+  const ul = $("shares-list");
+  ul.innerHTML = "";
+  if (!items.length) {
+    ul.innerHTML = '<li class="muted">No shares yet.</li>';
+    return;
+  }
+  for (const s of items) {
+    const li = document.createElement("li");
+    li.innerHTML = `<span>#${s.id} · ${escapeHtml(s.direction)} · ${escapeHtml(s.precision_level)}</span>
+      <span class="badge ${s.is_active ? "accepted" : "pending"}">${s.is_active ? "active" : "paused"}</span>`;
+    const toggle = document.createElement("button");
+    toggle.textContent = s.is_active ? "Pause" : "Resume";
+    toggle.className = "secondary";
+    toggle.onclick = () => toggleShare(s.id, !s.is_active);
+    li.appendChild(toggle);
+    ul.appendChild(li);
+  }
+}
+
+function renderLocations(items) {
+  const ul = $("locations-list");
+  ul.innerHTML = "";
+  if (!items.length) {
+    ul.innerHTML = '<li class="muted">No friend locations visible.</li>';
+    return;
+  }
+  for (const loc of items) {
+    const li = document.createElement("li");
+    li.textContent = `${loc.user_name} · ${Number(loc.latitude).toFixed(4)}, ${Number(loc.longitude).toFixed(4)} · ${loc.precision_level}`;
+    ul.appendChild(li);
+  }
+}
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+
+function fmtTime(iso) {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "unknown" : d.toLocaleString();
+}
+
+function renderSessions(items) {
+  const ul = $("sessions-list");
+  ul.innerHTML = "";
+  if (!items.length) {
+    ul.innerHTML = '<li class="muted">No active sessions.</li>';
+    return;
+  }
+  for (const s of items) {
+    const li = document.createElement("li");
+    li.innerHTML = `<span>${escapeHtml(s.auth_method)} · ${escapeHtml(s.id)}…</span>
+      <span class="badge ${s.current ? "accepted" : "pending"}">${s.current ? "this device" : "active"}</span>
+      <span class="muted">${escapeHtml(fmtTime(s.last_activity))}</span>`;
+    const revoke = document.createElement("button");
+    revoke.textContent = s.current ? "Sign out" : "Revoke";
+    revoke.className = "secondary";
+    revoke.onclick = () => revokeSession(s.id, s.current);
+    li.appendChild(revoke);
+    ul.appendChild(li);
+  }
+}
+
+function showRecoveryCode(code) {
+  $("recovery-code").textContent = code;
+  show($("recovery-panel"), true);
+  $("recovery-panel").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+async function anonymousSignIn() {
+  try {
+    const res = await fetch("/api/v1/auth/anonymous", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ device_name: "Web browser" }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body?.error?.message || `Anonymous sign-in failed (HTTP ${res.status})`);
+    captureCsrf(res, body);
+    state.user = body.user;
+    showRecoveryCode(body.recovery_code);
+    await enterApp();
+    setStatus("Anonymous account created. Save the recovery code.");
+  } catch (err) {
+    setStatus(err.message, true);
+  }
+}
+
+async function recoverAccount(code) {
+  try {
+    const res = await fetch("/api/v1/auth/anonymous/recover", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ recovery_code: code }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body?.error?.message || `Recovery failed (HTTP ${res.status})`);
+    captureCsrf(res, body);
+    state.user = body.user;
+    showRecoveryCode(body.recovery_code);
+    await enterApp();
+    setStatus("Account recovered. The previous code is no longer valid.");
+  } catch (err) {
+    setStatus(err.message, true);
+  }
+}
+
+async function revokeSession(id, isCurrent) {
+  try {
+    await api(`/api/v1/auth/sessions/${encodeURIComponent(id)}`, { method: "DELETE" });
+    if (isCurrent) {
+      await logout();
+      return;
+    }
+    setStatus("Session revoked.");
+    await refresh();
+  } catch (e) {
+    setStatus(e.message, true);
+  }
+}
+
+async function logoutAll() {
+  try {
+    await api("/api/v1/auth/logout-all", { method: "POST" });
+  } catch (_) {
+    // local state is cleared regardless
+  }
+  state.user = null;
+  state.csrf = null;
+  state.locations = [];
+  mapApi?.clearRoute();
+  $("place-sheet").classList.add("hidden");
+  $("route-panel").classList.add("hidden");
+  $("search-results").classList.add("hidden");
+  $("saved-list").innerHTML = "";
+  $("recent-list").innerHTML = "";
+  show($("app-panel"), false);
+  show($("session-bar"), false);
+  show($("recovery-panel"), false);
+  $("recovery-code").textContent = "";
+  show($("login-panel"), true);
+  setStatus("Signed out on every device.");
+}
+
+// ---------------------------------------------------------------------------
+// Leaflet map (locally vendored; tiles via the same-origin proxy)
+// ---------------------------------------------------------------------------
+let mapApi = null;
+let nav = null;
+
+function ensureMap() {
+  if (mapApi) return mapApi;
+  mapApi = createMap({
+    element: $("map"),
+    center: [state.map.lat, state.map.lon],
+    zoom: state.map.zoom,
+    onClick: (point) => nav?.onMapClick(point),
+  });
+  nav = initNavigation({
+    mapApi,
+    setStatus,
+    getUserId: () => state.user?.id ?? "anon",
+  });
+  return mapApi;
+}
+
+function updateMap() {
+  ensureMap().setFriendMarkers(state.locations);
+}
+
+// ---------------------------------------------------------------------------
+// Actions
+// ---------------------------------------------------------------------------
+async function respond(id, action) {
+  try {
+    await api(`/api/v1/friendships/${id}/respond`, { method: "POST", body: { action } });
+    setStatus(`Friendship ${action}ed.`);
+    await refresh();
+  } catch (e) {
+    setStatus(e.message, true);
+  }
+}
+
+async function toggleShare(id, isActive) {
+  try {
+    await api(`/api/v1/locations/shares/${id}`, { method: "PATCH", body: { is_active: isActive } });
+    await refresh();
+  } catch (e) {
+    setStatus(e.message, true);
+  }
+}
+
+async function publish(lat, lon) {
+  try {
+    await api("/api/v1/locations/me", { method: "POST", body: { latitude: lat, longitude: lon, accuracy: 10 } });
+    setStatus("Location published.");
+    state.map.lat = lat;
+    state.map.lon = lon;
+    await refresh();
+  } catch (e) {
+    setStatus(e.message, true);
+  }
+}
+
+async function sendFriendRequest(email) {
+  try {
+    await api("/api/v1/friendships/", { method: "POST", body: { receiver_email: email } });
+    setStatus("Friend request sent.");
+    await refresh();
+  } catch (e) {
+    setStatus(e.message, true);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Wiring
+// ---------------------------------------------------------------------------
+$("login-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    await login($("login-email").value.trim(), $("login-password").value);
+    setStatus("");
+  } catch (err) {
+    setStatus(err.message, true);
+  }
+});
+
+$("register-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    await register(
+      $("register-email").value.trim(),
+      $("register-password").value,
+      $("register-name").value.trim(),
+    );
+    setStatus("Account created.");
+  } catch (err) {
+    setStatus(err.message, true);
+  }
+});
+
+$("register-toggle").addEventListener("click", () => {
+  show($("login-form"), false);
+  show($("register-form"), true);
+});
+$("login-toggle").addEventListener("click", () => {
+  show($("register-form"), false);
+  show($("login-form"), true);
+});
+
+$("anonymous").addEventListener("click", anonymousSignIn);
+$("recover-toggle").addEventListener("click", () => {
+  show($("login-form"), false);
+  show($("register-form"), false);
+  show($("recover-form"), true);
+});
+$("recover-cancel").addEventListener("click", () => {
+  show($("recover-form"), false);
+  show($("login-form"), true);
+});
+$("recover-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  await recoverAccount($("recover-code").value.trim());
+});
+$("recovery-copy").addEventListener("click", async () => {
+  const code = $("recovery-code").textContent;
+  try {
+    await navigator.clipboard.writeText(code);
+    setStatus("Recovery code copied.");
+  } catch (_) {
+    setStatus("Select the code and copy it manually.", true);
+  }
+});
+$("recovery-dismiss").addEventListener("click", () => {
+  show($("recovery-panel"), false);
+  $("recovery-code").textContent = "";
+});
+
+$("logout").addEventListener("click", logout);
+$("logout-all").addEventListener("click", logoutAll);
+
+$("publish-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const lat = Number($("publish-lat").value);
+  const lon = Number($("publish-lon").value);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    setStatus("Enter a valid latitude and longitude.", true);
+    return;
+  }
+  await publish(lat, lon);
+});
+
+$("friend-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  await sendFriendRequest($("friend-email").value.trim());
+});
+
+$("locate-button").addEventListener("click", async () => {
+  try {
+    const fix = await ensureMap().locate();
+    setStatus(`Located: ${fix.lat.toFixed(5)}, ${fix.lon.toFixed(5)}`);
+  } catch (err) {
+    setStatus(err.message, true);
+  }
+});
+
+const drawer = $("social-drawer");
+const drawerToggle = $("drawer-toggle");
+function setDrawer(open) {
+  drawer.classList.toggle("closed", !open);
+  drawer.classList.toggle("open", open);
+  drawerToggle.setAttribute("aria-expanded", String(open));
+}
+setDrawer(window.innerWidth >= 900);
+drawerToggle.addEventListener("click", () => {
+  setDrawer(drawerToggle.getAttribute("aria-expanded") !== "true");
+});
+
+// Initial session check (cookie may already be valid).
+(async () => {
+  try {
+    const me = await api("/api/v1/auth/me");
+    state.user = me;
+    await enterApp();
+  } catch (_) {
+    show($("login-panel"), true);
+    show($("app-panel"), false);
+    show($("session-bar"), false);
+  }
+})();

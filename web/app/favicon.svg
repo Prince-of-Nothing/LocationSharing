@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Pinpoint">
+  <rect width="64" height="64" rx="14" fill="#0b1020"/>
+  <path d="M32 11c-8.6 0-15.5 6.9-15.5 15.5C16.5 38.4 32 53 32 53s15.5-14.6 15.5-26.5C47.5 17.9 40.6 11 32 11z" fill="#34d399"/>
+  <circle cx="32" cy="26.5" r="5.6" fill="#052e1b"/>
+</svg>

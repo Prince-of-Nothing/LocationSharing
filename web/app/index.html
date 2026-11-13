@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pinpoint — Map First</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="/vendor/leaflet.css" />
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Pinpoint</h1>
+      <div id="session-bar" class="hidden">
+        <span id="user-email" class="muted"></span>
+        <button id="logout" type="button">Sign out</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="login-panel" class="card">
+        <h2>Sign in</h2>
+        <form id="login-form">
+          <label>Email <input id="login-email" type="email" autocomplete="username" required /></label>
+          <label>Password <input id="login-password" type="password" autocomplete="current-password" required /></label>
+          <div class="row">
+            <button type="submit">Sign in</button>
+            <button type="button" id="register-toggle" class="secondary">Create account</button>
+          </div>
+        </form>
+        <form id="register-form" class="hidden">
+          <label>Email <input id="register-email" type="email" autocomplete="username" required /></label>
+          <label>Full name <input id="register-name" type="text" autocomplete="name" required /></label>
+          <label>Password <input id="register-password" type="password" autocomplete="new-password" required /></label>
+          <div class="row">
+            <button type="submit">Create account</button>
+            <button type="button" id="login-toggle" class="secondary">Back to sign in</button>
+          </div>
+        </form>
+        <form id="recover-form" class="hidden">
+          <label>Recovery code <input id="recover-code" type="text" autocomplete="one-time-code" required /></label>
+          <div class="row">
+            <button type="submit">Recover account</button>
+            <button type="button" id="recover-cancel" class="secondary">Cancel</button>
+          </div>
+        </form>
+        <div class="row auth-alt">
+          <button type="button" id="anonymous" class="secondary">Continue anonymously</button>
+          <button type="button" id="recover-toggle" class="secondary">Recover with code</button>
+        </div>
+        <p class="muted">Demo: <code>alice@example.com</code> / <code>DemoPass123!</code></p>
+        <p class="muted">
+          Privacy-first: no trackers, no third-party scripts, no IP geolocation.
+          Location is shared only with explicit, revocable consent.
+        </p>
+      </section>
+
+      <section id="recovery-panel" class="card warn hidden" aria-live="polite">
+        <h2>Save your recovery code</h2>
+        <p class="muted">
+          This anonymous account exists only on this device session. The code is
+          shown once and is the only way to restore it. Store it offline.
+        </p>
+        <p class="recovery-code"><code id="recovery-code"></code></p>
+        <div class="row">
+          <button type="button" id="recovery-copy" class="secondary">Copy code</button>
+          <button type="button" id="recovery-dismiss">I saved it</button>
+        </div>
+      </section>
+
+      <section id="app-panel" class="hidden app-shell">
+        <div id="map" class="map" aria-label="Map"></div>
+
+        <div class="map-topbar">
+          <form id="search-form" class="search-form" role="search">
+            <input
+              id="search-input"
+              type="search"
+              placeholder="Search places…"
+              autocomplete="off"
+              aria-label="Search places"
+            />
+            <button type="submit" class="icon-btn" aria-label="Search">
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2" />
+                <path d="m16.5 16.5 4.5 4.5" stroke="currentColor" stroke-width="2" />
+              </svg>
+            </button>
+          </form>
+          <button id="locate-button" class="icon-btn" type="button" aria-label="Locate me">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <circle cx="12" cy="12" r="6" fill="none" stroke="currentColor" stroke-width="2" />
+              <path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="currentColor" stroke-width="2" />
+            </svg>
+          </button>
+          <button
+            id="drawer-toggle"
+            class="icon-btn"
+            type="button"
+            aria-label="Friends and sharing"
+            aria-expanded="true"
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" />
+            </svg>
+          </button>
+        </div>
+
+        <div id="search-results" class="search-results hidden" aria-live="polite"></div>
+
+        <div id="category-chips" class="category-chips hidden" aria-label="Search categories">
+          <button type="button" data-q="restaurant">Food</button>
+          <button type="button" data-q="cafe">Cafe</button>
+          <button type="button" data-q="fuel">Fuel</button>
+          <button type="button" data-q="pharmacy">Pharmacy</button>
+          <button type="button" data-q="hospital">Hospital</button>
+          <button type="button" data-q="parking">Parking</button>
+          <button type="button" data-q="atm">ATM</button>
+          <button type="button" data-q="hotel">Hotel</button>
+          <button type="button" data-q="park">Park</button>
+        </div>
+
+        <aside id="side-panel" class="side-panel">
+          <div id="place-sheet" class="sheet hidden" aria-live="polite">
+            <button type="button" class="sheet-close" id="place-close" aria-label="Close place">×</button>
+            <h2 id="place-name">Place</h2>
+            <p id="place-address" class="muted"></p>
+            <p id="place-distance" class="muted"></p>
+            <div class="row">
+              <button type="button" id="place-directions">Directions</button>
+              <button type="button" id="place-origin" class="secondary">Set as origin</button>
+              <button type="button" id="place-save" class="secondary">Save</button>
+              <button type="button" id="place-copy" class="secondary">Copy</button>
+              <button type="button" id="place-osm" class="secondary">Open in OSM</button>
+            </div>
+          </div>
+
+          <div id="route-panel" class="sheet hidden" aria-live="polite">
+            <button type="button" class="sheet-close" id="route-close" aria-label="Close route">×</button>
+            <h2>Route</h2>
+            <div class="route-field">
+              <span class="route-dot">A</span>
+              <input id="route-from" type="text" placeholder="My location" readonly />
+            </div>
+            <div class="route-field">
+              <span class="route-dot">B</span>
+              <input id="route-to" type="text" placeholder="Destination" readonly />
+            </div>
+            <div class="row">
+              <button type="button" id="route-swap" class="secondary">Swap</button>
+              <div class="mode-tabs" role="tablist" aria-label="Travel mode">
+                <button type="button" class="mode active" data-mode="driving">Car</button>
+                <button type="button" class="mode" data-mode="foot">Walk</button>
+                <button type="button" class="mode" data-mode="bike">Bike</button>
+              </div>
+            </div>
+            <div id="route-summary" class="route-summary muted"></div>
+            <div id="route-alternatives" class="route-alternatives"></div>
+            <ol id="route-steps" class="route-steps"></ol>
+            <div class="row">
+              <button type="button" id="route-start">Start</button>
+              <button type="button" id="route-clear" class="secondary">Clear</button>
+            </div>
+          </div>
+        </aside>
+
+        <aside id="social-drawer" class="drawer">
+          <div class="card">
+            <h2>Publish my location</h2>
+            <form id="publish-form">
+              <label>Latitude <input id="publish-lat" type="number" step="any" min="-90" max="90" required /></label>
+              <label>Longitude <input id="publish-lon" type="number" step="any" min="-180" max="180" required /></label>
+              <button type="submit">Publish</button>
+            </form>
+          </div>
+
+          <div class="card">
+            <h2>Friends</h2>
+            <ul id="friends-list" class="list"></ul>
+            <form id="friend-form">
+              <label>Friend email <input id="friend-email" type="email" required /></label>
+              <button type="submit">Send request</button>
+            </form>
+          </div>
+
+          <div class="card">
+            <h2>Shares</h2>
+            <ul id="shares-list" class="list"></ul>
+            <p class="muted">Shares are directional, precision-scoped and revocable.</p>
+          </div>
+
+          <div class="card">
+            <h2>Friend locations</h2>
+            <ul id="locations-list" class="list"></ul>
+          </div>
+
+          <div class="card">
+            <h2>Saved places</h2>
+            <ul id="saved-list" class="list"></ul>
+            <button type="button" id="clear-saved" class="secondary">Clear saved</button>
+          </div>
+
+          <div class="card">
+            <h2>Recent places</h2>
+            <ul id="recent-list" class="list"></ul>
+            <button type="button" id="clear-recents" class="secondary">Clear history</button>
+          </div>
+
+          <div class="card">
+            <h2>Active sessions</h2>
+            <ul id="sessions-list" class="list"></ul>
+            <div class="row">
+              <button type="button" id="logout-all" class="secondary">Sign out everywhere</button>
+            </div>
+          </div>
+        </aside>
+      </section>
+    </main>
+
+    <div id="status" role="status" aria-live="polite"></div>
+    <script src="/vendor/leaflet.js"></script>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
