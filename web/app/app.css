@@ -763,3 +763,42 @@ header { height: 60px; }
 .share-toggle input { width: auto; margin: 0; }
 #share-sheet select { margin-top: 0.25rem; }
 #share-incoming { margin: 0.5rem 0 0.75rem; }
+
+.route-stop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  padding: 0.2rem 0;
+}
+.route-avoid {
+  border: 0;
+  padding: 0;
+  margin: 0.5rem 0;
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.route-avoid legend {
+  color: var(--muted);
+  font-size: 0.78rem;
+  padding: 0;
+  margin-bottom: 0.2rem;
+}
+.route-avoid label {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0;
+  color: var(--text);
+  font-size: 0.8rem;
+}
+.route-avoid input { width: auto; margin: 0; }
+.pin-route-end .pin-dot.pin-stop {
+  background: #38bdf8;
+  color: #04121f;
+  box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.2);
+  font-size: 0.68rem;
+}

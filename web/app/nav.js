@@ -14,7 +14,7 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
   const savedList = $("saved-list");
   const recentList = $("recent-list");
 
-  const capabilities = { autocomplete: false, modes: ["driving"] };
+  const capabilities = { autocomplete: false, modes: ["driving"], avoid: false };
   let searchController = null;
   let debounceTimer = null;
   let selected = null;
@@ -26,6 +26,9 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
     index: 0,
     controller: null,
     watchId: null,
+    via: [],
+    avoid: [],
+    addingStop: false,
   };
 
   // --- per-account on-device storage (never leaves the browser) ------------
@@ -141,6 +144,7 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
       if (!caps) return;
       capabilities.autocomplete = Boolean(caps.autocomplete);
       capabilities.modes = Array.isArray(caps.modes) ? caps.modes : ["driving"];
+      capabilities.avoid = Boolean(caps.avoid);
       applyModeAvailability();
     })
     .catch(() => {});
@@ -153,6 +157,12 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
       btn.title = enabled
         ? ""
         : "Self-host foot/bike routing to enable this mode.";
+    });
+    document.querySelectorAll(".route-avoid input").forEach((input) => {
+      input.disabled = !capabilities.avoid;
+      input.title = capabilities.avoid
+        ? ""
+        : "Avoid options require a self-hosted OSRM instance.";
     });
   }
 
@@ -262,6 +272,8 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
       lon: Number(place.longitude),
       label: place.short_name || place.display_name || "Destination",
     };
+    route.via = [];
+    route.addingStop = false;
     renderRouteFields();
     routePanel.classList.remove("hidden");
     placeSheet.classList.add("hidden");
@@ -276,6 +288,26 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
   function renderRouteFields() {
     $("route-from").value = route.origin?.label || "Choose origin";
     $("route-to").value = route.destination?.label || "Choose destination";
+    const stops = $("route-stops");
+    stops.innerHTML = "";
+    route.via.forEach((stop, index) => {
+      const row = document.createElement("div");
+      row.className = "route-stop";
+      const label = document.createElement("span");
+      label.textContent = `Stop ${index + 1}: ${stop.lat.toFixed(4)}, ${stop.lon.toFixed(4)}`;
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "mini";
+      remove.textContent = "×";
+      remove.setAttribute("aria-label", `Remove stop ${index + 1}`);
+      remove.addEventListener("click", () => {
+        route.via.splice(index, 1);
+        renderRouteFields();
+        if (route.origin && route.destination) planRoute();
+      });
+      row.append(label, remove);
+      stops.appendChild(row);
+    });
   }
 
   async function planRoute() {
@@ -294,6 +326,13 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
         mode: route.mode,
         alternatives: "true",
       });
+      if (route.via.length) {
+        params.set(
+          "via",
+          route.via.map((stop) => `${stop.lat.toFixed(6)},${stop.lon.toFixed(6)}`).join(";"),
+        );
+      }
+      if (route.avoid.length) params.set("avoid", route.avoid.join(","));
       const res = await fetch(`/map/route?${params}`, {
         signal: route.controller.signal,
         credentials: "include",
@@ -316,7 +355,7 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
     const chosen = route.routes[index];
     if (!chosen) return;
     route.index = index;
-    mapApi.drawRoute(chosen);
+    mapApi.drawRoute(chosen, route.via);
     mapApi.fitRoute(chosen);
     $("route-summary").textContent = `${formatDistance(chosen.distance_m)} · ${formatDuration(chosen.duration_s)} · ${route.mode}`;
     const steps = $("route-steps");
@@ -352,6 +391,31 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
     const h = Math.floor(s / 3600);
     const m = Math.round((s % 3600) / 60);
     return `${h} h ${m} min`;
+  }
+
+  function downloadGpx() {
+    const chosen = route.routes[route.index];
+    if (!chosen?.points?.length) {
+      setStatus("Plan a route first.", true);
+      return;
+    }
+    const points = chosen.points
+      .map(([lat, lon]) => `<trkpt lat="${Number(lat).toFixed(6)}" lon="${Number(lon).toFixed(6)}"></trkpt>`)
+      .join("");
+    const gpx = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Pinpoint" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><name>Pinpoint route</name><trkseg>${points}</trkseg></trk>
+</gpx>`;
+    const blob = new Blob([gpx], { type: "application/gpx+xml" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "pinpoint-route.gpx";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setStatus("GPX exported.");
   }
 
   function setMode(mode) {
@@ -400,6 +464,13 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
     exitNavigation();
     route.routes = [];
     route.destination = null;
+    route.via = [];
+    route.avoid = [];
+    route.addingStop = false;
+    document.querySelectorAll(".route-avoid input").forEach((input) => {
+      input.checked = false;
+    });
+    $("route-stops").innerHTML = "";
     mapApi.clearRoute();
     routePanel.classList.add("hidden");
     $("route-steps").innerHTML = "";
@@ -476,6 +547,14 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
   }
 
   function onMapClick({ lat, lon }) {
+    if (!routePanel.classList.contains("hidden") && route.addingStop) {
+      route.via.push({ lat, lon });
+      route.addingStop = false;
+      renderRouteFields();
+      if (route.destination) planRoute();
+      setStatus("Stop added.");
+      return;
+    }
     if (!routePanel.classList.contains("hidden")) {
       route.destination = {
         lat,
@@ -590,6 +669,19 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
   $("route-swap").addEventListener("click", swapEndpoints);
   $("route-start").addEventListener("click", startFollowing);
   $("route-clear").addEventListener("click", clearRoutePanel);
+  $("route-add-stop").addEventListener("click", () => {
+    route.addingStop = true;
+    setStatus("Click the map to add a stop.");
+  });
+  document.querySelectorAll(".route-avoid input").forEach((input) => {
+    input.addEventListener("change", () => {
+      route.avoid = [...document.querySelectorAll(".route-avoid input:checked")].map(
+        (item) => item.value,
+      );
+      if (route.origin && route.destination) planRoute();
+    });
+  });
+  $("route-gpx").addEventListener("click", downloadGpx);
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {

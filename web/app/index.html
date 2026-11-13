@@ -187,6 +187,14 @@
               <span class="route-dot">B</span>
               <input id="route-to" type="text" placeholder="Destination" readonly />
             </div>
+            <div id="route-stops" class="route-stops"></div>
+            <button type="button" id="route-add-stop" class="secondary">Add stop</button>
+            <fieldset class="route-avoid">
+              <legend>Avoid</legend>
+              <label><input type="checkbox" value="motorway" /> Motorways</label>
+              <label><input type="checkbox" value="toll" /> Tolls</label>
+              <label><input type="checkbox" value="ferry" /> Ferries</label>
+            </fieldset>
             <div class="row">
               <button type="button" id="route-swap" class="secondary">Swap</button>
               <div class="mode-tabs" role="tablist" aria-label="Travel mode">
@@ -200,6 +208,7 @@
             <ol id="route-steps" class="route-steps"></ol>
             <div class="row">
               <button type="button" id="route-start">Navigate</button>
+              <button type="button" id="route-gpx" class="secondary">Export GPX</button>
               <button type="button" id="route-clear" class="secondary">Clear</button>
             </div>
           </div>

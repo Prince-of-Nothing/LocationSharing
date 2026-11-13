@@ -387,7 +387,9 @@ pub mod map_handlers {
         let autocomplete = std::env::var("PINPOINT_SEARCH_AUTOCOMPLETE")
             .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
             .unwrap_or(false);
-        Json(json!({ "autocomplete": autocomplete, "modes": modes }))
+        Json(
+            json!({ "autocomplete": autocomplete, "modes": modes, "avoid": crate::osm::osrm_supports_avoid() }),
+        )
     }
 
     pub async fn attribution() -> Json<serde_json::Value> {
@@ -617,6 +619,8 @@ pub mod map_handlers {
         to_lon: f64,
         mode: Option<String>,
         alternatives: Option<bool>,
+        via: Option<String>,
+        avoid: Option<String>,
     }
 
     type MapCache = HashMap<String, (Value, Instant)>;
@@ -651,6 +655,45 @@ pub mod map_handlers {
             && lon.is_finite()
             && (-90.0..=90.0).contains(&lat)
             && (-180.0..=180.0).contains(&lon)
+    }
+
+    /// `via=lat,lon;lat,lon` (max 6 stops).
+    fn parse_via(raw: Option<&str>) -> Result<Vec<(f64, f64)>, ()> {
+        let Some(raw) = raw.map(str::trim).filter(|s| !s.is_empty()) else {
+            return Ok(Vec::new());
+        };
+        let mut out = Vec::new();
+        for pair in raw.split(';') {
+            let mut parts = pair.split(',');
+            let lat: f64 = parts.next().ok_or(())?.trim().parse().map_err(|_| ())?;
+            let lon: f64 = parts.next().ok_or(())?.trim().parse().map_err(|_| ())?;
+            if parts.next().is_some() || !valid_coord(lat, lon) {
+                return Err(());
+            }
+            out.push((lat, lon));
+            if out.len() > 6 {
+                return Err(());
+            }
+        }
+        Ok(out)
+    }
+
+    /// `avoid=motorway,toll,ferry`.
+    fn parse_avoid(raw: Option<&str>) -> Result<Vec<String>, ()> {
+        let Some(raw) = raw.map(str::trim).filter(|s| !s.is_empty()) else {
+            return Ok(Vec::new());
+        };
+        let mut out: Vec<String> = Vec::new();
+        for item in raw.split(',') {
+            let item = item.trim().to_ascii_lowercase();
+            if !["motorway", "toll", "ferry"].contains(&item.as_str()) {
+                return Err(());
+            }
+            if !out.contains(&item) {
+                out.push(item);
+            }
+        }
+        Ok(out)
     }
 
     fn parse_mode(mode: Option<&str>) -> Option<TravelMode> {
@@ -843,14 +886,46 @@ pub mod map_handlers {
             );
         }
         let alternatives = p.alternatives.unwrap_or(true);
+        let via = match parse_via(p.via.as_deref()) {
+            Ok(v) => v,
+            Err(_) => {
+                return api_error(
+                    StatusCode::BAD_REQUEST,
+                    "VALIDATION_FAILED",
+                    "via must be up to 6 lat,lon pairs separated by ';'.",
+                )
+            }
+        };
+        let avoid = match parse_avoid(p.avoid.as_deref()) {
+            Ok(v) => v,
+            Err(_) => {
+                return api_error(
+                    StatusCode::BAD_REQUEST,
+                    "VALIDATION_FAILED",
+                    "avoid must be motorway, toll or ferry.",
+                )
+            }
+        };
+        if !avoid.is_empty() && !crate::osm::osrm_supports_avoid() {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                "AVOID_UNAVAILABLE",
+                "Avoid options require a self-hosted OSRM instance.",
+            );
+        }
         let key = format!(
-            "route:{:.5},{:.5};{:.5},{:.5}:{}:{}",
+            "route:{:.5},{:.5};{:.5},{:.5}:{}:{}:{}:{}",
             p.from_lat,
             p.from_lon,
             p.to_lat,
             p.to_lon,
             mode.profile(),
-            alternatives
+            alternatives,
+            via.iter()
+                .map(|(lat, lon)| format!("{lat:.4},{lon:.4}"))
+                .collect::<Vec<_>>()
+                .join(";"),
+            avoid.join(",")
         );
         if let Some(value) = cache_get(&key, Duration::from_secs(300)) {
             return (StatusCode::OK, Json(value)).into_response();
@@ -871,7 +946,13 @@ pub mod map_handlers {
             Err(_) => return upstream_error("Routing"),
         };
         match client
-            .route_alternatives((p.from_lat, p.from_lon), (p.to_lat, p.to_lon), mode)
+            .route_alternatives_via(
+                (p.from_lat, p.from_lon),
+                (p.to_lat, p.to_lon),
+                mode,
+                &via,
+                &avoid,
+            )
             .await
         {
             Ok(mut routes) => {
@@ -946,6 +1027,21 @@ pub mod map_handlers {
         #[test]
         fn upstream_failure_is_502() {
             assert_eq!(upstream_error("Search").status(), StatusCode::BAD_GATEWAY);
+        }
+
+        #[test]
+        fn via_and_avoid_parsing_is_strict() {
+            assert_eq!(
+                parse_via(Some("47.0,28.8;47.1,28.9")).unwrap(),
+                vec![(47.0, 28.8), (47.1, 28.9)]
+            );
+            assert!(parse_via(Some("47.0")).is_err());
+            assert!(parse_via(Some("999,28.8")).is_err());
+            assert_eq!(
+                parse_avoid(Some("toll,ferry")).unwrap(),
+                vec!["toll".to_string(), "ferry".to_string()]
+            );
+            assert!(parse_avoid(Some("tunnel")).is_err());
         }
     }
 }

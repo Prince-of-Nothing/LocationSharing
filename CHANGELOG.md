@@ -12,6 +12,11 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [FEATURE] **Route options**: multi-stop routing (add stops by clicking the
+  map, numbered markers, remove), GPX 1.1 export from the route panel, and
+  avoid-motorway/toll/ferry controls. Avoid needs a self-hosted OSRM profile;
+  `/map/capabilities` reports `avoid` and the UI disables the controls when
+  the public demo cannot honour them.
 - [FEATURE] **Per-friend sharing controls**: every accepted friend gets a
   “Sharing” sheet with an on/off switch, precision (`exact` / `approximate` /
   `city_only`) and duration presets (1 h, 8 h, 24 h, 7 days, until turned

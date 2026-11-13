@@ -348,6 +348,7 @@ async fn map_capabilities_lists_driving() {
         .iter()
         .any(|m| m == "driving"));
     assert!(json["autocomplete"].is_boolean());
+    assert!(json["avoid"].is_boolean());
 }
 
 #[tokio::test]

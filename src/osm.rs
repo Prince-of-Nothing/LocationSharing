@@ -59,6 +59,16 @@ fn env_optional(name: &str) -> Option<String> {
         .filter(|v| !v.is_empty())
 }
 
+/// OSRM exclusions (`avoid=motorway,toll,ferry`) need a profile that declares
+/// those classes. The public demo does not, so the capability is opt-in for
+/// self-hosted instances (`PINPOINT_OSRM_URL` or `PINPOINT_OSRM_AVOID=1`).
+pub fn osrm_supports_avoid() -> bool {
+    env_optional("PINPOINT_OSRM_URL").is_some()
+        || std::env::var("PINPOINT_OSRM_AVOID")
+            .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+            .unwrap_or(false)
+}
+
 /// Active Overpass interpreter URL: `PINPOINT_OVERPASS_URL` or the public demo.
 pub fn overpass_url() -> String {
     env_url("PINPOINT_OVERPASS_URL", PUBLIC_OVERPASS)
@@ -341,7 +351,7 @@ impl OsmClient {
         to: (f64, f64),
         mode: TravelMode,
     ) -> anyhow::Result<Route> {
-        self.route_alternatives_at(&osrm_base(), from, to, mode)
+        self.route_alternatives_at(&osrm_base(), from, to, mode, &[], &[])
             .await?
             .into_iter()
             .next()
@@ -356,6 +366,19 @@ impl OsmClient {
         to: (f64, f64),
         mode: TravelMode,
     ) -> anyhow::Result<Vec<Route>> {
+        self.route_alternatives_via(from, to, mode, &[], &[]).await
+    }
+
+    /// Routing with intermediate stops (`via`) and OSRM exclusions
+    /// (`motorway`, `toll`, `ferry`). Alternatives stay enabled.
+    pub async fn route_alternatives_via(
+        &self,
+        from: (f64, f64),
+        to: (f64, f64),
+        mode: TravelMode,
+        via: &[(f64, f64)],
+        avoid: &[String],
+    ) -> anyhow::Result<Vec<Route>> {
         let base = osrm_base_for(mode).ok_or_else(|| {
             anyhow::anyhow!(
                 "The {} routing profile is not configured. Set {}.",
@@ -367,7 +390,8 @@ impl OsmClient {
                 }
             )
         })?;
-        self.route_alternatives_at(&base, from, to, mode).await
+        self.route_alternatives_at(&base, from, to, mode, via, avoid)
+            .await
     }
 
     async fn route_alternatives_at(
@@ -376,16 +400,23 @@ impl OsmClient {
         from: (f64, f64),
         to: (f64, f64),
         mode: TravelMode,
+        via: &[(f64, f64)],
+        avoid: &[String],
     ) -> anyhow::Result<Vec<Route>> {
-        // Coords are lon,lat;lon,lat (OSRM convention).
+        // Coords are lon,lat;lon,lat (OSRM convention), with optional stops.
+        let mut coords = format!("{:.6},{:.6}", from.1, from.0);
+        for (lat, lon) in via {
+            coords.push_str(&format!(";{lon:.6},{lat:.6}"));
+        }
+        coords.push_str(&format!(";{:.6},{:.6}", to.1, to.0));
+        let exclude = if avoid.is_empty() {
+            String::new()
+        } else {
+            format!("&exclude={}", avoid.join(","))
+        };
         let url = format!(
-            "{}/route/v1/{}/{:.6},{:.6};{:.6},{:.6}?overview=full&geometries=polyline&steps=true&alternatives=true",
-            base,
+            "{base}/route/v1/{}/{coords}?overview=full&geometries=polyline&steps=true&alternatives=true{exclude}",
             mode.profile(),
-            from.1,
-            from.0,
-            to.1,
-            to.0,
         );
         let resp: OsrmResponse = self.http.get(&url).send().await?.json().await?;
         if resp.code != "Ok" || resp.routes.is_empty() {

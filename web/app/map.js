@@ -83,7 +83,7 @@ export function createMap({ element, center, zoom, onClick }) {
     }
   }
 
-  function drawRoute(route) {
+  function drawRoute(route, stops = []) {
     clearRoute();
     const points = (route?.points || [])
       .map(([lat, lon]) => [Number(lat), Number(lon)])
@@ -105,6 +105,17 @@ export function createMap({ element, center, zoom, onClick }) {
     });
     L.marker(points[0], { icon: start, keyboard: false }).addTo(routeLayer);
     L.marker(points[points.length - 1], { icon: end, keyboard: false }).addTo(routeLayer);
+
+    (Array.isArray(stops) ? stops : []).forEach((stop, index) => {
+      const pin = L.divIcon({
+        className: "pin-route-end",
+        html: `<span class="pin-dot pin-stop">${index + 1}</span>`,
+        iconSize: [0, 0],
+      });
+      L.marker([Number(stop.lat), Number(stop.lon)], { icon: pin, keyboard: false }).addTo(
+        routeLayer,
+      );
+    });
   }
 
   function fitRoute(route) {
