@@ -35,12 +35,17 @@ pub async fn create_share(
         .unwrap_or("exact")
         .to_string();
     // Optional expiry: duration_hours (int) or explicit expires_at ISO-8601.
+    // 0 means "no expiry".
     let expires_at: Option<String> =
         if let Some(h) = body.get("duration_hours").and_then(Value::as_i64) {
-            if h <= 0 {
-                return error_envelope("VALIDATION_FAILED", "duration_hours must be > 0");
+            if h < 0 {
+                return error_envelope("VALIDATION_FAILED", "duration_hours must be >= 0");
             }
-            Some(format!("2026-11-08T{}:00:00Z", 12 + h))
+            if h == 0 {
+                None
+            } else {
+                Some((chrono::Utc::now() + chrono::Duration::hours(h)).to_rfc3339())
+            }
         } else {
             body.get("expires_at")
                 .and_then(Value::as_str)
@@ -63,6 +68,19 @@ pub async fn create_share(
             "FRIENDSHIP_NOT_FOUND",
             "Friendship not found or not accepted.",
         );
+    }
+    // Per-friend control is an upsert: one share per friendship + direction.
+    if let Some(existing) = store.shares.iter_mut().find(|s| {
+        s.owner_id == cu.user_id && s.friendship_id == friendship_id && s.direction == direction
+    }) {
+        existing.precision_level = precision;
+        existing.expires_at = expires_at;
+        existing.is_active = true;
+        if label.is_some() {
+            existing.label = label;
+        }
+        let view = share_json(existing);
+        return (StatusCode::OK, Json(view)).into_response();
     }
     let id = store.next_share_id;
     store.next_share_id += 1;
@@ -140,6 +158,16 @@ pub async fn update_share(
     }
     if let Some(l) = body.get("label").and_then(Value::as_str) {
         share.label = Some(l.to_string());
+    }
+    if let Some(h) = body.get("duration_hours").and_then(Value::as_i64) {
+        if h < 0 {
+            return error_envelope("VALIDATION_FAILED", "duration_hours must be >= 0");
+        }
+        share.expires_at = if h == 0 {
+            None
+        } else {
+            Some((chrono::Utc::now() + chrono::Duration::hours(h)).to_rfc3339())
+        };
     }
     if body.get("expires_at").is_some() {
         share.expires_at = body

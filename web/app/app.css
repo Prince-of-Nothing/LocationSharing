@@ -752,3 +752,14 @@ header { height: 60px; }
   .admin-nav-item { width: auto; }
   .admin-sidebar #admin-close { margin: 0; }
 }
+
+.share-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+  color: var(--text);
+}
+.share-toggle input { width: auto; margin: 0; }
+#share-sheet select { margin-top: 0.25rem; }
+#share-incoming { margin: 0.5rem 0 0.75rem; }

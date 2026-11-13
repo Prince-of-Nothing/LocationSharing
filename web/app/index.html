@@ -145,6 +145,37 @@
             </div>
           </div>
 
+          <div id="share-sheet" class="sheet hidden" aria-live="polite">
+            <button type="button" class="sheet-close" id="share-close" aria-label="Close sharing">×</button>
+            <h2 id="share-title">Share with friend</h2>
+            <p id="share-subtitle" class="muted"></p>
+            <label class="share-toggle">
+              <input type="checkbox" id="share-enabled" />
+              Share my location with this friend
+            </label>
+            <label>Precision
+              <select id="share-precision">
+                <option value="exact">Exact location</option>
+                <option value="approximate">Approximate (neighbourhood)</option>
+                <option value="city_only">City only</option>
+              </select>
+            </label>
+            <label>For how long
+              <select id="share-duration">
+                <option value="0">Until I turn it off</option>
+                <option value="1">1 hour</option>
+                <option value="8">8 hours</option>
+                <option value="24">24 hours</option>
+                <option value="168">7 days</option>
+              </select>
+            </label>
+            <p id="share-incoming" class="muted"></p>
+            <div class="row">
+              <button type="button" id="share-save">Save sharing</button>
+              <button type="button" id="share-revoke" class="secondary">Stop sharing</button>
+            </div>
+          </div>
+
           <div id="route-panel" class="sheet hidden" aria-live="polite">
             <button type="button" class="sheet-close" id="route-close" aria-label="Close route">×</button>
             <h2>Route</h2>

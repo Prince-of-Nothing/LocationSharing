@@ -4,6 +4,7 @@
 import { createMap } from "./map.js";
 import { initNavigation } from "./nav.js";
 import { createAdminConsole } from "./admin.js";
+import { initSharing } from "./sharing.js";
 
 const state = {
   csrf: null,
@@ -98,6 +99,7 @@ async function logout() {
   $("nav-banner").classList.add("hidden");
   $("place-sheet").classList.add("hidden");
   $("route-panel").classList.add("hidden");
+  $("share-sheet").classList.add("hidden");
   $("search-results").classList.add("hidden");
   $("saved-list").innerHTML = "";
   $("recent-list").innerHTML = "";
@@ -118,6 +120,14 @@ async function enterApp() {
   $("user-email").textContent = state.user?.email || "";
   updateAdminTab();
   ensureMap().map.invalidateSize();
+  if (!sharing) {
+    sharing = initSharing({
+      api,
+      setStatus,
+      getUser: () => state.user,
+      onChanged: refresh,
+    });
+  }
   await refresh();
 }
 
@@ -172,6 +182,12 @@ function renderFriends(items) {
       reject.className = "secondary";
       reject.onclick = () => respond(f.id, "reject");
       li.append(accept, reject);
+    } else if (f.status === "accepted") {
+      const manage = document.createElement("button");
+      manage.textContent = "Sharing";
+      manage.className = "secondary";
+      manage.onclick = () => sharing?.open(f);
+      li.appendChild(manage);
     }
     ul.appendChild(li);
   }
@@ -317,6 +333,7 @@ async function logoutAll() {
   $("nav-banner").classList.add("hidden");
   $("place-sheet").classList.add("hidden");
   $("route-panel").classList.add("hidden");
+  $("share-sheet").classList.add("hidden");
   $("search-results").classList.add("hidden");
   $("saved-list").innerHTML = "";
   $("recent-list").innerHTML = "";
@@ -336,6 +353,7 @@ async function logoutAll() {
 let mapApi = null;
 let nav = null;
 let adminConsole = null;
+let sharing = null;
 
 function canAdmin() {
   return ["admin", "administrator"].includes(state.user?.role);
