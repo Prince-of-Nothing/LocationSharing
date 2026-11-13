@@ -7,6 +7,8 @@ impl PinpointAppUI {
         self.draw_main_toolbar(ui);
         ui.heading("Places — route, nearby POIs & address lookup");
         ui.add_space(8.0);
+
+        // Route form
         ui.group(|ui| {
             ui.label(RichText::new("Route (OSRM)").size(14.0).strong());
             ui.horizontal(|ui| {
@@ -46,6 +48,8 @@ impl PinpointAppUI {
             }
         });
         ui.add_space(8.0);
+
+        // POI form
         ui.group(|ui| {
             ui.label(RichText::new("Nearby (Overpass)").size(14.0).strong());
             for cat in [
@@ -68,6 +72,8 @@ impl PinpointAppUI {
             }
         });
         ui.add_space(8.0);
+
+        // Reverse form
         ui.group(|ui| {
             ui.label(RichText::new("Reverse geocode").size(14.0).strong());
             ui.add(
@@ -90,5 +96,78 @@ impl PinpointAppUI {
                 }
             }
         });
+
+        // Nearby POI results (name, hours, phone, website, save, OSM link)
+        let pois = { self.app.data().lock().unwrap().poi_results.clone() };
+        if !pois.is_empty() {
+            ui.add_space(8.0);
+            ui.group(|ui| {
+                ui.label(
+                    RichText::new(format!("Nearby places ({})", pois.len()))
+                        .size(14.0)
+                        .strong(),
+                );
+                for poi in &pois {
+                    ui.horizontal(|ui| {
+                        ui.label(format!("{} {}", poi.icon, poi.name));
+                        if !poi.opening_hours.is_empty() {
+                            ui.label(RichText::new(&poi.opening_hours).size(10.0));
+                        }
+                        if !poi.phone.is_empty() {
+                            ui.label(RichText::new(&poi.phone).size(10.0));
+                        }
+                        if ui.small_button("Save").clicked() {
+                            let store = crate::bookmarks::BookmarkStore::default_location();
+                            store.add(&poi.name, poi.latitude, poi.longitude);
+                            self.app.set_notice(Some(format!("Saved {}", poi.name)));
+                        }
+                        if ui.small_button("OSM").clicked() {
+                            let url = format!(
+                                "https://www.openstreetmap.org/?mlat={:.4}&mlon={:.4}#map=16/{:.4}/{:.4}",
+                                poi.latitude, poi.longitude, poi.latitude, poi.longitude
+                            );
+                            let _ = webbrowser::open(&url);
+                        }
+                    });
+                    if !poi.website.is_empty() {
+                        ui.hyperlink_to(RichText::new(&poi.website).size(10.0), &poi.website);
+                    }
+                    ui.add_space(2.0);
+                }
+            });
+        }
+
+        // Route results (summary, steps, GPX export)
+        let route = { self.app.data().lock().unwrap().last_route.clone() };
+        if let Some(route) = route {
+            ui.add_space(8.0);
+            ui.group(|ui| {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new(format!(
+                            "Route — {:.2} km, ~{} min",
+                            route.distance_m / 1000.0,
+                            (route.duration_s / 60.0) as i64
+                        ))
+                        .size(14.0)
+                        .strong(),
+                    );
+                    if ui.small_button("Export GPX").clicked() {
+                        self.spawn_action(
+                            PendingAction::ExportGpx {
+                                name: "Pinpoint route".to_string(),
+                            },
+                            ctx,
+                        );
+                    }
+                });
+                if !route.summary.is_empty() {
+                    ui.label(RichText::new(&route.summary).size(11.0));
+                }
+                for step in &route.steps {
+                    ui.label(format!("• {}", step.text));
+                }
+            });
+        }
     }
 }

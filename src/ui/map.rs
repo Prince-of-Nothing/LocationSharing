@@ -309,6 +309,12 @@ impl PinpointAppUI {
                             place.display_name, place.latitude, place.longitude
                         ));
                         ui.add_space(4.0);
+                        if ui.small_button("★ Save").clicked() {
+                            let store = crate::bookmarks::BookmarkStore::default_location();
+                            store.add(&place.short_name, place.latitude, place.longitude);
+                            self.app
+                                .set_notice(Some(format!("Saved {}", place.short_name)));
+                        }
                         if ui.button("Navigate").clicked() {
                             let url = format!(
                                 "https://www.openstreetmap.org/directions?to={:.4}%2C{:.4}",

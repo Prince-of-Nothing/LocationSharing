@@ -109,6 +109,9 @@ enum PendingAction {
         full_name: String,
     },
     PublishGpsLocation,
+    ExportGpx {
+        name: String,
+    },
     DownloadTilePack {
         center_lat: f64,
         center_lon: f64,
@@ -347,11 +350,11 @@ impl PinpointAppUI {
                             Ok(r) => {
                                 let mins = (r.duration_s / 60.0) as i64;
                                 app.set_notice(Some(format!(
-                                    "Route: {:.2} km, ~{} min. {}",
+                                    "Route: {:.2} km, ~{} min.",
                                     r.distance_m / 1000.0,
-                                    mins,
-                                    r.steps.first().map(|s| s.text.clone()).unwrap_or_default()
+                                    mins
                                 )));
+                                app.data().lock().unwrap().last_route = Some(r);
                             }
                             Err(e) => app.set_error(Some(e.to_string())),
                         }
@@ -361,10 +364,11 @@ impl PinpointAppUI {
                     if let Ok(client) = OsmClient::new() {
                         match client.pois(lat, lon, &category).await {
                             Ok(pois) => {
+                                let count = pois.len();
+                                app.data().lock().unwrap().poi_results = pois;
                                 app.set_notice(Some(format!(
                                     "Found {} {} place(s) nearby",
-                                    pois.len(),
-                                    category
+                                    count, category
                                 )));
                             }
                             Err(e) => app.set_error(Some(e.to_string())),
@@ -387,6 +391,19 @@ impl PinpointAppUI {
                 PendingAction::PublishGpsLocation => {
                     let _ = app.publish_my_location().await;
                 }
+                PendingAction::ExportGpx { name } => {
+                    let route = app.data().lock().unwrap().last_route.clone();
+                    match route {
+                        Some(route) => match crate::osm::export_route_gpx(&route, &name) {
+                            Ok(path) => app.set_notice(Some(format!(
+                                "GPX exported to {}",
+                                path.display()
+                            ))),
+                            Err(e) => app.set_error(Some(format!("GPX export failed: {e}"))),
+                        },
+                        None => app.set_error(Some("No route to export.".to_string())),
+                    }
+                }
                 PendingAction::DownloadTilePack {
                     center_lat,
                     center_lon,
@@ -403,8 +420,13 @@ impl PinpointAppUI {
                     );
                     let triples: Vec<(u32, u32, u32)> =
                         xy.into_iter().map(|(x, y)| (z as u32, x, y)).collect();
-                    let (ok, skipped, failed) =
-                        crate::tilepacks::download_pack(&triples, None).await;
+                    let backend_url = app.backend().backend_url().to_string();
+                    let (ok, skipped, failed) = crate::tilepacks::download_pack(
+                        &triples,
+                        None,
+                        Some(&backend_url),
+                    )
+                    .await;
                     app.set_notice(Some(format!(
                         "Offline tile pack (z{z}): {ok} downloaded, {skipped} cached, {failed} failed."
                     )));
