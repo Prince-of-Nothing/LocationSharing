@@ -21,7 +21,7 @@ combined `pinpoint-server` binary.
 | Async runtime | tokio |
 | DB | sqlx 0.8 (postgres, rustls) |
 | Auth | session cookie + `X-CSRF-Token` double-submit (`src/api.rs`) |
-| Passwords | PBKDF2-HMAC-SHA256 (`src/security/password.rs`) |
+| Passwords | Argon2id (`src/security/password.rs`) |
 | MFA | TOTP (`src/security/mfa.rs`) |
 | Config | env (`BIND_ADDR`, `DATABASE_URL`, `CARTO_API_KEY`, …) |
 
@@ -101,6 +101,10 @@ src/bin/
 
 ## Storage & replication
 
+- **Target schema:** normalized + application-encrypted
+  (`docs/database/schema.md`, ADR-0010, `db/schema/00-target.sql`); the
+  runtime currently uses the `pinpoint_*` tables + a `pinpoint_state`
+  rollback snapshot and must migrate to the target.
 - **In-memory:** `Store` behind `Arc<Mutex<…>>` for demo/tests/local.
 - **Postgres:** `sqlx::PgPool`; `AppState::persist()` writes normalized tables
   (`users`, `friendships`, `shares`, `locations`, `checkins`, `emergencies`)
@@ -116,17 +120,39 @@ src/bin/
 
 ## Security controls
 
-- **Passwords:** PBKDF2-HMAC-SHA256 (50k+ iters, salted) in
-  `src/security/password.rs`.
+- **Passwords:** Argon2id (PHC, memory-hard; OWASP-aligned) in
+  `src/security/password.rs`; legacy PBKDF2 hashes verify and re-hash on login.
 - **Sessions/CSRF:** session cookie + `X-CSRF-Token` double-submit.
-- **MFA:** TOTP enroll/verify/status/disable with replay protection.
-- **Rate limiting / lockout:** failed-login lockout with expiry.
+- **MFA:** TOTP enroll/verify/status/disable with replay protection
+  (RFC 6238 HMAC-SHA256, 30 s step, ±1 drift).
+- **OAuth2/OIDC + PKCE:** provider/PKCE/state/redirect primitives in
+  `src/security/oauth.rs`; login wiring pending.
+- **Rate limiting / lockout:** failed-login lockout with expiry; client-side
+  rate limiter in `src/security/rate_limit.rs`; server-side limits pending.
 - **Authorization:** directional share checks on every location read/write;
   server-side enforcement (client is untrusted).
 - **Transport:** HTTPS via nginx/Caddy in deployment (ADR-0006; plain HTTP only
   for loopback dev).
 - **Map policy:** never `tile.openstreetmap.org`; ODbL attribution always
   returned.
+
+## Authentication & sessions
+
+- **Models (ADR-0009):** email+password (identity) and anonymous device-bound
+  accounts (one-time recovery code), with an upgrade path (link an identity
+  later).
+- **Session model (ADR-0012 + `docs/security/session-management.md`):**
+  opaque 256-bit `pinpoint_sessions` row delivered as an `HttpOnly;
+  SameSite=Lax` cookie + `X-CSRF-Token` double-submit; sliding idle timeout;
+  immediate revocation on logout/logout-all/session revoke/password change;
+  `mfa_pending` gate. No JWT, no refresh token.
+- **Shared across services:** sessions live in Postgres so auth/users/
+  locations replicas validate the same session; in-memory fallback for the
+  single `pinpoint-server` binary.
+- **Status:** implemented — handlers (`src/server/auth_handlers.rs`), store
+  (`state/sessions.rs`), middleware (`session_auth`) and the web UI. Remaining
+  follow-ups: anonymous device challenge-response and rate limiting on
+  anonymous creation/recovery (`session-management.md` §10).
 
 ## Build / run / test
 

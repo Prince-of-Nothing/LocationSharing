@@ -1,229 +1,140 @@
-# API Contract (as built)
+# API Contract (as built, Rust)
 
-Version: `api/v1` · Base path: `/api/v1` · Served by the FastAPI backend in
-`backend/app`. The machine-readable schema is [`openapi.json`](./openapi.json)
-(regenerate with `cd backend && python scripts/export_openapi.py`). In
-development, interactive docs are available at `/docs`; they are disabled in
-production.
+Version: `api/v1` · Base path: `/api/v1` · Implemented by the Axum server in
+`src/server/` (`pinpoint-server` for the combined demo, or the split
+`pinpoint-auth` / `pinpoint-users` / `pinpoint-locations` / `pinpoint-map`
+services behind the gateway).
 
-> The longer [API Contract Reference](./api-contract-reference.md) and
-> [API Security Implementation Guide](./api-security-implementation.md)
-> describe the **target** OIDC/WebSocket design. Where they differ from this
-> page, this page describes what is actually implemented (see
-> [ADR 0003](../adr/password-auth-with-rotating-refresh-tokens.md)).
+This page describes **what is implemented today**. The contract is pinned by
+`tests/contract.rs` and `tests/router_probe.rs`; route definitions live in
+`src/server/mod.rs`. The Go/FastAPI-era documents
+([`api-contract-reference.md`](./api-contract-reference.md),
+[`api-security-implementation.md`](./api-security-implementation.md)) describe
+the historical/target design and are **not** the current contract.
 
 ## Conventions
 
-- JSON request and response bodies. **Unknown fields are rejected** (422).
-- Authentication: `Authorization: Bearer <access_token>` on every endpoint
-  except register, login, refresh and health. Tokens are never accepted in
-  query strings or cookies.
-- Identifiers are random UUIDs. A record that exists but belongs to someone
-  else returns the **same 404** as a missing record (and is audited).
-- Timestamps are ISO 8601 UTC.
-- Errors use Problem Details (RFC 9457) with a stable `code`:
+- JSON request and response bodies; unknown JSON fields are ignored.
+- **Authentication (ADR-0012):** an opaque `session_id` cookie
+  (`HttpOnly; SameSite=Lax`, `Secure` over HTTPS) plus an `X-CSRF-Token`
+  header on every unsafe method (`POST`/`PUT`/`PATCH`/`DELETE`). There is no
+  `Authorization: Bearer` path and no refresh endpoint.
+- Errors use a stable envelope:
+  ```json
+  { "error": { "code": "VALIDATION_FAILED", "message": "email is required" } }
+  ```
+- Timestamps are ISO 8601 UTC. IDs are integers.
+- Unauthenticated requests to protected endpoints return `401`
+  `UNAUTHENTICATED`; a missing/wrong CSRF token returns `403` `CSRF_FAILED`.
 
-```json
-{
-  "type": "about:blank#validation_failed",
-  "title": "Unprocessable Entity",
-  "status": 422,
-  "code": "VALIDATION_FAILED",
-  "detail": "The request is invalid.",
-  "instance": "/api/v1/locations/me",
-  "errors": {
-    "latitude": ["Input should be less than or equal to 90"],
-    "user_id": ["Extra inputs are not permitted"]
-  }
-}
-```
+## Auth — `/api/v1/auth/*`
 
-| Status | Meaning |
-|---|---|
-| 400 | Semantically invalid request (e.g. befriending yourself) |
-| 401 | Missing, invalid or expired token, or ended session (`WWW-Authenticate: Bearer`) |
-| 403 | Authenticated but not allowed (not friends, not the owner, not admin, CSRF failed) |
-| 404 | Not found **or not yours** |
-| 409 | Conflict with current state (duplicate request/share, closed check-in) |
-| 413 | Body larger than 64 KB |
-| 422 | Validation failed (`VALIDATION_FAILED`, `WEAK_PASSWORD`, `INVALID_TIMESTAMP`) |
-| 429 | Rate limited; see `Retry-After` |
-| 500 | `INTERNAL_ERROR` with a generic message only |
-
-## Endpoints
-
-### Authentication and sessions (`/auth`)
-
-| Method | Path | Purpose | Rate limit |
+| Method | Path | Auth | Notes |
 |---|---|---|---|
-| POST | `/auth/register` | Create an account `{username, email, password, display_name?}` → 201 user | 5/hour/IP |
-| POST | `/auth/login` | `{login, password, token_delivery: "cookie"\|"body"}` → tokens + user | 10/min/IP |
-| POST | `/auth/refresh` | Rotate refresh token. Body `{refresh_token}` (native) **or** cookie + `X-CSRF-Token` header (web) | 30/min/IP |
-| POST | `/auth/logout` | Revoke the current session, clear cookies → 204 | |
-| POST | `/auth/logout-all` | Revoke every session of the user → 204 | |
-| GET | `/auth/sessions` | List own active sessions (`current` flag) | |
-| DELETE | `/auth/sessions/{id}` | Revoke one own session → 204 | |
-| POST | `/auth/password` | `{current_password, new_password}` → 204; revokes all sessions | 5/15 min/account |
+| POST | `/auth/register` | — | `{email, password, full_name}` → `201` session + user |
+| POST | `/auth/login` | — | `{email, password, totp?}` → `200` session + user; `MFA_REQUIRED` if enrolled without a valid code |
+| POST | `/auth/anonymous` | — | `{device_name?, public_key?}` → `201` session + user + **one-time** `recovery_code` |
+| POST | `/auth/anonymous/recover` | — | `{recovery_code}` → `200` session + rotated `recovery_code`; old code is invalid |
+| POST | `/auth/session` | cookie | validate the cookie, return `{user}` + `X-CSRF-Token` |
+| GET | `/auth/me` | cookie | current user |
+| POST | `/auth/logout` | cookie + CSRF | revoke the current session, clear cookie |
+| POST | `/auth/logout-all` | cookie + CSRF | revoke every session for the user |
+| GET | `/auth/sessions` | cookie | `{sessions:[{id, current, auth_method, mfa_pending, created_at, last_activity}]}` — `id` is an 8-hex prefix, never the full token |
+| DELETE | `/auth/sessions/:id` | cookie + CSRF | revoke one own session by prefix; clears the cookie if it was current |
+| POST | `/auth/password/change` | cookie + CSRF | `{new_password, confirm_password}`; revokes all sessions |
+| POST | `/auth/password/force-change` | cookie + CSRF | same handler, for `must_change_password` accounts |
+| POST | `/auth/mfa/enroll` | cookie | generate a TOTP secret + `otpauth_uri` |
+| POST | `/auth/mfa/verify` | cookie | `{code}` → enable MFA |
+| GET | `/auth/mfa/status` | cookie | `{mfa_enabled}` |
+| DELETE | `/auth/mfa` | cookie + CSRF | disable MFA |
 
-Login response (`token_delivery: "body"`; in cookie mode `refresh_token` is
-`null`, the refresh token is set as an `HttpOnly; SameSite=Strict` cookie on
-path `/api/v1/auth` and `csrf_token` is returned):
+Session responses include `csrf_token` in the body **and** an `X-CSRF-Token`
+header. The cookie value is stored server-side only as a SHA-256 hash.
 
-```json
-{
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "token_type": "bearer",
-  "expires_in": 900,
-  "refresh_token": "D4yDUbW1_6kOl2XVuMw2XnmE9hpAD_aclng0ZDtw8WE",
-  "csrf_token": null,
-  "user": {
-    "id": "7ea801db-0273-4583-bd56-d0a50e371ecd",
-    "username": "alice",
-    "email": "alice@example.com",
-    "display_name": "Alice",
-    "bio": null,
-    "role": "user",
-    "created_at": "2026-09-29T04:37:36.428923Z",
-    "last_login_at": "2026-09-29T04:37:36.451615Z"
-  }
-}
+## Users & friendships — `/api/v1/*`
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| GET | `/users/` | cookie | list users (scoped by role) |
+| POST | `/users/` | cookie | create a user (admin flows) |
+| GET | `/users/:id` | cookie | user by id |
+| PATCH | `/users/:id` | cookie + CSRF | update own profile / admin update |
+| DELETE | `/users/:id` | cookie + CSRF | delete (admin) |
+| GET | `/users/search?q=` | cookie | search by email/name |
+| GET | `/friendships/` | cookie | list friendships involving the caller |
+| POST | `/friendships/` | cookie + CSRF | `{receiver_email}` → pending request |
+| POST | `/friendships/:id/respond` | cookie + CSRF | `{action:"accept"\|"reject"}` (receiver only) |
+| DELETE | `/friendships/:id` | cookie + CSRF | remove a friendship |
+
+## Locations & shares — `/api/v1/locations/*`
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| GET | `/locations/shares` | cookie | shares created by the caller |
+| POST | `/locations/shares` | cookie + CSRF | `{friend_id, precision_level, purpose?, expires_at?}` |
+| PATCH | `/locations/shares/:id` | cookie + CSRF | `{is_active}` — pause/resume (owner only) |
+| DELETE | `/locations/shares/:id` | cookie + CSRF | revoke (owner only) |
+| POST | `/locations/me` | cookie + CSRF | `{latitude, longitude, accuracy?}` — publish latest location |
+| GET | `/locations/me` | cookie | own latest location |
+| GET | `/locations/friends` | cookie | friend locations visible under an active share, precision-downgraded |
+| GET/POST | `/locations/check-ins` | cookie (+CSRF) | list / create a check-in |
+| DELETE | `/locations/check-ins/:id` | cookie + CSRF | delete own check-in |
+| GET/POST | `/locations/emergency` | cookie (+CSRF) | list / trigger an emergency share |
+| PATCH | `/locations/emergency/:id` | cookie + CSRF | resolve |
+
+Authorization is server-side on every request: friendship alone grants
+nothing; an active, unexpired, unpaused `SharePermission` with the caller as
+recipient is required, and precision (`exact` / `approximate` / `city_only`)
+is applied before serialization.
+
+## Map proxy — `/map/*`
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/map/tiles/:z/:x/:y` | ODbL raster proxy. Order: `PINPOINT_TILE_URL` (self-hosted, ADR-0011) → `tile.openstreetmap.de` → Wikimedia → CARTO. Never `tile.openstreetmap.org`. Cached 1 h, returns `X-Tile-Source` and `X-Data-Attribution`. |
+| GET | `/map/attribution` | source list + license |
+| GET | `/map/health` | tile-cache health |
+
+## Operations
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/health` | `{status, version, mode, database}` |
+| GET | `/api/v1/sync-status` | replica convergence state (`mode`, `database_connected`) |
+| GET | `/` | web client (`web/app/`) with CSP + security headers |
+| GET | `/app.js`, `/app.css` | web assets (same-origin only) |
+| GET | `/favicon.svg`, `/favicon.ico` | locally generated icon (no icon CDN) |
+
+## Example: sign in and publish
+
+```http
+POST /api/v1/auth/login
+Content-Type: application/json
+
+{ "email": "alice@example.com", "password": "DemoPass123!" }
 ```
 
-Access-token claims: `sub` (user id), `sid` (session id), `role`,
-`type="access"`, `jti`, `iss`, `aud`, `iat`, `nbf`, `exp`.
+```http
+HTTP/1.1 200 OK
+Set-Cookie: session_id=…; Path=/; HttpOnly; SameSite=Lax
+X-CSRF-Token: 3f2c…
 
-### Users and profiles (`/users`)
-
-| Method | Path | Purpose |
-|---|---|---|
-| GET | `/users/me` | Own account |
-| PATCH | `/users/me` | Update `{display_name?, bio?}` |
-| GET | `/users/{username}` | Viewer-filtered profile (60/min/account) |
-
-`relationship` is `self`, `friend` or `none`. Non-friends and blocked users
-receive only `{"username": "...", "relationship": "none"}` (other fields null).
-Friend view:
-
-```json
-{
-  "username": "alice",
-  "relationship": "friend",
-  "display_name": "Alice",
-  "bio": null,
-  "friends_since": "2026-09-29T04:37:36.503780Z"
-}
+{ "token_type": "session", "expires_in": 900,
+  "csrf_token": "3f2c…", "user": { "id": 1, "email": "alice@example.com", … } }
 ```
 
-### Friendships (`/friendships`) and blocks (`/blocks`)
+```http
+POST /api/v1/locations/me
+Cookie: session_id=…
+X-CSRF-Token: 3f2c…
+Content-Type: application/json
 
-| Method | Path | Purpose |
-|---|---|---|
-| GET | `/friendships` | `{friends, incoming, outgoing}` |
-| POST | `/friendships` | `{username}` → 201 pending request (20/hour/account) |
-| POST | `/friendships/{id}/accept` | Addressee only |
-| POST | `/friendships/{id}/decline` | Addressee only → 204 |
-| DELETE | `/friendships/{id}` | Cancel own request or end friendship; revokes shares both ways → 204 |
-| GET | `/blocks` | Users I blocked |
-| POST | `/blocks` | `{username}`: ends friendship, revokes shares, hides both users from each other |
-| DELETE | `/blocks/{username}` | Unblock → 204 |
-
-### Location shares (`/location-shares`)
-
-| Method | Path | Purpose |
-|---|---|---|
-| GET | `/location-shares` | Active `{outgoing, incoming}` shares |
-| POST | `/location-shares` | `{recipient_username, precision: "approximate"\|"exact", purpose?, expires_in_minutes? (5..10080)}`; recipient must be an accepted friend |
-| GET | `/location-shares/{id}` | Owner or recipient only |
-| PATCH | `/location-shares/{id}` | Owner only: `{precision?, purpose?, expires_in_minutes?, remove_expiry?}` |
-| DELETE | `/location-shares/{id}` | Owner stops sharing or recipient stops receiving → 204 |
-
-Share changes are limited to 30/hour/account.
-
-```json
-{
-  "id": "28f49eb8-48a1-4c03-8862-071d9ced4f66",
-  "direction": "outgoing",
-  "owner": {"id": "7ea801db-…", "username": "alice", "display_name": "Alice"},
-  "recipient": {"id": "f136275d-…", "username": "bob", "display_name": null},
-  "precision": "approximate",
-  "purpose": "Walking home",
-  "expires_at": "2026-09-29T05:37:36.584725Z",
-  "created_at": "2026-09-29T04:37:36.587834Z",
-  "revoked_at": null,
-  "active": true
-}
+{ "latitude": 47.0105, "longitude": 28.8638, "accuracy": 10 }
 ```
 
-### Locations (`/locations`)
+## Not in the contract
 
-| Method | Path | Purpose |
-|---|---|---|
-| PUT | `/locations/me` | `{latitude, longitude, accuracy_m?, battery_pct?, is_charging?, recorded_at?}` (60/min/account) |
-| GET | `/locations/me` | Own latest location with freshness |
-| DELETE | `/locations/me` | Erase own stored location → 204 |
-| GET | `/locations/visible` | Everyone who currently shares with the caller |
-
-There is deliberately **no** endpoint that takes another user's id. The
-recipient view (approximate share, so coordinates snapped to the grid centre
-and accuracy at least ~1.1 km):
-
-```json
-[
-  {
-    "share_id": "28f49eb8-48a1-4c03-8862-071d9ced4f66",
-    "user": {"id": "7ea801db-…", "username": "alice", "display_name": "Alice"},
-    "precision": "approximate",
-    "share_expires_at": "2026-09-29T05:37:36.584725Z",
-    "freshness": "live",
-    "latitude": 44.425,
-    "longitude": 26.105,
-    "accuracy_m": 1113.0,
-    "recorded_at": "2026-09-29T04:37:36.604136Z",
-    "age_seconds": 0,
-    "last_battery_pct": 64,
-    "is_charging": false,
-    "low_battery": false,
-    "navigation": {
-      "openstreetmap": "https://www.openstreetmap.org/directions?to=44.42500%2C26.10500",
-      "google_maps": "https://www.google.com/maps/dir/?api=1&destination=44.42500,26.10500",
-      "geo_uri": "geo:44.42500,26.10500"
-    }
-  }
-]
-```
-
-`freshness`: `live` (≤ 5 min), `stale` (≤ 60 min), `dead` (older),
-`unknown` (no location stored). `is_charging` is only reported while live.
-
-### Check-ins (`/check-ins`)
-
-| Method | Path | Purpose |
-|---|---|---|
-| GET | `/check-ins` | Own active and last-24h check-ins |
-| POST | `/check-ins` | `{due_in_minutes (5..1440), grace_minutes? (0..120), note?}`; max 5 active |
-| POST | `/check-ins/{id}/complete` | "I'm OK" |
-| POST | `/check-ins/{id}/cancel` | Cancel |
-| GET | `/check-ins/shared` | Check-ins of people who currently share their location with me |
-
-`state`: `pending` → `due_soon` (≤ 10 min before due) → `overdue` (within
-grace) → `missed`; or `completed` / `cancelled`.
-
-### Administration (`/admin`, role `admin`)
-
-| Method | Path | Purpose |
-|---|---|---|
-| GET | `/admin/users?limit&offset` | Accounts (no password data) |
-| POST | `/admin/users/{id}/unlock` | Clear lockout |
-| POST | `/admin/users/{id}/deactivate` | Deactivate and revoke all sessions |
-| POST | `/admin/users/{id}/activate` | Reactivate |
-| GET | `/admin/audit-events?event_type&limit&offset` | Audit trail |
-
-Admins have no endpoint for locations or shares.
-
-### Health
-
-`GET /api/v1/health` → `{"status": "ok", "version": "0.2.0"}`.
-
----
-*See also [Domain Data Model](./domain-data-model.md) and the
-[Security Control Register](./security-control-register.md).*
+- `/auth/refresh` and bearer JWTs — removed by ADR-0012.
+- OAuth/OIDC login wiring, passkeys, magic links and password reset — pending
+  (`docs/security/dual-auth-model.md`).
+- WebSocket `/ws` — planned, the demo polls.

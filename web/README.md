@@ -40,6 +40,21 @@ trunk serve --config web/webk/Trunk.toml --release
 - `weba` uses the shared `Backend` admin/user operations; server-side
   authorization remains authoritative (UI role checks are fail-closed hints).
 
+## Assets are local-only
+
+- **Fonts:** the UI uses the operating system's `system-ui` stack. There is no
+  `@font-face`, no Google Fonts and no font CDN, so a page load makes zero
+  font requests. `font-src 'self'` in the CSP keeps it that way if a bundled
+  font is added later.
+- **Scripts/styles/icons:** `/app.js`, `/app.css` and `/favicon.svg` are served
+  by the Pinpoint server itself (embedded with `include_str!`), not a CDN.
+- **Map tiles:** the browser only calls `/map/tiles/{z}/{x}/{y}` on the same
+  origin; the server proxies or serves self-hosted tiles (ADR-0011).
+- **Desktop:** offline tile packs prefer the configured backend's
+  `/map/tiles` proxy before any public fallback (`tilepacks::download_pack`).
+- `tests/assets.rs` fails the build if a third-party asset host or an absolute
+  subresource URL is added to the shipped HTML/CSS/JS.
+
 ## Status (honest)
 
 Desktop GUI modules (`src/ui`, `map`, `tilepacks`) are `#[cfg(not(wasm32))]`.

@@ -269,6 +269,7 @@ tokens) is removed with the app.
 | Version | Date | Changes |
 |---------|------|---------|
 | 0.2.0 | 2026-11-08 | Rust multiplatform pivot; map-first UX; OSM search/routing/POI; bookmarks |
+| 1.0.0 | 2026-11-13 | Real sessions, anonymous accounts, web UI, local-only assets, release packaging |
 | 0.1.0 | — | Initial Rust desktop client |
 
 ---

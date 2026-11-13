@@ -83,7 +83,7 @@ src/
 - **Redundancy:** `FailoverBackend` with circuit breakers, health monitoring,
   exponential backoff.
 - **Security:** E2E location encryption (AES-256-GCM) + OS keychain persistence;
-  PBKDF2 passwords; rate limiting; audit logging; input validation.
+  Argon2id passwords; rate limiting; audit logging; input validation.
 - **i18n:** 79 languages with auto-detect + picker.
 - **GPS:** `GpsProvider` (env/file) + "Use GPS" publish.
 
@@ -100,7 +100,7 @@ UI (egui)  ──► PinpointApp ──► DynBackend (REST adapter) ──► /
 
 ## Security controls
 
-- **Passwords:** PBKDF2-HMAC-SHA256 (`src/security/password.rs`).
+- **Passwords:** Argon2id (PHC) (`src/security/password.rs`).
 - **Sessions/CSRF:** session cookie + `X-CSRF-Token` double-submit.
 - **E2E:** `src/security/e2e.rs` AES-256-GCM with PBKDF2-derived per-user keys;
   key persisted in the OS keychain (`src/security/keychain.rs`).
@@ -110,6 +110,19 @@ UI (egui)  ──► PinpointApp ──► DynBackend (REST adapter) ──► /
 - **Fail-closed:** `src/security/session.rs`, `signing.rs`, `oauth.rs`,
   `scrape.rs`.
 - **Transport policy:** plain HTTP only for loopback (ADR-0006).
+
+## Authentication & sessions
+
+- **Identity model:** email+password (Argon2id) via `src/api.rs`; the client
+  captures the session cookie + `X-CSRF-Token` from login/register and
+  attaches them on every request.
+- **Anonymous model:** device key stored in the OS keychain
+  (`src/security/keychain.rs`) + recovery code; same session/CSRF machinery
+  (see `docs/security/dual-auth-model.md`).
+- **Session refresh:** access token is short-lived; the client refreshes on
+  401 (pending) and drops local state on confirmed logout or password change.
+- **Status:** cookies/CSRF plumbing exists; the server-side session store and
+  anonymous endpoints are pending (`session-management.md` §10).
 
 ## Build / run / test
 

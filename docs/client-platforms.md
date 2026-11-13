@@ -44,6 +44,9 @@ verification path.
 - Backend URL: `--backend` > `$PINPOINT_BACKEND` > `platform::default_backend_url()`
   (`http://localhost:8000` desktop, `http://10.0.2.2:8000` Android emulator).
   Plain HTTP off-loopback is refused client-side (`api::validate_backend_url`, ADR-0006).
+- OSM services: `$PINPOINT_NOMINATIM_URL`, `$PINPOINT_OSRM_URL`,
+  `$PINPOINT_OVERPASS_URL`, `$PINPOINT_TILE_URL` point at self-hosted
+  infrastructure in production (ADR-0011); public defaults are demo-only.
 - Transport (REST v1 adapter): session cookie + `X-CSRF-Token` double-submit (`src/api.rs`).
 - Privacy: friend coordinates are never sent to Nominatim/OSRM/Overpass
   (`src/osm.rs`); OSM hand-off links only; ODbL attribution always rendered.

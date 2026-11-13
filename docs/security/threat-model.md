@@ -54,7 +54,7 @@ DREAD 1–3 each (Damage, Reproducibility, Exploitability, Affected users, Disco
 
 | ID | STRIDE | Threat (attacker goal → step) | Asset / component | Vuln if defence missing | DREAD | Countermeasure (implemented) | Evidence |
 |---|---|---|---|---|---|---|---|
-| T-S1 | Spoofing | Credential stuffing on `/auth/login` | Accounts / auth svc | No throttling | 2.8 H | Generic errors; client `api_login` 5/min; server rate limit + lockout; bcrypt cost ≥10 | `security/validation.rs`, `rate_limit.rs`, `tests/contract.rs::rejected_login_*` |
+| T-S1 | Spoofing | Credential stuffing on `/auth/login` | Accounts / auth svc | No throttling | 2.8 H | Generic errors; client `api_login` 5/min; server rate limit + lockout; Argon2id | `security/validation.rs`, `rate_limit.rs`, `tests/contract.rs::rejected_login_*` |
 | T-S2 | Spoofing | Session steal (XSS/mitm) → impersonate | Session / gateway | Plain HTTP, JS-readable cookie | 2.6 H | HttpOnly+SameSite=Lax+Secure cookies; HTTPS-only off-loopback (ADR-0006 `validate_backend_url`); rotation; logout confirmed | `api.rs`, `security-architecture §3–4` |
 | T-T1 | Tampering | Forge publish/share via CSRF | Locations/shares | No CSRF token | 2.7 H | Double-submit `X-CSRF-Token` on every unsafe method; GETs never send CSRF | `api.rs::request`, `unsafe_requests_send_csrf_*` |
 | T-T2 | Tampering | IDOR: `GET /users/{id}`, `PATCH shares/{id}` for other user | Locations / users svc | Missing ownership check | 3.0 H | Server-side consent check (friendship + active unexpired share + recipient); generic 403/404; validation at boundary | `server/handlers.rs`, `contract.rs` |
@@ -81,7 +81,7 @@ GOAL: learn Alice's exact location [T-I1, DREAD 2.9]
 │     └─ AND 1a. Get accepted friendship  ── blocked by explicit accept/reject + audit [T-R1]
 │     └─ AND 1b. Sharer sets exact precision ── blocked by expiry/pause/delete defaults [T-I1]
 ├─ OR 2. Account takeover (T-S1 → T-S2)
-│     ├─ Credential stuffing  ── bcrypt + rate limit + lockout
+│     ├─ Credential stuffing  ── Argon2id + rate limit + lockout
 │     └─ Session hijack via HTTP/XSS ── Secure/HttpOnly + ADR-0006 + CSP
 ├─ OR 3. IDOR / broken access control (T-T2)
 │     └─ GET /locations/friends/{alice_id} ── server consent check → generic 403/404
@@ -103,7 +103,7 @@ tests; leaf 1 is a **user-consent risk**, mitigated by UX (expiry, precision, on
 | 2 | Secure auth/session + CSRF double-submit + HTTPS-off-loopback | T-S1/T-S2/T-T1 | ✅ Implemented | `api.rs` 4 tests + validation |
 | 3 | Input validation + output encoding (boundary) | T-T3/T-I4 | ✅ Implemented | `validation.rs` 11 tests |
 | 4 | Rate limiting (client + server) + generic errors | T-D1/T-S1 | ✅ Implemented | `rate_limit.rs` 5 tests |
-| 5 | Password hashing (bcrypt) + `must_change_password` + lockout | T-S1/T-E1 | ⚠️ Demo: any-password; design in SECURITY.md | pending: real hash + seed-off flag |
+| 5 | Password hashing (Argon2id) + `must_change_password` + lockout | T-S1/T-E1 | ✅ Argon2id + lockout | shipped |
 | 6 | Encryption in transit (TLS) + at rest (AES-GCM bookmarks) | T-I3/T-S2 | ✅ Partial | `encryption.rs` 5 tests |
 | 7 | Secret management (env-only, no repo secrets) | T-I3 | ✅ Implemented | `.env.example`, gitignore |
 | 8 | Logging/monitoring (audit + healthchecks) | T-R1 | ✅ Implemented | `audit.rs` 5 tests |
@@ -112,7 +112,7 @@ tests; leaf 1 is a **user-consent risk**, mitigated by UX (expiry, precision, on
 
 ## 7. Residual risks & honest gaps (thesis scope)
 
-- Demo auth accepts any password for seeded users; production needs bcrypt hashes + `SEED_DEMO_DATA=false`.
+- Seeded demo accounts use Argon2id hashes; production still needs `SEED_DEMO_DATA=false`.
 - `pinpoint_state` JSONB snapshot → needs normalised tables + migrations + least-privilege DB user.
 - No MFA, no E2E encryption (server sees plaintext locations — accepted, documented).
 - Request signing exists client-side only; server verification + OS-keychain for bookmark keys pending.
@@ -122,3 +122,9 @@ tests; leaf 1 is a **user-consent risk**, mitigated by UX (expiry, precision, on
 
 Requirement (SDLC-10) → Threat (§4) → Defence (§6) → Code → Test evidence in §6 table.
 References: OWASP ASVS/Top 10, Threat Modeling Manifesto, OSMF policies, ADR-0006/0007/0008.
+
+## Rejected patterns (GDPR / ethics)
+
+- **Covert IP / WebRTC geolocation.** Pinpoint never derives location from IP addresses, WebRTC candidates, call metadata or any similar side channel. Location comes only from explicit GPS permission, manual entry, or a disclosed opt-in network-location action.
+- **Raw IP logging.** The app does not store IP addresses for tracking. If a short-lived security hash is ever needed for rate limiting, use HMAC-SHA-256 with a secret pepper and delete it after the rate-limit window (pseudonymous, security-only, never geolocation).
+- **Online status via IP.** Login state is the session ID, not the IP; binding sessions to IPs causes false logouts on NAT/CGNAT/mobile networks and adds little security.

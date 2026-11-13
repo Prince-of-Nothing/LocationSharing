@@ -1,69 +1,98 @@
 # Architecture
 
+> Current architecture (Rust). The arc42 documentation in
+> [`docs/architecture/`](./architecture/) is the detailed source; the
+> historical Go/FastAPI/Kotlin trees are archived under `archive/` and are
+> **not** built.
+
 ## Overview
-Modular monolith. One Go service owns all business logic and security decisions; clients
-(web SPA, future Kotlin app, weba/webk) are thin and untrusted.
+
+One Rust crate (`pinpoint-desktop`) serves every target. The API is Axum with
+four independently scalable routers (auth, users, locations, map) behind a
+gateway in compose deployments, or one combined `pinpoint-server` binary for
+the demo. All authorization and precision downgrading is server-side.
 
 ```
- Browser / Mobile ──HTTPS──▶ nginx (web, static + proxy)   [compose mode]
-                       └──▶ Go server :9000 (/api/v1, optional static WEB_ROOT)
-                                     │
-                        ┌────────────┼──────────────┐
-                        ▼            ▼              ▼
-                   internal/     internal/      internal/
-                   handlers      security       store (in-memory now → Postgres Phase 1)
-                        │            │              │
-                        └──── models (User, Friendship, SharePermission, Location) ────┘
+Desktop (eframe) ─┐
+Web (web/app)    ─┼── HTTPS / loopback ──▶ Axum routers ──▶ AppState
+Android / iOS    ─┘        (cookie + CSRF)      │              │
+                                                ▼              ▼
+                                          session_auth    in-memory store
+                                          (ADR-0012)      or Postgres (ADR-0010)
 ```
 
-## Package layout (`backend/`)
-| Package             | Responsibility                                                        |
-|---------------------|-----------------------------------------------------------------------|
-| `cmd/server`        | Entrypoint: config load, router wiring (chi), middleware stack, shutdown |
-| `internal/config`   | Env-driven settings (`JWT_SECRET`, `SEED_DEMO_DATA`, `COOKIE_INSECURE`, `WEB_ROOT`, port) |
-| `internal/models`   | Domain types: User, Friendship, SharePermission (precision/purpose/expiry/state), Location |
-| `internal/store`    | Data access + invariants (email→ID index, cascade deletes, seed). **Swap point for Postgres.** |
-| `internal/security` | bcrypt hashing, JWT issue/verify, session store, CSRF double-submit, rate limiter |
-| `internal/handlers` | HTTP layer per bounded context: auth, users, friendships, shares, locations, admin, static |
+## Module layout (`src/`)
+
+| Path | Responsibility |
+|---|---|
+| `main.rs` | Desktop entry (eframe/egui) |
+| `lib.rs` | Portable core module declarations |
+| `api.rs` | HTTP client: session cookie + `X-CSRF-Token`, transport policy (ADR-0006) |
+| `app.rs`, `ui.rs`, `ui/` | Desktop state/screens (10 per-screen modules) |
+| `models.rs` | Serde domain models + pure math (precision, freshness) |
+| `server/mod.rs` | Routers, `session_auth` middleware, tile proxy, health |
+| `server/auth_handlers.rs` | Register/login/logout/sessions/anonymous/MFA/password |
+| `server/state/` | Store facade: users, friendships, locations, sessions |
+| `server/migrations.rs` | Postgres migrations 1–14 (`pinpoint_sessions` in 14) |
+| `security/` | One mechanism per file: password (Argon2id), session, CSRF, rate limit, encryption, audit, signing, MFA, OAuth primitives |
+| `patterns/` | Repository, Strategy, Command, State, Observer, Factory, Decorator, Proxy |
+| `map.rs`, `tilepacks.rs`, `bookmarks.rs` | Pins, offline tiles, on-device bookmarks |
+| `osm.rs` | Nominatim/OSRM/Overpass (friend coordinates never sent) |
+| `platform.rs` | All `cfg(target_os)` branches |
+| `webapp/`, `mobile/` | Portable web clients and mobile adapters |
+| `bin/` | One binary per deployable (`pinpoint-server`, `auth`, `users`, `locations`, `map`, `web`) |
 
 ## Request pipeline
-1. Middleware: request log → CORS → rate limit → auth (session cookie **or** Bearer JWT)
-   → CSRF check (session callers only) → must-change-password gate.
-2. Handler validates input strictly (bounds on lat/lon, string lengths, enum values).
-3. Handler calls store with the **authenticated principal**; store enforces ownership/consent.
-4. Location reads apply precision downgrade server-side before serialization.
-5. Errors map to generic client messages; details stay in logs.
 
-## Key design decisions (ADRs in brief)
-- **ADR-1 Go replaces FastAPI** — static binary deployment, no runtime deps, native concurrency;
-  refactor complete, Python removed.
-- **ADR-2 Directional consent records** — `SharePermission{SharerID, RecipientID, Precision,
-  Purpose, ExpiresAt, State(active/paused/revoked/expired)}`; friendship is necessary but
-  never sufficient.
-- **ADR-3 Server-side precision fuzzing** — approximate/city_only computed at read time so a
-  changed grant can't leak previously-exact cached payloads.
-- **ADR-4 Sessions + CSRF double-submit over pure JWT for browsers** — HttpOnly cookies keep
-  tokens out of JS reach; JWT retained for API/mobile consumers.
-- **ADR-5 In-memory store for MVP** — deterministic tests & demo; interface designed so
-  Postgres drops in without handler changes (Phase 1).
-- **ADR-6 Two deployment shapes** — compose (nginx serves SPA + proxies `/api`) or single
-  binary serving `WEB_ROOT`; same-origin default avoids CORS complexity.
+1. `converge` middleware (replica convergence tick) → `session_auth`:
+   parse the `session_id` cookie, load the session row (hash lookup),
+   reject expired sessions, and require exact `X-CSRF-Token` on unsafe
+   methods (ADR-0012).
+2. Handler validates input (coordinate bounds, lengths, enums) and uses the
+   **session user** — never a body-supplied id.
+3. Store enforces ownership and consent; friendship alone grants nothing.
+4. Location reads apply precision downgrade (`exact` / `approximate` /
+   `city_only`) before serialization.
+5. Errors use `{error:{code,message}}`; details stay server-side.
+
+## Key decisions (see `docs/adr/`)
+
+- **ADR-0007** — Rust multiplatform is the only application codebase.
+- **ADR-0008** — split API services behind a gateway (compose) with a combined
+  binary for the demo.
+- **ADR-0009** — dual auth: anonymous device-bound accounts + identity-linked
+  accounts (email now; OAuth/passkeys pending).
+- **ADR-0010** — normalized, application-encrypted Postgres schema with blind
+  indexes; no single JSONB source of truth.
+- **ADR-0011** — self-hosted OSM services in production; public endpoints are
+  demo fallbacks with ODbL attribution.
+- **ADR-0012** — opaque server-side sessions (hash-stored), not JWT + refresh;
+  immediate revocation and one HttpOnly credential.
 
 ## Data model sketch
+
 ```
-User(id, email*, display_name, password_hash, role, must_change_password, locked, timestamps)
-Friendship(id, requester_id, addressee_id, status: pending|accepted|rejected|removed)
-SharePermission(id, sharer_id, recipient_id, precision, purpose, expires_at, state, timestamps)
-Location(user_id PK, lat, lon, accuracy_m, label, battery_pct, updated_at)   -- current publish only
+User(id, email, full_name, password_hash?, role, must_change_password,
+     auth_method, public_key?, recovery_code_hash?, identity_subject?,
+     mfa_enabled, totp_secret?, failed_login_attempts, locked_until?)
+Friendship(id, requester_id, receiver_id, status, timestamps)
+SharePermission(id, sharer_id, recipient_id, precision, purpose,
+                is_active, expires_at?, timestamps)
+Location(user_id PK, latitude, longitude, accuracy, updated_at)  -- latest only
+Session(session_id_hash PK, user_id, csrf_token, auth_method,
+        mfa_pending, created_at, last_activity)
 ```
-\* unique index; store keeps an email→id map that `UpdateUser` maintains in sync.
 
 ## Extension points
-- Realtime: WebSocket hub in Phase 1 pushing `location.updated` events to consented recipients.
-- Check-ins: job queue (Redis) evaluating scheduled/trip check-ins → missed-check-in notifications.
-- New clients (`weba`, `webk`, Kotlin mobile): consume the same `/api/v1`; no bespoke endpoints
-  per client — authorization lives in one place.
+
+- Realtime: WebSocket fan-out to consented recipients (planned; the demo polls).
+- Check-ins: shared job queue evaluating scheduled/trip check-ins.
+- New clients consume the same `/api/v1`; authorization stays in one place.
+- New tables: migration + domain module; new screens: `src/ui/<name>.rs`.
 
 ## Scaling path
-Stateless API replicas → shared Postgres + Redis (sessions/rate limits) → CDN for tiles/static.
-Nothing in the architecture blocks this today; the in-memory store is the only barrier.
+
+Stateless API replicas → shared Postgres (sessions, users, locations) → Redis
+for rate limits/jobs → self-hosted OSM (tiles, Nominatim, OSRM, Overpass) and
+a CDN for static assets. The in-memory store is the demo path only; the schema
+and session sharing are already in place.

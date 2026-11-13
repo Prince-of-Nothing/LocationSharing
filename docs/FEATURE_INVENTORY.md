@@ -26,7 +26,7 @@ coverage. Live automation: `scripts/e2e.ps1` (needs stack up; exit code =
 
 | # | Feature | Service | Endpoints |
 |---|---|---|---|
-| S1 | Register (duplicate email rejected, PBKDF2) | auth :8001 | `POST /auth/register` |
+| S1 | Register (duplicate email rejected, Argon2id) | auth :8001 | `POST /auth/register` |
 | S2 | Login (wrong pw 401, MFA gate, seeded accounts) | auth | `POST /auth/login` |
 | S3 | me / session / logout (confirmed) | auth | `GET /auth/me`, `POST /auth/session`, `POST /auth/logout` |
 | S4 | Password change + force-change (real rotation) | auth | `POST /auth/password/*` |

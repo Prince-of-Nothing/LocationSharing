@@ -6,7 +6,7 @@
 | NFR-02 | Performance (search) | Debounce 350 ms; ≤1 Nominatim req/s; results cached per session | Code review + QA grep |
 | NFR-03 | Performance (routing/POI) | Single user-initiated request; 30 s timeout; no polling/looping | Code review |
 | NFR-04 | Availability | Demo boots from `docker compose up --build` with zero config | Manual QA step |
-| NFR-05 | Security | TLS in transit; HttpOnly cookies; CSRF double-submit; bcrypt; rate limits; generic errors | Security test suite |
+| NFR-05 | Security | TLS in transit; HttpOnly cookies; CSRF double-submit; Argon2id; rate limits; generic errors | Security test suite |
 | NFR-06 | Privacy | 0 trackers; CSP-enforced origins; no friend data to OSM services; bookmarks on-device only | CSP + QA policy checks |
 | NFR-07 | Licensing | ODbL attribution permanent on every map view; notices updated | QA attribution grep |
 | NFR-08 | Offline | Web shell + bookmarks offline; live data shows banner; mobile packs offline | Manual QA |

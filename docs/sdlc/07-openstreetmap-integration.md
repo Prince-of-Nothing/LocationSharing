@@ -82,3 +82,30 @@ Organic Maps https://organicmaps.app/.
 - [ ] Overpass: single-query UX verified; timeout/abort handled.
 - [ ] Attribution strings reviewed against notices + QA greps green.
 - [ ] Production checklist in 12-deployment signed off.
+
+## 7.9 Self-hosted services (production default — ADR-0011)
+
+The public endpoints above are **demo defaults only**. Production must point
+these env vars at self-hosted services (guide:
+[`docs/maps/self-hosted-osm.md`](../maps/self-hosted-osm.md)):
+
+| Env var | Service | Code |
+|---|---|---|
+| `PINPOINT_NOMINATIM_URL` | Nominatim search/reverse | `src/osm.rs` (`nominatim_base`) |
+| `PINPOINT_OSRM_URL` | OSRM routing | `src/osm.rs` (`osrm_base`) |
+| `PINPOINT_OVERPASS_URL` | Overpass POI | `src/osm.rs` (`overpass_url`) |
+| `PINPOINT_TILE_URL` | Tile template (`…/{z}/{x}/{y}.png`) | `src/tilepacks.rs`, `src/server/mod.rs` |
+
+Rules:
+
+- Self-hosted first; public providers are fallbacks for local development.
+- **ODbL attribution stays** on every map view and tile response, even when we
+  host the data (`openstreetmap.org/copyright`).
+- Never `tile.openstreetmap.org`; never silently fall back to public endpoints
+  in production.
+- Self-hosting removes OSMF/demo rate limits and keeps query metadata on our
+  infrastructure; friend/shared coordinates still never leave Pinpoint.
+
+The stack: `mediagis/nominatim`, `osrm/osrm-backend`, `maptiler/tileserver-gl`
+(or `martin`/`planetiler`), `wiktorn/overpass-api`, all over Geofabrik
+extracts. See `docs/maps/self-hosted-osm.md` for sizing, cadence and Compose.

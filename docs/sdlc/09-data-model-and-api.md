@@ -1,5 +1,11 @@
 # 09 — Data Model and API
 
+> **Persistence target:** the normalized, application-encrypted schema
+> (ADR-0010) is specified in
+> [`docs/database/schema.md`](../database/schema.md) with reference DDL in
+> [`db/schema/00-target.sql`](../../db/schema/00-target.sql). This document
+> keeps the domain/API view; the schema doc is the storage source of truth.
+
 ## Domain entities (consent core — unchanged)
 
 ```text

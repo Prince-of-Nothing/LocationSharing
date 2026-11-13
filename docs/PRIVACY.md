@@ -6,7 +6,7 @@ ever goes public, this becomes the basis of the real privacy statement.)*
 ## What we collect
 | Data                        | Why                                   | Retention                  |
 |-----------------------------|---------------------------------------|----------------------------|
-| Email + bcrypt hash         | Account identification/authentication | Until account deletion     |
+| Email + Argon2id hash        | Account identification/authentication | Until account deletion     |
 | Display name (pseudonymous) | Shown to consenting recipients        | Until changed/deleted      |
 | Role/flags (admin, locked…) | Access control                        | Until changed/deleted      |
 | **Current location publish**| Only to serve explicitly granted shares | Overwritten by next publish; **no history kept in MVP** |
@@ -19,6 +19,15 @@ ever goes public, this becomes the basis of the real privacy statement.)*
 - No implicit access: **friendship does not grant visibility** — only explicit, directional
   `SharePermission` records do, each with precision, purpose, and optional expiry.
 - No covert features: everything a recipient can see, the sharer can see and revoke instantly.
+- No OSM query leakage: only user-initiated searches/routes/POIs reach the OSM
+  services, and production self-hosts them (ADR-0011); friend coordinates never
+  leave Pinpoint.
+- **No IP-based or covert geolocation.** We never derive location from IP
+  addresses, WebRTC candidates, call metadata or similar side channels. We do not
+  store IP addresses for tracking or analytics. If a short-lived security hash is
+  ever needed for rate limiting, it is a **keyed HMAC** (not a plain hash) with a
+  short retention; it is pseudonymous, used only for abuse prevention, and never
+  for location or profiling.
 
 ## The consent lifecycle
 1. **Grant** — sharer creates a permission naming one recipient, one precision level,
@@ -45,3 +54,19 @@ ever goes public, this becomes the basis of the real privacy statement.)*
 - Logs must not include location coordinates or password material.
 - Any future feature that would extend collection (trails, regions, messaging) requires
   a written threat/privacy analysis in `docs/` **before** implementation (see ROADMAP gates).
+
+## Competitive context (why this model)
+
+See `docs/components/07-competitive-analysis.md` for the full analysis. The
+short version:- **Life360-style harvesting** collects precise geolocation, driving events,
+  motion activity and advertising identifiers, and discloses location/movement
+  data to business partners for monetisation (with opt-outs). Pinpoint collects
+  none of that: no trackers, no ads, no partner sharing, no profiling.
+- **Apple's Advanced Data Protection** is the reference model for Pinpoint's
+  E2E location encryption: keys live on the device (OS keychain), the server
+  stores ciphertext only.
+- **Organic Maps / OsmAnd** are the reference for privacy-first offline maps:
+  no account, no trackers, OSM data, open source.
+- **Pinpoint's differentiator** is directional, per-recipient consent
+  (direction + precision + expiry) on top of E2E encryption — no mainstream
+  location-sharing app combines both.

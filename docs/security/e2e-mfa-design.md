@@ -1,23 +1,39 @@
 # Pinpoint — E2E Encryption + MFA Design Note
 
-**Status:** MFA implemented (client verify + unit tests). E2E encryption: design only — NOT implemented (server sees plaintext locations; accepted MVP trade-off).
+**Status:** MFA implemented (TOTP + endpoints + unit tests). E2E location
+encryption implemented (`src/security/e2e.rs`) with OS-keychain key storage
+(`src/security/keychain.rs`) and publish wiring (`src/app.rs`); bookmark
+encryption wiring is the remaining piece. See
+[`auth-mechanisms.md`](auth-mechanisms.md) and
+[`session-management.md`](session-management.md) for the current auth/session
+details.
 
 ## 1. MFA (TOTP, implemented)
 
 - `src/security/mfa.rs` — RFC 6238 TOTP with HMAC-SHA256, 30s step, ±1 step tolerance, constant-time compare.
 - `generate_secret()` (160-bit random), `totp(secret, unix)`, `verify_totp(...) -> Option<step>`, `otpauth_uri(...)`.
 - Tests: round-trip + drift, unique secrets, uri shape, fail-closed on bad secret.
-- Remaining integration: server-side `totp_secret_enc` column + `/auth/mfa/*` endpoints + UI enrolment screen (DB + API work, not yet wired to client). Client verify + server verify must agree on step boundaries (use `verify_totp` on both sides).
+- **Endpoints implemented:** `/auth/mfa/enroll`, `/auth/mfa/verify`, `/auth/mfa/status`, `DELETE /auth/mfa` (`src/server/auth_handlers.rs`); login gate requires `totp` when enabled; replay-safe via `mfa_last_step`.
+- **Remaining integration:** `mfa_pending` session gate once the session store lands; TOTP recovery codes.
 
-## 2. E2E encryption (design, post-MVP)
+## 2. E2E encryption (implemented, MVP scope)
 
-Goal: server stores only ciphertext; friends decrypt with per-friendship keys.
+Goal: server stores only ciphertext; friends decrypt with per-user keys.
 
-- Key exchange: X25519 ECDH per friendship (first connect), wrapped under each party's device key.
-- Payload: AES-256-GCM over `{lat, lon, accuracy, ts}` per publish; server stores opaque blob + `precision_level` **outside** the ciphertext (needed for server-side precision enforcement).
-- Conflict: server-side precision downgrade (T-I1 defence) requires plaintext. E2E therefore needs client-side coarsening + server still enforces a **max-precision cap** agreed at share creation. This weakens T-E2 unless the client is trusted — acceptable only with attestation.
-- Key storage: OS keychain (Windows Credential Manager / macOS Keychain / Android Keystore), never in `bookmarks.json` or repo.
-- Migration: dual-read path (plaintext `FriendLocation` + ciphertext blob) behind feature flag; revocation rotates friendship keys.
+- **Implemented:** `src/security/e2e.rs` derives a per-user key with PBKDF2
+  (`e2e$<salt>$<iters>$<key>`), encrypts `{lat, lon, acc}` with AES-256-GCM,
+  and `PinpointApp` produces the ciphertext on publish
+  (`encrypt_my_location`) while the key is persisted in the OS keychain.
+- **Current limitation:** the `/locations/me` contract still carries plaintext
+  coordinates for server-side precision enforcement; the E2E ciphertext is
+  produced and retained client-side (`last_e2e_location_ciphertext`). Moving
+  the ciphertext onto the wire requires the precision-cap design below.
+- **Target design:** per-friendship key wrapping (X25519 ECDH), server stores
+  an opaque blob + `precision_level` outside the ciphertext, client-side
+  coarsening + a server-enforced max-precision cap agreed at share creation
+  (weakens T-E2 unless the client is attested).
+- **Key storage:** OS keychain (Windows Credential Manager / macOS Keychain /
+  Linux Secret Service), never in `bookmarks.json` or the repo.
 
 ## 3. OS keychain for bookmark keys
 

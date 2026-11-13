@@ -1522,7 +1522,7 @@
   "info": {
     "description": "Privacy-first location sharing API with directional consent.",
     "title": "Pinpoint API",
-    "version": "0.2.0"
+    "version": "1.0.0"
   },
   "openapi": "3.1.0",
   "paths": {

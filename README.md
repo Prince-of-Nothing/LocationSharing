@@ -2,130 +2,109 @@
 
 **A privacy-first location-sharing platform for trusted friends.**
 
-Friendship does not grant access to anyone's location: each person
-explicitly chooses who can see them, at what precision, and for how long.
-Every share can be revoked, and recipients can see whether a location is
-fresh or stale.
+Friendship does not grant access to anyone's location: each person explicitly
+chooses who can see them, at what precision, and for how long. Every share can
+be revoked, and recipients can see whether a location is fresh or stale.
 
-## Map First
-
-Open the app and you're immediately on the map — no login required. The map
-works offline with demo locations. Sign in to unlock friends, location
-sharing, and admin features.
-
-```
-Open app → See map → (optional) Sign in → Unlock friends/sharing
-```
+**Current release: [1.0.0](./RELEASE_NOTES.md)** — thesis demo, not
+production-hardened. See the functional-state matrix and per-item
+`[FEATURE]` / `[FIX]` flags in the release notes.
 
 ---
 
-## Features
+## What works today
 
-- **Map-first UX** — Interactive map opens immediately, works offline
-- **OpenStreetMap (ODbL)** — All map data from OSM; attribution always visible
-- **Search places** — Nominatim search for cafés, pharmacies, parks, etc.
-- **Navigate** — OpenStreetMap directions and OSM map links for any location
-- **Consent-based sharing** — Directional shares (to_friend/from_friend/
-  mutual) with precision (exact/approximate/city_only) and expiry
-- **Honest freshness** — Every location shows age/accuracy; stale states
-  are never displayed as live
-- **0 trackers** — No analytics, crash reporting, or advertising SDKs
-- **Server-side enforcement** — All consent decisions made on the server
-- **Multiplatform** — Rust client for desktop (Windows/Linux/macOS),
-  Android, and iOS from one codebase
+- **Accounts & sessions** — email/password (Argon2id) and anonymous
+  device-bound accounts, opaque `HttpOnly` session cookies + CSRF, session
+  list/revoke, logout-all, lockout, TOTP MFA.
+- **Web UI at `/`** — map-first Leaflet UI (locally vendored), place search,
+  A→B routing with alternatives/steps (drive; walk/bike when self-hosted),
+  saved/recent places per account, locate-me, plus the 1.0 auth, publish,
+  friends, shares and sessions surfaces in a drawer.
+- **Desktop client** — map, Nominatim search, OSRM routing (drive/walk/bike),
+  Overpass POIs, bookmarks, check-ins, emergency, offline tile packs.
+- **Consent model** — directional, precision-scoped (`exact` / `approximate` /
+  `city_only`), purpose-bound, expiring, revocable; enforced server-side.
+- **Privacy** — no trackers, no analytics, no raw IP storage, no IP/WebRTC
+  geolocation; local-only web assets (no Google Fonts/CDNs); ODbL attribution
+  everywhere.
+- **OSM self-hosting** — `PINPOINT_TILE_URL`, `PINPOINT_NOMINATIM_URL`,
+  `PINPOINT_OSRM_URL`, `PINPOINT_OVERPASS_URL`; public providers are demo
+  fallbacks only.
+
+**Not in 1.0.0:** Alice/Bob as client containers (still seeded), Postgres
+write-through for users/locations, OAuth/passkeys/magic links, Android/iOS
+builds. (Web search + A→B routing landed after the 1.0.0 tag — see
+`CHANGELOG.md`.) See [`ROADMAP.md`](./ROADMAP.md) and
+[`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ---
 
-## Quick Start
+## Quick start
 
-### Terminal 1 — Rust API server (pure Rust, no Go)
+### Web (single binary)
 
 ```bash
 cargo run --bin pinpoint-server
-# → http://localhost:8000/ (demo accounts pre-seeded, in-memory store)
+# → http://127.0.0.1:8000/  (in-memory demo store, seeded Alice/Bob)
+# demo login: alice@example.com / DemoPass123!
 ```
 
-### Terminal 2 — Desktop client
+If port 8000 is taken (Docker), use `BIND_ADDR=127.0.0.1:8080`.
+
+### Desktop
 
 ```bash
-cargo run -- --backend http://localhost:8000
-# (map opens immediately; sign in optional)
+cargo run -- --backend http://127.0.0.1:8000
 ```
 
-### With Docker (backend + Postgres, all Rust)
+### Docker
 
 ```bash
-# Start Postgres + Rust API server
-docker compose up --build -d db api
-
-# Run the desktop client against the containerized API
-cargo run -- --backend http://localhost:8000
-
-# Full CI gate inside a container (fmt/clippy/build/test)
-docker build -f Dockerfile.client --target tester -t pinpoint-desktop:tester .
-docker run --rm pinpoint-desktop:tester
+docker compose up --build -d
+# gateway → http://127.0.0.1:8000/
 ```
 
-### With Podman
+### Release artifact
 
-```bash
-podman build -t pinpoint-desktop:latest -f Containerfile.podman --target runtime .
-podman run --rm -e PINPOINT_BACKEND=http://host.containers.internal:8000 \
-  pinpoint-desktop:latest
-```
+Unzip `dist/pinpoint-1.0.0-windows-x64.zip`, run `pinpoint-server.exe`, open
+`http://127.0.0.1:8080/`.
 
 ---
 
-## Sign In
+## Architecture
 
-Click **Sign in** in the header to unlock:
+One Rust crate (`pinpoint-desktop`): portable core in `src/lib.rs`, desktop
+entry in `src/main.rs`, Axum API in `src/server/` (auth/users/locations/map
+routers behind a gateway), OSM clients in `src/osm.rs`, platform code in
+`src/platform.rs`. Desktop, Android, iOS and a WASM stub share the core.
 
-- Publish your location
-- Send/accept friend requests
-- Create location shares (precision, purpose, expiry)
-- Admin panel (administrator role only)
-- Change password
-
-Demo accounts: `alice@example.com` / `DemoPass123!` (if backend is seeded).
-
----
-
-## Documentation
-
-| Document | Description |
-|----------|-------------|
-| `docs/USER_GUIDE.md` | Complete user guide — map, sign in, share, navigate |
-| `docs/SETUP.md` | Installation and setup for all platforms |
-| `docs/client-platforms.md` | Per-OS client status: desktop/Linux/macOS/Android/iOS/Web build+verify |
-| `docs/TROUBLESHOOTING.md` | Common problems and fixes |
-| `docs/FEATURES.md` | Complete feature reference |
-| `docs/END_OF_SERVICE.md` | Data export and code reuse after service ends |
-| `docs/sdlc/` | Full SDLC documentation set (00–16) |
-| `docs/uml/` | Mermaid diagrams (01–15) |
+- [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — current module map
+- [`docs/adr/`](./docs/adr/) — decisions (ADR-0007…0012)
+- [`docs/SECURITY.md`](./docs/SECURITY.md) — security model and gaps
+- [`docs/PRIVACY.md`](./docs/PRIVACY.md) — GDPR posture
+- [`docs/reference/api-contract.md`](./docs/reference/api-contract.md) — live API
 
 ---
 
-## Quality Gates
-
-All four commands must pass before pushing:
+## Quality gates
 
 ```bash
 cargo fmt --all -- --check
 cargo clippy --all-targets -- -D warnings
-cargo build --locked
-cargo test --locked
+cargo build --locked && cargo test --locked
 ```
+
+CI adds `cargo-audit`, map QA, and the flagged release artifact job.
 
 ---
 
 ## License
 
-MIT © 2026 Pinpoint
-
----
+MIT © 2026 Pinpoint. Map data © OpenStreetMap contributors, ODbL.
 
 ## Contributing
 
-Small PRs, conventional commits, docs in the same pr. Security changes need
-a regression test and a fail-closed test. Commits are authored by the
-repository owner only — no co-author trailers (see `CONTRIBUTING.md`).
+Small PRs, conventional commits, docs in the same PR. Security changes need a
+regression test and a fail-closed test. Commits are authored by the repository
+owner only — no co-author trailers (see `CONTRIBUTING.md`).

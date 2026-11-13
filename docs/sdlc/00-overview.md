@@ -72,3 +72,14 @@ spiral plan (turns S0–S6), exit criteria, pros/cons and critical path live in
 The `docs/sdlc/00–16` set is the requirement/design/verification backbone that
 each turn consumes and extends; `15-traceability-matrix.md` is the
 requirement→test contract.
+
+## Related work / competitive context
+
+Pinpoint is positioned against mainstream location-sharing apps (Google Maps
+Location Sharing, Apple Find My, Life360, Glympse, WhatsApp/Telegram Live
+Location, Strava Beacon) and privacy-first map apps (Organic Maps, OsmAnd). The
+full analysis and prioritised recommendations live in
+[`docs/components/07-competitive-analysis.md`](../components/07-competitive-analysis.md).
+Headline: Pinpoint is the only analysed app combining **directional,
+per-recipient consent** (direction + precision + expiry) with **E2E-encrypted
+locations in an OS keychain**, while remaining **0-tracker / 0-ad / OSM-only**.

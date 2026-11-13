@@ -160,7 +160,7 @@ Pinpoint's NFRs (from `docs/sdlc/03-non-functional-requirements.md` and
 |---|---|---|
 | Performance | Map renders < 16 ms/frame; API p95 < 200 ms | `cargo bench` (none yet) / load test |
 | Offline | All 10 screens render without network | `PinpointApp` offline mode + `PendingMutation` queue |
-| Security | PBKDF2 ≥ 50k iters; CSRF double-submit; Secure cookies | `src/security/*`, `src/api.rs` |
+| Security | Argon2id (memory-hard); CSRF double-submit; Secure cookies | `src/security/*`, `src/api.rs` |
 | Privacy | Friend coords never sent to OSM/Nominatim/OSRM | `src/osm.rs` (no third-party coords) |
 | Portability | One Rust crate → desktop/Android/iOS/Web | `src/platform.rs`, `cfg(target_os)` |
 | i18n | 79 languages, auto-detect | `src/i18n.rs` |

@@ -37,7 +37,7 @@ $env:DATABASE_URL="sqlite:///./pinpoint_local.db"
 $env:RATE_LIMIT_BACKEND="memory"
 .venv\Scripts\python.exe -m alembic upgrade head   # one-time schema
 .venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8001
-# → GET http://127.0.0.1:8001/api/v1/health   {"status":"ok","version":"0.2.0"}
+# → GET http://127.0.0.1:8001/api/v1/health   {"status":"ok","version":"1.0.0"}
 ```
 
 > `RATE_LIMIT_BACKEND=memory` is required when Redis is not running, and

@@ -92,7 +92,7 @@ time-boxed (expiry), and revocable, and every consent decision is enforced
 server-side.
 
 This repository's **active codebase is a single Rust crate** (`pinpoint-desktop`,
-v0.2.0) that serves as a multiplatform client:
+v1.0.0) that serves as a multiplatform client:
 
 - **Desktop** (Windows / Linux / macOS) via `eframe`/`egui` + `run_native`
 - **Android** via `cargo-apk` + `eframe`/`winit` (`aarch64-linux-android`)
@@ -118,7 +118,7 @@ attribution is permanent and non-removable.
 
 ```
 C:\Users\Dinusauuuur\Desktop\git\Pinpoint\          (repository root)
-├── Cargo.toml                                       # pinpoint-desktop v0.2.0
+├── Cargo.toml                                       # pinpoint-desktop v1.0.0
 ├── Cargo.lock                                       # locked dependency tree
 ├── Dockerfile                                       # multi-stage: builder / runtime / tester
 ├── Containerfile.podman                             # podman-equivalent build
@@ -171,11 +171,12 @@ C:\Users\Dinusauuuur\Desktop\git\Pinpoint\          (repository root)
 |-----|-------|--------|-------------------------|
 | 0001 | Record Architecture Decisions | Accepted | This document follows ADR conventions |
 | 0002 | Adopt Pinpoint Product Direction | Accepted | Privacy-first, consent-based |
-| 0003 | Password Auth with Session-Bound JWTs | Accepted | Session cookie + CSRF in `src/api.rs` |
+| 0003 | Password Auth with Session-Bound JWTs | Accepted (transport superseded by 0012) | Password auth + Argon2id; opaque session cookie + CSRF |
 | 0004 | Web Client for MVP; Flutter Deferred | Accepted | Superseded by 0007 |
 | 0005 | Store Only Latest Location | Accepted | No location history in client |
 | 0006 | Rust Desktop Client Transport Policy | Accepted | Plain HTTP only for loopback |
 | 0007 | **Rust Multiplatform as Sole Codebase** | **Accepted** | Single crate builds desktop/mobile |
+| 0012 | Opaque Server-Side Sessions | Accepted | HttpOnly session cookie, no JWT/refresh |
 
 The container images exist to (a) build and test the Rust crate in a clean,
 reproducible environment, and (b) optionally run an offline mock API for client
@@ -384,7 +385,7 @@ volumes:
   write bookmarks to `PINPOINT_DATA_DIR`), but the writable path is limited
   to the data directory.
 - **No secrets in image**: No API keys, passwords, or tokens are baked into
-  the image. The mock API uses hardcoded mock tokens only.
+  the image. Demo credentials come from fictional seed data only.
 - **Health check**: The `mock-api` service defines a health check hitting
   `GET /health`. The `pinpoint` and `tester` services do not define health
   checks (they are short-lived or GUI processes).
@@ -697,7 +698,7 @@ Policy prohibits app/bulk use of that infrastructure. Compliant sources:
 
 - Web (archived): CARTO raster (dark/light/voyager) + Wikimedia OSM Standard
 - Rust mobile (archived): OpenFreeMap vector styles (liberty/bright/positron)
-- Rust desktop: OSM hand-off links (no in-app tile rendering in v0.2.0)
+- Rust desktop: in-app tile rendering + backend-proxied offline packs (v1.0.0)
 
 Production deployments should self-host Martin/TileServer GL over Geofabrik
 extracts.

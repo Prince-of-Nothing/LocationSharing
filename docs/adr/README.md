@@ -34,6 +34,10 @@ Examples: backend framework, real-time transport (WebSockets vs. MQTT), authenti
 | 0006 | [Rust Desktop Client Transport Policy and Session Contract](./0006-rust-client-transport-and-session-contract.md) | Accepted |
 | 0007 | [Rust Multiplatform as the Sole Application Codebase](./0007-rust-multiplatform.md) | Accepted |
 | 0008 | [Split Rust API into Independently Scalable Services Behind a Gateway](./0008-modular-rust-services.md) | Accepted |
+| 0009 | [Dual Authentication Models — Anonymous Device-Bound and Identity-Linked Accounts](./0009-dual-auth-anonymous-and-identity.md) | Accepted (partial) |
+| 0010 | [Normalized, Encrypted, Modular Database Schema](./0010-normalized-encrypted-database.md) | Accepted (design target) |
+| 0011 | [Self-Hosted OpenStreetMap Services](./0011-self-hosted-osm-services.md) | Accepted (config + docs) |
+| 0012 | [Opaque Server-Side Sessions Instead of JWT + Rotating Refresh Tokens](./0012-opaque-server-side-sessions.md) | Accepted |
 
 See [`architecture/architecture-decisions-link.md`](../architecture/architecture-decisions-link.md) for the complete list.
 

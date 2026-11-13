@@ -4,7 +4,7 @@ Goal `have the best app ever` is only met when ALL criteria below hold. Status v
 2026-11-08 (full E2E `scripts/e2e.ps1` + cargo QA below).
 
 ## A. Security (must pass)
-- [x] Real password hashing (PBKDF2-HMAC-SHA256, 50k iters, salted) — correct password accepted, wrong rejected (`docker compose` auth :8001 + `security/password.rs` 3 tests, 86 total)
+- [x] Real password hashing (Argon2id PHC, memory-hard) — correct password accepted, wrong rejected (`security/password.rs` tests)
 - [x] Path-param routing fixed (matchit 0.7 `:id` syntax) — `tests/router_probe.rs` 3/3 in-process + live (`GET /users/2` → Alice, `PATCH /shares/:id` → proper JSON errors)
 - [x] Gateway hardening (Z-1/Z-3/Z-5) live on HTTP profile: `nosniff`/`DENY`/CSP + version-free `Server: nginx` (curl-verified)
 - [x] **MFA E2E live**: enroll → verify → login gate (`MFA_REQUIRED`) → login with fresh TOTP 200, replay rejected (`scripts/e2e.ps1` checks 7–10)

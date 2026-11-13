@@ -29,6 +29,7 @@ so each component can be read standalone.
 | [04-rust-client.md](04-rust-client.md) | `src/` multiplatform client |
 | [05-kotlin-android.md](05-kotlin-android.md) | `mobile/` Jetpack Compose |
 | [06-archived-web-client.md](06-archived-web-client.md) | `archive/web/` vanilla JS |
+| [07-competitive-analysis.md](07-competitive-analysis.md) | Similar-app analysis (Google Maps LS, Find My, Life360, Glympse, WhatsApp/Telegram, Strava, Organic Maps, OsmAnd) + prioritised recommendations |
 
 ## How the components relate
 
@@ -84,3 +85,17 @@ so each component can be read standalone.
 | Rust backend | Rust 1.99 | Axum 0.7, sqlx 0.8, tokio | memory / Postgres |
 | Rust client | Rust 1.99 | eframe/egui 0.32, reqwest 0.12 | on-device JSON / keychain |
 | Kotlin app | Kotlin 2.0.21 / JDK 17 | Compose BOM 2024.10, MapLibre 11.5.1 | DataStore / app-private |
+
+## Competitive context
+
+See [07-competitive-analysis.md](07-competitive-analysis.md) for the full
+similar-app analysis and the prioritized recommendations it implies. Headline
+positioning:
+
+- **Pinpoint is the only app in the set with directional, per-recipient consent
+  (direction + precision + expiry) and E2E-encrypted locations in an OS
+  keychain.**
+- **0 trackers / 0 ads / OSM-only** matches Organic Maps/OsmAnd, unlike
+  Life360/Google.
+- **Gaps to close:** real-time streaming, Glympse-style temporary share links,
+  offline routing, battery-aware sampling.

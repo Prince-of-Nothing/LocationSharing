@@ -2,9 +2,46 @@
 
 All notable changes to this project are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
-Semantic Versioning. This is a pre-1.0 (thesis MVP) project.
+Semantic Versioning. 1.0.0 is the thesis demo release; production hardening is
+tracked in [`ROADMAP.md`](./ROADMAP.md).
+
+Release flags: `[FEATURE]` new capability · `[FIX]` bug fix ·
+`[SECURITY]` hardening · `[DOCS]` documentation · `[INFRA]` build/deploy.
+The per-item flagged list for this release is in
+[`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+### Added
+- [FEATURE] **Web place search and A→B routing**: same-origin
+  `/map/search`, `/map/reverse`, `/map/route` proxies over `src/osm.rs`
+  (validation, LRU cache, 2-permit route semaphore, `alternatives=true`),
+  with OSRM foot/bike profiles enabled only when
+  `PINPOINT_OSRM_FOOT_URL` / `PINPOINT_OSRM_BIKE_URL` are configured
+  (`/map/capabilities` reports what is available).
+- [FEATURE] **Map-first web UI with locally vendored Leaflet 1.9.4**
+  (BSD-2, served from `/vendor/`, no CDN): full-viewport map, dark tile
+  treatment, friend pins, place sheet, route panel with alternatives and
+  step list, scale bar and ODbL attribution.
+- [FEATURE] **Search UX**: submit-on-Enter by default (Nominatim policy),
+  opt-in 300 ms autocomplete with `PINPOINT_SEARCH_AUTOCOMPLETE=1` for a
+  self-hosted Nominatim, category chips, distance-sorted results,
+  “What’s here?” reverse geocoding on map click.
+- [FEATURE] **Saved places and recent places** on-device, scoped per account
+  (`pinpoint.v1.<userId>.savedPlaces|recents`), with clear-saved and
+  clear-history actions.
+- [FEATURE] **Locate me** (explicit button, browser permission only) and
+  route follow mode using `watchPosition` (preview, no voice).
+### Fixed
+- [FIX] **Cross-account saved-place flash**: switching accounts without a
+  reload could briefly show the previous account’s saved places; the drawer
+  is cleared on logout and re-rendered from the current account’s keys.
+- [FIX] **Search/route coordinates in server logs**: `converge` now logs the
+  path only (`loggable_uri`), so queries and coordinates never reach stderr.
+### Security
+- [SECURITY] Map endpoints accept no session/friend data, are cached by
+  query/coords only, and redact query strings from logs.
+
+## [1.0.0] - 2026-11-13
 ### Added
 - Client platforms track (`docs/client-platforms.md`): Windows/Linux/macOS
   desktop via `src/main.rs` (`--help`, `$PINPOINT_BACKEND`, per-platform
@@ -75,8 +112,114 @@ Semantic Versioning. This is a pre-1.0 (thesis MVP) project.
 - Bookmarks GeoJSON export/import (`src/bookmarks.rs`, `src/ui/bookmarks.rs`):
   RFC 7946 `FeatureCollection` export/import with fail-closed coordinate
   validation and one-click clipboard copy.
+- Component documentation for **all architectures** (`docs/components/`):
+  01 Go backend · 02 Python/FastAPI backend · 03 Rust/Axum backend ·
+  04 Rust multiplatform client · 05 Kotlin Android app · 06 archived vanilla-JS
+  web client — each standalone with stack, module map, API surface, data model,
+  security controls, build/run/test, deployment, and cross-component relations.
+- Competitive & similar-app analysis (`docs/components/07-competitive-analysis.md`):
+  Google Maps LS · Apple Find My · Life360 · Glympse · WhatsApp/Telegram Live
+  Location · Strava Beacon · Organic Maps · OsmAnd — feature matrix, consent/
+  privacy model comparison, architecture patterns, gaps, and prioritised P1–P3
+  recommendations (temporary share links, real-time streaming, battery-aware
+  sampling, E2E bookmark sync). Referenced from `docs/sdlc/00-overview.md` and
+  `docs/PRIVACY.md`; ROADMAP updated with the P2/P3 items.
+- Dual authentication model (ADR-0009, **Accepted (partial)** +
+  `docs/security/dual-auth-model.md`): anonymous device-bound accounts
+  (no PII; one-time recovery code) alongside identity-linked accounts
+  (email/OAuth/passkey), with an upgrade path and Sybil/abuse controls.
+  Phases 1–2 implemented; OAuth/passkey/magic-link/link endpoints pending.
+- **Session management decision + spec** (`docs/security/session-management.md`,
+  ADR-0012): opaque 256-bit server-side sessions (`pinpoint_sessions`) shared
+  across services, `HttpOnly; SameSite=Lax` cookie + session-bound CSRF
+  double-submit, sliding idle timeout, immediate revocation on
+  logout/logout-all/password-change/per-session revoke, `mfa_pending` gate,
+  split-service sharing and in-memory fallback. The JWT + rotating-refresh
+  design of ADR-0003 is superseded for transport (ADR-0012 keeps the password
+  decision).
+- **Authentication mechanisms reference** (`docs/security/auth-mechanisms.md`):
+  TOTP (RFC 6238, HMAC-SHA256, ±1 step, replay-safe), OAuth2/OIDC + PKCE
+  primitives, passkeys/magic-link designs, anonymous recovery codes, lockout
+  and rate limiting, CSRF, audit, scraping detection, request signing, and a
+  per-mechanism implementation-status table (TOTP + OAuth primitives
+  implemented; passkeys/magic links/password reset pending).
+- Auth/session **handlers landed**: `User` gains `auth_method` /
+  `public_key` / `recovery_code_hash` / `identity_subject`; migration 14 adds
+  the columns and `pinpoint_sessions`. The mock tokens are gone: login/register
+  create a real session (HttpOnly cookie + CSRF), logout revokes it, password
+  change revokes all sessions, and `session_auth` middleware validates the
+  cookie + `X-CSRF-Token` on every request.
+- **Session device management**: `GET /api/v1/auth/sessions` (8-hex prefix +
+  `current` flag, full id never exposed), `DELETE /api/v1/auth/sessions/:id`
+  (own sessions only, CSRF-protected), `POST /api/v1/auth/logout-all`; sliding
+  `last_activity`, configurable idle timeout (`PINPOINT_SESSION_IDLE_MINUTES`,
+  default 12 h demo), expired sessions deleted on use.
+- **Anonymous accounts** (`POST /api/v1/auth/anonymous`,
+  `/auth/anonymous/recover`): device-bound account with no PII, one-time
+  160-bit recovery code shown once (SHA-256 stored, rotated on every
+  recovery), same session/CSRF machinery; web UI adds "Continue anonymously",
+  a recovery-code panel and a "Recover with code" form.
+- **Web UI** (`web/app/`, served at `/`): login/register, anonymous sign-in,
+  Slippy map via the server `/map/tiles` proxy, publish location, friends,
+  shares, active-sessions card with revoke/sign-out-everywhere; CSP +
+  security headers; ODbL attribution. Plain HTML/CSS/JS, no third-party
+  scripts, no IP geolocation.
+- **Tile proxy fix**: `tile.openstreetmap.de` (FOSSGIS) is the readable demo
+  default with Wikimedia/CARTO fallbacks, an accepted User-Agent, one retry for
+  rate-limited bursts, and a source-aware cache. Fixed a latent cache-key bug
+  (`u8` truncated x/y at z ≥ 9 and could serve the wrong tile). `/map/tiles`
+  returns 200 without a watermark; production self-hosts (ADR-0011).
+- **Local-only web assets**: local `/favicon.svg` (no favicon service), CSP
+  tightened to `style-src 'self'` and explicit `font-src 'self'` (the UI uses
+  `system-ui`, so no font request is made at all), and `tests/assets.rs`
+  guards against Google Fonts/CDN URLs or absolute subresources in the shipped
+  HTML/CSS/JS.
+- **Desktop tile packs via the backend**: `tilepacks::download_pack` now
+  prefers `<backend>/map/tiles/{z}/{x}/{y}` before `PINPOINT_TILE_URL` and the
+  public fallbacks, so desktop clients do not call a CDN directly when a
+  Pinpoint server is configured.
+- ADR-0009 status → **Accepted (partial)**; traceability matrix (15) rebuilt
+  against the current Rust/Kotlin tree with FR-23…FR-30 auth/session/E2E/
+  GPS/dual-mobile rows.
+- **Database design** (`docs/database/schema.md`, ADR-0010, reference DDL
+  `db/schema/00-target.sql`): normalized domain-owned tables (auth/social/
+  location/audit), no single JSONB source of truth, identity columns instead
+  of a counters table, application-level AES-256-GCM column encryption with
+  `v1:` format + blind indexes (`email_hash`), one-way hashes for
+  passwords/session ids/CSRF/recovery, per-service least-privilege roles, and an
+  additive-modularity rulebook. Migration path documented (backfill →
+  encrypt → retire `pinpoint_state`/`pinpoint_counters`).
+- **Self-hosted OSM services** (ADR-0011, `docs/maps/self-hosted-osm.md`):
+  `PINPOINT_NOMINATIM_URL`, `PINPOINT_OSRM_URL`, `PINPOINT_OVERPASS_URL`,
+  `PINPOINT_TILE_URL` make every OSM endpoint self-host-first; public
+  endpoints are demo fallbacks only. ODbL attribution stays mandatory
+  (`openstreetmap.org/copyright` + `X-Data-Attribution`). Added `.env.example`
+  with the OSM + security variables.
+- **OSM parity quick wins** (`docs/maps/osm-feature-parity.md`): POI result
+  list with opening hours/phone/website + Save/OSM buttons, full route-steps
+  display, **GPX 1.1 export** for routes (`src/osm.rs::export_route_gpx`),
+  and a Save button on search results.
+### Fixed
+- [FIX] **CSRF lost after reload** (`web/app/app.js`, `auth_handlers::me`): a
+  reloaded page kept the `HttpOnly` session cookie but had no CSRF token, so
+  the first publish/revoke returned `403 CSRF_FAILED`. `GET /auth/me` now
+  returns `X-CSRF-Token` and the client re-arms it from any response.
+- [FIX] **Session ids stored in plaintext** (`state/sessions.rs`): a database dump
+  could have been replayed as cookies. Sessions are now persisted/kept as
+  SHA-256 hashes; the raw 256-bit value exists only in the cookie.
+- [FIX] **Tile cache key truncation** (`src/server/mod.rs`): `(u8,u8,u8)` wrapped
+  x/y at z ≥ 9 and could serve a neighbouring tile; the key is now
+  `(u32,u32,u32)` and cache hits report their `X-Tile-Source`.
+
 ### Changed
-- Rust desktop client: bumped `eframe` 0.30 → 0.32, moving the Linux
+- [SECURITY] **Password hashing → Argon2id** (`src/security/password.rs`): new hashes are
+  Argon2id PHC strings (`$argon2id$v=19$m=19456,t=2,p=1$…`, OWASP-aligned,
+  memory-hard) via the `argon2` crate 0.6. Legacy `pbkdf2$…` hashes still
+  verify and are transparently re-hashed to Argon2id on the next successful
+  login (`needs_rehash`). `pbkdf2` remains only for legacy verification and
+  E2E key derivation. Chosen over bcrypt (72-byte limit, recent
+  RUSTSEC-2026-0199 DoS advisory).
+- [INFRA] Rust desktop client: bumped `eframe` 0.30 → 0.32, moving the Linux
   accessibility stack off `quick-xml 0.30.0` (RUSTSEC-2026-0194,
   RUSTSEC-2026-0195, both high) to `0.41.0`; `cargo audit` now exits 0 with
   0 vulnerabilities (5 unmaintained warnings only)

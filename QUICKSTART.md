@@ -1,9 +1,13 @@
-# Pinpoint — Quick Start (3-Day Setup)
+# Pinpoint — Quick Start
 
-This guide gets you running Pinpoint with friends in under 3 days. The
-entire stack is pure Rust: API server (`pinpoint-server`) + desktop client
-(`pinpoint-desktop`). The Go backend and web/mobile stacks are archived
-under `archive/` (see ADR-0007/0008).
+**Release 1.0.0 (2026-11-13).** The web UI has accounts, map, publishing,
+friends, shares and sessions; **web search/routing is not in 1.0.0** (the
+desktop client has it). See [`RELEASE_NOTES.md`](./RELEASE_NOTES.md) for the
+functional-state matrix and [`ROADMAP.md`](./ROADMAP.md) for what's next.
+
+This guide gets the pure-Rust stack running: API server (`pinpoint-server`) +
+desktop client (`pinpoint-desktop`). The Go backend and old web/mobile stacks
+are archived under `archive/` (see ADR-0007/0008).
 
 ## Overview
 
@@ -68,7 +72,6 @@ The backend starts on **http://localhost:8000/** with:
 | alice@example.com | DemoPass123! | Resident |
 | bob@example.com | DemoPass456! | Resident |
 | admin@example.com | ChangeMe123! | Administrator (must change on first login) |
-
 ## Step 3: Open the Desktop Client
 
 The Rust client is GUI (`eframe`). Run it in a second terminal:
@@ -77,9 +80,10 @@ The Rust client is GUI (`eframe`). Run it in a second terminal:
 cargo run -- --backend http://localhost:8000
 ```
 
-The map opens immediately — no login required. You'll see demo friend locations (Alice, Bob, Carol) around Chicago.
+The map opens immediately; sign in to load friends and publish. The demo
+locations are Alice and Bob around Chișinău, Moldova.
 
-The health check `curl http://localhost:8000/health` returns `{"status":"healthy","version":"0.1.0"}` when the server is up.
+The health check `curl http://localhost:8000/health` returns `{"status":"healthy","version":"1.0.0"}` when the server is up.
 
 ### What You Can Do Without Logging In
 

@@ -17,7 +17,7 @@
 
 ## Controls (selected)
 
-- **Auth:** bcrypt/Argon2 passwords; session store; rate limits; forced
+- **Auth:** Argon2id passwords; session store; rate limits; forced
   change; lockout; secure cookie flags (`Secure`, `SameSite=Lax`, `HttpOnly`).
 - **Transport:** HTTPS-only in prod; cleartext only for loopback dev
   (Rust fail-closed, Android network config).

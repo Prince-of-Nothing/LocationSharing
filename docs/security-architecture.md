@@ -312,7 +312,7 @@ security::signing::tests::no_key_returns_error ... ok
 
 The Rust client assumes the Go backend (`backend/`, archived copy in `archive/` is historical) enforces:
 
-- **bcrypt** password hashing (cost 12).
+- **Argon2id** password hashing (PHC, memory-hard).
 - **Session store** with idle timeout and revocation on password change.
 - **Rate limiting** on login/register (5/min IP, lockout after 5 failures for 15 min).
 - **CSRF double-submit** check on all unsafe methods (`X-CSRF-Token` header).

@@ -10,7 +10,10 @@ Start here. Every doc is Markdown (Mermaid for diagrams). See also the root
 - **What it does:** [`docs/FEATURE_INVENTORY.md`](FEATURE_INVENTORY.md) · [`docs/BEST_APP_CRITERIA.md`](BEST_APP_CRITERIA.md)
 - **Architecture:** [`docs/architecture-data-domains.md`](architecture-data-domains.md) · [`docs/design-principles.md`](design-principles.md) · [`docs/principles-matrix.md`](principles-matrix.md) · [`docs/service-discovery.md`](service-discovery.md) · [`docs/redundancy.md`](redundancy.md) · [`docs/postgres-ha.md`](postgres-ha.md)
 - **Clients:** [`docs/client-platforms.md`](client-platforms.md) · [`docs/docker-deployment.md`](docker-deployment.md) · [`docs/docker-podman.md`](docker-podman.md) · [`docs/gap-acceptance.md`](gap-acceptance.md)
-- **Security:** `docs/security/` (architecture, threat model, incident response) · `docs/evidence/` (ZAP)
+- **Security:** `docs/security/` (architecture, threat model, incident response, `dual-auth-model.md`, `session-management.md`, `auth-mechanisms.md`) · `docs/evidence/` (ZAP)
+- **Components (all architectures):** [`docs/components/`](components/) — Go · Python · Rust/Axum · Rust client · Kotlin · archived web
+- **Database:** [`docs/database/schema.md`](database/schema.md) (normalized, encrypted, modular) · DDL [`db/schema/00-target.sql`](../db/schema/00-target.sql)
+- **Maps:** [`docs/maps/osm-feature-parity.md`](maps/osm-feature-parity.md) (Organic Maps/Magic Earth/OsmAnd parity) · [`docs/maps/self-hosted-osm.md`](maps/self-hosted-osm.md) (self-hosting)
 - **SDLC:** `docs/sdlc/00–17` (17 = spiral execution plan) · **UML:** `docs/uml/01–15` · **ADRs:** `docs/adr/`
 
 ## Module map (for humans and AI agents)

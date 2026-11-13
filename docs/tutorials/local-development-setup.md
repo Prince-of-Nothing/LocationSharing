@@ -35,7 +35,7 @@ Check it:
 
 ```bash
 curl http://localhost:8000/api/v1/health
-# {"status":"ok","version":"0.2.0"}
+# {"status":"ok","version":"1.0.0"}
 ```
 
 Open <http://localhost:8000/> for the web client and
