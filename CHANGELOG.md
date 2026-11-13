@@ -32,6 +32,11 @@ The per-item flagged list for this release is in
 - [FEATURE] **Locate me** (explicit button, browser permission only) and
   route follow mode using `watchPosition` (preview, no voice).
 ### Fixed
+- [FIX] **Navigation Start failed when geolocation was blocked**: “Navigate”
+  now always enters a route-preview banner (distance/time + first step) even
+  without GPS, shows a precise blocked/unavailable/timeout message with an
+  “Enable location” retry, and keeps the route drawn. Exit stops the watch and
+  removes the self marker.
 - [FIX] **No “you are here” marker after locating**: the locate button only
   flew the map to the GPS fix. It now draws a pulsing “You” marker plus a
   dashed accuracy circle (also updated during route follow mode) and clears

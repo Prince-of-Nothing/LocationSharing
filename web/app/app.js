@@ -94,6 +94,7 @@ async function logout() {
   state.locations = [];
   mapApi?.clearRoute();
   mapApi?.clearSelfLocation();
+  $("nav-banner").classList.add("hidden");
   $("place-sheet").classList.add("hidden");
   $("route-panel").classList.add("hidden");
   $("search-results").classList.add("hidden");
@@ -308,6 +309,7 @@ async function logoutAll() {
   state.locations = [];
   mapApi?.clearRoute();
   mapApi?.clearSelfLocation();
+  $("nav-banner").classList.add("hidden");
   $("place-sheet").classList.add("hidden");
   $("route-panel").classList.add("hidden");
   $("search-results").classList.add("hidden");

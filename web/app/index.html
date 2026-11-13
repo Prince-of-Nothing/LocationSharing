@@ -108,6 +108,15 @@
 
         <div id="search-results" class="search-results hidden" aria-live="polite"></div>
 
+        <div id="nav-banner" class="nav-banner hidden" role="status" aria-live="polite">
+          <div class="nav-next">
+            <span id="nav-step">Route preview</span>
+            <span id="nav-meta" class="muted"></span>
+          </div>
+          <button type="button" id="nav-retry" class="secondary hidden">Enable location</button>
+          <button type="button" id="nav-exit" class="secondary">Exit</button>
+        </div>
+
         <div id="category-chips" class="category-chips hidden" aria-label="Search categories">
           <button type="button" data-q="restaurant">Food</button>
           <button type="button" data-q="cafe">Cafe</button>
@@ -158,7 +167,7 @@
             <div id="route-alternatives" class="route-alternatives"></div>
             <ol id="route-steps" class="route-steps"></ol>
             <div class="row">
-              <button type="button" id="route-start">Start</button>
+              <button type="button" id="route-start">Navigate</button>
               <button type="button" id="route-clear" class="secondary">Clear</button>
             </div>
           </div>

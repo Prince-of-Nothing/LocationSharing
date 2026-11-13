@@ -378,10 +378,28 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
     }
   }
 
+  function showNavBanner(step, meta, { retry = false } = {}) {
+    $("nav-step").textContent = step;
+    $("nav-meta").textContent = meta || "";
+    $("nav-retry").classList.toggle("hidden", !retry);
+    $("nav-banner").classList.remove("hidden");
+  }
+
+  function hideNavBanner() {
+    $("nav-banner").classList.add("hidden");
+    $("nav-retry").classList.add("hidden");
+  }
+
+  function exitNavigation() {
+    stopFollowing();
+    mapApi.clearSelfLocation();
+    hideNavBanner();
+  }
+
   function clearRoutePanel() {
+    exitNavigation();
     route.routes = [];
     route.destination = null;
-    stopFollowing();
     mapApi.clearRoute();
     routePanel.classList.add("hidden");
     $("route-steps").innerHTML = "";
@@ -389,12 +407,41 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
     $("route-summary").textContent = "";
   }
 
+  function geolocationErrorMessage(err) {
+    if (err?.code === 1) {
+      return "Location permission is blocked for this site.";
+    }
+    if (err?.code === 3) {
+      return "Location request timed out.";
+    }
+    return "Your location is currently unavailable.";
+  }
+
+  function enterNavigationPreview() {
+    const chosen = route.routes[route.index];
+    const step = chosen?.steps?.[0]?.text || chosen?.summary || "Route preview";
+    const meta = chosen
+      ? `${formatDistance(chosen.distance_m)} · ${formatDuration(chosen.duration_s)} · ${route.mode}`
+      : "Route preview";
+    showNavBanner(step, meta);
+  }
+
   function startFollowing() {
+    if (!route.origin || !route.destination) {
+      setStatus("Plan a route first.", true);
+      return;
+    }
+    // Navigation always starts in preview mode; GPS is an enhancement, not a
+    // prerequisite. A denied permission must never make Start a dead end.
+    enterNavigationPreview();
     if (!navigator.geolocation) {
-      setStatus("Geolocation is not available in this browser.", true);
+      showNavBanner("Location unavailable", "Route preview only — this browser has no geolocation.", {
+        retry: false,
+      });
       return;
     }
     stopFollowing();
+    let firstFix = true;
     route.watchId = navigator.geolocation.watchPosition(
       (pos) => {
         const fix = {
@@ -405,11 +452,27 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
         mapApi.setSelfLocation(fix);
         route.origin = { lat: fix.lat, lon: fix.lon, label: "My location" };
         renderRouteFields();
+        const chosen = route.routes[route.index];
+        const step = chosen?.steps?.[0]?.text || "Following route";
+        const meta = chosen
+          ? `Following · ${formatDistance(chosen.distance_m)} · ${formatDuration(chosen.duration_s)}`
+          : "Following";
+        showNavBanner(step, meta);
+        if (firstFix) {
+          mapApi.map.panTo([fix.lat, fix.lon], { animate: true });
+          firstFix = false;
+        }
+        setStatus("Following your location. Route preview only — no voice guidance.");
       },
-      () => setStatus("Location permission denied — routing from map centre.", true),
-      { enableHighAccuracy: true, maximumAge: 15000, timeout: 10000 },
+      (err) => {
+        const message = geolocationErrorMessage(err);
+        showNavBanner("Location unavailable", `${message} Route preview is still active.`, {
+          retry: true,
+        });
+        setStatus(`${message} Allow location and press Enable location.`, true);
+      },
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 12000 },
     );
-    setStatus("Following your location. Route preview only — no voice guidance.");
   }
 
   function onMapClick({ lat, lon }) {
@@ -518,6 +581,8 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
   $("route-close").addEventListener("click", () => {
     clearRoutePanel();
   });
+  $("nav-exit").addEventListener("click", exitNavigation);
+  $("nav-retry").addEventListener("click", startFollowing);
 
   document.querySelectorAll(".mode").forEach((btn) => {
     btn.addEventListener("click", () => setMode(btn.dataset.mode));
