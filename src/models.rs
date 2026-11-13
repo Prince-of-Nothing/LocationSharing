@@ -30,6 +30,22 @@ pub struct User {
     /// ISO-8601 lockout expiry (None = not locked). Server-only.
     #[serde(skip_serializing, default)]
     pub locked_until: Option<String>,
+    /// Authentication model: `email` | `anonymous` | `oauth` | `passkey`.
+    #[serde(default = "default_auth_method")]
+    pub auth_method: String,
+    /// Device public key (base64) for anonymous accounts; null otherwise.
+    #[serde(default)]
+    pub public_key: Option<String>,
+    /// PBKDF2 hash of the anonymous recovery code; null otherwise.
+    #[serde(default)]
+    pub recovery_code_hash: Option<String>,
+    /// IdP subject for OAuth accounts (future); null otherwise.
+    #[serde(default)]
+    pub identity_subject: Option<String>,
+}
+
+fn default_auth_method() -> String {
+    "email".to_string()
 }
 
 /// Envelope of `POST /api/v1/auth/login` and `POST /api/v1/auth/register`.
@@ -261,6 +277,10 @@ pub struct AppData {
     pub must_change_password: bool,
     pub search_results: Vec<SearchPlace>,
     pub search_error: Option<String>,
+    /// Nearby POI results from the last Overpass query (Places screen).
+    pub poi_results: Vec<crate::osm::Poi>,
+    /// Last calculated route (summary/steps/GPX export).
+    pub last_route: Option<crate::osm::Route>,
     // New feature state (populated by the server where applicable).
     pub my_location: Option<FriendLocation>,
     pub check_ins: Vec<CheckIn>,

@@ -85,6 +85,18 @@ pub const MIGRATIONS: &[(u32, &str, &[&str])] = &[
             "ALTER TABLE pinpoint_users ADD COLUMN IF NOT EXISTS locked_until TEXT",
         ],
     ),
+    (
+        14,
+        "auth_methods_and_sessions",
+        &[
+            "ALTER TABLE pinpoint_users ADD COLUMN IF NOT EXISTS auth_method TEXT NOT NULL DEFAULT 'email'",
+            "ALTER TABLE pinpoint_users ADD COLUMN IF NOT EXISTS public_key TEXT",
+            "ALTER TABLE pinpoint_users ADD COLUMN IF NOT EXISTS recovery_code_hash TEXT",
+            "ALTER TABLE pinpoint_users ADD COLUMN IF NOT EXISTS identity_subject TEXT",
+            "CREATE TABLE IF NOT EXISTS pinpoint_sessions (session_id TEXT PRIMARY KEY, user_id BIGINT NOT NULL, csrf_token TEXT NOT NULL, auth_method TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), last_activity TIMESTAMPTZ NOT NULL DEFAULT now(), mfa_pending BOOLEAN NOT NULL DEFAULT false)",
+            "CREATE INDEX IF NOT EXISTS idx_sessions_user ON pinpoint_sessions(user_id)",
+        ],
+    ),
 ];
 
 /// Apply all pending migrations (idempotent, recorded in version table).

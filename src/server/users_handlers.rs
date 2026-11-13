@@ -1,14 +1,14 @@
 //! Users + friendships service handlers.
 use axum::{
-    extract::{Path, State},
+    extract::{Extension, Path, State},
     http::StatusCode,
     Json,
 };
 use serde_json::{json, Value};
 
-use super::handlers::{current_user, user_json};
+use super::handlers::{require_current_user, user_json};
 use super::state::AppState;
-use super::{error_envelope, IntoResponse};
+use super::{error_envelope, CurrentUser, IntoResponse};
 
 /// `GET /users/` — list users (demo: all users).
 pub async fn list_users(State(state): State<AppState>) -> impl IntoResponse {
@@ -84,6 +84,10 @@ pub async fn create_user(
         mfa_last_step: 0,
         failed_login_attempts: 0,
         locked_until: None,
+        auth_method: "email".into(),
+        public_key: None,
+        recovery_code_hash: None,
+        identity_subject: None,
     };
     {
         let mut store = state.store.lock().unwrap();
@@ -177,14 +181,22 @@ pub async fn update_user(
 }
 
 /// `DELETE /users/{id}` — admin removal (cascades friendships/shares/locations).
-pub async fn delete_user(State(state): State<AppState>, Path(id): Path<i64>) -> impl IntoResponse {
+pub async fn delete_user(
+    State(state): State<AppState>,
+    cu: Option<Extension<CurrentUser>>,
+    Path(id): Path<i64>,
+) -> impl IntoResponse {
+    let cu = match require_current_user(cu) {
+        Ok(cu) => cu,
+        Err(resp) => return resp,
+    };
     {
         let mut store = state.store.lock().unwrap();
         let pos = match store.users.iter().position(|u| u.id == id) {
             Some(p) => p,
             None => return error_envelope("USER_NOT_FOUND", "User not found."),
         };
-        let me = current_user(&store).map(|u| u.id).unwrap_or(-1);
+        let me = cu.user_id;
         if me == id {
             return error_envelope(
                 "VALIDATION_FAILED",
@@ -228,8 +240,13 @@ pub async fn search_users(
 /// `POST /friendships/` — send friend request.
 pub async fn create_friendship(
     State(state): State<AppState>,
+    cu: Option<Extension<CurrentUser>>,
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
+    let cu = match require_current_user(cu) {
+        Ok(cu) => cu,
+        Err(resp) => return resp,
+    };
     let receiver_email = body
         .get("receiver_email")
         .and_then(Value::as_str)
@@ -242,12 +259,10 @@ pub async fn create_friendship(
         Some(u) => u.clone(),
         None => return error_envelope("USER_NOT_FOUND", "User not found."),
     };
-    let requester = store
-        .users
-        .iter()
-        .find(|u| u.role == "resident")
-        .unwrap_or(&store.users[0])
-        .clone();
+    let requester = match store.find_user_by_id(cu.user_id).cloned() {
+        Some(u) => u,
+        None => return error_envelope("USER_NOT_FOUND", "User not found."),
+    };
     if requester.id == receiver.id {
         return error_envelope(
             "VALIDATION_FAILED",
@@ -282,11 +297,19 @@ pub async fn create_friendship(
 }
 
 /// `GET /friendships/`.
-pub async fn list_friendships(State(state): State<AppState>) -> impl IntoResponse {
+pub async fn list_friendships(
+    State(state): State<AppState>,
+    cu: Option<Extension<CurrentUser>>,
+) -> impl IntoResponse {
+    let cu = match require_current_user(cu) {
+        Ok(cu) => cu,
+        Err(resp) => return resp,
+    };
     let store = state.store.lock().unwrap();
     let friendships: Vec<Value> = store
         .friendships
         .iter()
+        .filter(|f| f.requester_id == cu.user_id || f.receiver_id == cu.user_id)
         .map(|f| {
             json!({
                 "id": f.id,
@@ -298,19 +321,25 @@ pub async fn list_friendships(State(state): State<AppState>) -> impl IntoRespons
             })
         })
         .collect();
-    (StatusCode::OK, Json(friendships))
+    (StatusCode::OK, Json(friendships)).into_response()
 }
 
 /// `POST /friendships/{id}/respond`.
 pub async fn respond_friendship(
     State(state): State<AppState>,
+    cu: Option<Extension<CurrentUser>>,
     Path(id): Path<i64>,
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
+    let cu = match require_current_user(cu) {
+        Ok(cu) => cu,
+        Err(resp) => return resp,
+    };
     let action = body.get("action").and_then(Value::as_str).unwrap_or("");
     let mut store = state.store.lock().unwrap();
     let friendship = match store.friendships.iter_mut().find(|f| f.id == id) {
-        Some(f) => f,
+        Some(f) if f.receiver_id == cu.user_id => f,
+        Some(_) => return error_envelope("FRIENDSHIP_NOT_FOUND", "Friendship not found."),
         None => return error_envelope("FRIENDSHIP_NOT_FOUND", "Friendship not found."),
     };
     friendship.status = match action {
@@ -333,11 +362,18 @@ pub async fn respond_friendship(
 /// `DELETE /friendships/{id}` — unfriend / remove request (cascades shares).
 pub async fn delete_friendship(
     State(state): State<AppState>,
+    cu: Option<Extension<CurrentUser>>,
     Path(id): Path<i64>,
 ) -> impl IntoResponse {
+    let cu = match require_current_user(cu) {
+        Ok(cu) => cu,
+        Err(resp) => return resp,
+    };
     {
         let mut store = state.store.lock().unwrap();
-        let pos = match store.friendships.iter().position(|f| f.id == id) {
+        let pos = match store.friendships.iter().position(|f| {
+            f.id == id && (f.requester_id == cu.user_id || f.receiver_id == cu.user_id)
+        }) {
             Some(p) => p,
             None => return error_envelope("FRIENDSHIP_NOT_FOUND", "Friendship not found."),
         };

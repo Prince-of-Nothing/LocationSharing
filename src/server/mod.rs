@@ -2,7 +2,7 @@
 //!
 //! Implements the `/api/v1` wire contract consumed by the Rust client
 //! (`src/api.rs`) and the archived web/mobile clients:
-//! - `POST /api/v1/auth/login` → `{access_token, csrf_token, user}` + session cookie
+//! - `POST /api/v1/auth/login` → `{csrf_token, user}` + `HttpOnly` session cookie
 //! - `POST /api/v1/auth/register`, `/auth/logout`, `/auth/session`
 //! - `POST /api/v1/auth/password/change`, `/auth/password/force-change`
 //! - `GET /api/v1/auth/me`
@@ -24,19 +24,92 @@ mod locations_handlers;
 mod migrations;
 mod state;
 mod users_handlers;
+mod web_handlers;
 
+pub use handlers::health;
 pub use handlers::sync_status;
-pub use state::{AppState, ServiceKind, Store};
+pub use state::{AppState, ServiceKind, Store, StoredSession};
 
 pub use crate::models::{FriendLocation, Friendship, LocationShare, User};
 
 use axum::{
     extract::State,
+    http::{header, HeaderMap, StatusCode},
     middleware::Next,
     routing::{delete, get, patch, post},
     Json, Router,
 };
 use serde_json::json;
+
+/// Authenticated session extracted from the `session_id` cookie.
+#[derive(Debug, Clone)]
+pub struct CurrentUser {
+    pub user_id: i64,
+    pub session_id: String,
+    pub csrf_token: String,
+    pub mfa_pending: bool,
+}
+
+fn cookie_value(headers: &HeaderMap, name: &str) -> Option<String> {
+    headers
+        .get(header::COOKIE)?
+        .to_str()
+        .ok()?
+        .split(';')
+        .find_map(|pair| {
+            let (k, v) = pair.trim().split_once('=')?;
+            if k == name {
+                Some(v.to_string())
+            } else {
+                None
+            }
+        })
+}
+
+/// Validate the session cookie (and CSRF on unsafe methods) and inject
+/// [`CurrentUser`] into request extensions. Unauthenticated requests pass
+/// through without the extension; handlers that require auth fail closed.
+pub async fn session_auth(
+    State(state): State<AppState>,
+    mut req: axum::http::Request<axum::body::Body>,
+    next: Next,
+) -> axum::response::Response {
+    if let Some(session_id) = cookie_value(req.headers(), "session_id") {
+        if let Some(session) = state.get_session(&session_id).await {
+            let unsafe_method = !matches!(
+                *req.method(),
+                axum::http::Method::GET | axum::http::Method::HEAD | axum::http::Method::OPTIONS
+            );
+            if unsafe_method {
+                let csrf = req
+                    .headers()
+                    .get("X-CSRF-Token")
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("");
+                if csrf != session.csrf_token {
+                    return (
+                        StatusCode::FORBIDDEN,
+                        Json(json!({"error": {"code": "CSRF_FAILED", "message": "Invalid CSRF token."}})),
+                    )
+                        .into_response();
+                }
+            }
+            req.extensions_mut().insert(CurrentUser {
+                user_id: session.user_id,
+                session_id: session.session_id.clone(),
+                csrf_token: session.csrf_token.clone(),
+                mfa_pending: session.mfa_pending,
+            });
+            state.touch_session(&session.session_id).await;
+        }
+    }
+    next.run(req).await
+}
+
+/// Privacy: logs never include query strings (search terms, coordinates).
+fn loggable_uri(uri: &axum::http::Uri) -> &str {
+    uri.path()
+}
 
 /// Per-request convergence for multi-replica determinism.
 ///
@@ -54,7 +127,7 @@ pub async fn converge(
     next: Next,
 ) -> axum::response::Response {
     let method = req.method().clone();
-    eprintln!("CONVERGE run {} {}", method, req.uri());
+    eprintln!("CONVERGE run {} {}", method, loggable_uri(req.uri()));
     state.refresh_from_db().await;
     let res = next.run(req).await;
     if method != axum::http::Method::GET {
@@ -67,24 +140,53 @@ pub async fn converge(
 /// Build the full Axum router with all `/api/v1` routes + health.
 pub fn router(state: AppState) -> Router {
     let app_state = state.clone();
+    let session_state = state.clone();
     auth_router()
         .merge(users_router())
         .merge(locations_router())
         .merge(map_router())
+        .route("/", get(web_handlers::index))
+        .route("/app.js", get(web_handlers::app_js))
+        .route("/map.js", get(web_handlers::map_js))
+        .route("/nav.js", get(web_handlers::nav_js))
+        .route("/app.css", get(web_handlers::app_css))
+        .route("/favicon.svg", get(web_handlers::favicon))
+        .route("/favicon.ico", get(web_handlers::favicon))
+        .route("/vendor/leaflet.js", get(web_handlers::leaflet_js))
+        .route("/vendor/leaflet.css", get(web_handlers::leaflet_css))
+        .route(
+            "/vendor/leaflet/LICENSE",
+            get(web_handlers::leaflet_license),
+        )
+        .route("/vendor/images/:file", get(web_handlers::leaflet_image))
         .route("/health", get(handlers::health))
         .route("/api/v1/sync-status", get(handlers::sync_status))
         .with_state(state)
         .layer(axum::middleware::from_fn_with_state(app_state, converge))
+        .layer(axum::middleware::from_fn_with_state(
+            session_state,
+            session_auth,
+        ))
 }
 
 /// Auth service routes (`/api/v1/auth/*`). Independently scalable.
 /// Stateless: the app state is supplied once by the binary's `with_state`.
 pub fn auth_router() -> Router<AppState> {
     Router::new()
-        .route("/health", get(handlers::health))
         .route("/api/v1/auth/login", post(auth_handlers::login))
         .route("/api/v1/auth/register", post(auth_handlers::register))
         .route("/api/v1/auth/logout", post(auth_handlers::logout))
+        .route("/api/v1/auth/logout-all", post(auth_handlers::logout_all))
+        .route("/api/v1/auth/anonymous", post(auth_handlers::anonymous))
+        .route(
+            "/api/v1/auth/anonymous/recover",
+            post(auth_handlers::anonymous_recover),
+        )
+        .route("/api/v1/auth/sessions", get(auth_handlers::list_sessions))
+        .route(
+            "/api/v1/auth/sessions/:id",
+            delete(auth_handlers::revoke_session),
+        )
         .route("/api/v1/auth/session", post(auth_handlers::session))
         .route("/api/v1/auth/me", get(auth_handlers::me))
         .route(
@@ -105,7 +207,6 @@ pub fn auth_router() -> Router<AppState> {
 /// NOTE: matchit 0.7 (axum 0.7) uses `:param` syntax, NOT `{param}` (that is axum 0.8).
 pub fn users_router() -> Router<AppState> {
     Router::new()
-        .route("/health", get(handlers::health))
         .route(
             "/api/v1/users/",
             get(users_handlers::list_users).post(users_handlers::create_user),
@@ -134,7 +235,6 @@ pub fn users_router() -> Router<AppState> {
 /// Locations + shares service routes. Independently scalable.
 pub fn locations_router() -> Router<AppState> {
     Router::new()
-        .route("/health", get(handlers::health))
         .route(
             "/api/v1/locations/shares",
             get(locations_handlers::list_shares).post(locations_handlers::create_share),
@@ -174,46 +274,62 @@ pub fn locations_router() -> Router<AppState> {
 pub fn map_router() -> Router<AppState> {
     Router::new()
         .route("/map/tiles/:z/:x/:y", get(map_handlers::tile))
+        .route("/map/search", get(map_handlers::search))
+        .route("/map/reverse", get(map_handlers::reverse))
+        .route("/map/route", get(map_handlers::route))
+        .route("/map/capabilities", get(map_handlers::capabilities))
         .route("/map/attribution", get(map_handlers::attribution))
         .route("/map/health", get(map_handlers::health))
 }
 
 pub mod map_handlers {
+    use crate::osm::{OsmClient, SearchPlace, TravelMode};
     use axum::{
+        extract::Query,
         http::{header, HeaderMap, StatusCode},
         response::IntoResponse,
         Json,
     };
-    use serde_json::json;
+    use serde::Deserialize;
+    use serde_json::{json, Value};
     use std::collections::HashMap;
     use std::sync::{Mutex, OnceLock};
     use std::time::{Duration, Instant};
 
-    type TileKey = (u8, u8, u8);
-    type TileCacheMap = HashMap<TileKey, (Vec<u8>, Instant)>;
+    /// Cache key is the real tile coordinate (u32 — `u8` silently wrapped at
+    /// z >= 9 and served the wrong tile).
+    type TileKey = (u32, u32, u32);
+    type TileCacheMap = HashMap<TileKey, CachedTile>;
+
+    struct CachedTile {
+        bytes: Vec<u8>,
+        source: &'static str,
+        inserted: Instant,
+    }
+
     static TILE_CACHE: OnceLock<Mutex<TileCacheMap>> = OnceLock::new();
     const TILE_TTL: Duration = Duration::from_secs(3600);
     const TILE_CACHE_MAX: usize = 1024;
 
     /// Ordered list of tile sources tried in sequence on failure.
     /// All are ODbL-compliant (OSM-derived). Never uses tile.openstreetmap.org.
+    /// `tile.openstreetmap.de` (FOSSGIS) is the readable demo default; the
+    /// other two are fallbacks. Production self-hosts via `PINPOINT_TILE_URL`
+    /// (ADR-0011).
     const TILE_SOURCES: &[TileSource] = &[
         TileSource {
-            name: "carto",
-            url_pattern: "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-            requires_api_key: true,
+            name: "osm-de",
+            url_pattern: "https://tile.openstreetmap.de/{z}/{x}/{y}.png",
             attribution: "© OpenStreetMap contributors",
         },
         TileSource {
             name: "wikimedia",
             url_pattern: "https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png",
-            requires_api_key: false,
             attribution: "© OpenStreetMap contributors",
         },
         TileSource {
-            name: "openfreemap",
-            url_pattern: "https://tiles.openfreemap.org/styles/light/{z}/{x}/{y}",
-            requires_api_key: false,
+            name: "carto-dark",
+            url_pattern: "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
             attribution: "© OpenStreetMap contributors",
         },
     ];
@@ -221,7 +337,6 @@ pub mod map_handlers {
     struct TileSource {
         name: &'static str,
         url_pattern: &'static str,
-        requires_api_key: bool,
         attribution: &'static str,
     }
 
@@ -237,6 +352,22 @@ pub mod map_handlers {
         Json(json!({"service": "map", "status": "healthy", "cache_entries": tile_cache_len()}))
     }
 
+    /// What this deployment can actually do: search autocomplete (self-hosted
+    /// Nominatim only) and configured routing profiles.
+    pub async fn capabilities() -> Json<Value> {
+        let mut modes = vec!["driving"];
+        if crate::osm::osrm_base_for(TravelMode::Foot).is_some() {
+            modes.push("foot");
+        }
+        if crate::osm::osrm_base_for(TravelMode::Bike).is_some() {
+            modes.push("bike");
+        }
+        let autocomplete = std::env::var("PINPOINT_SEARCH_AUTOCOMPLETE")
+            .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+            .unwrap_or(false);
+        Json(json!({ "autocomplete": autocomplete, "modes": modes }))
+    }
+
     pub async fn attribution() -> Json<serde_json::Value> {
         Json(json!({
             "data": "© OpenStreetMap contributors",
@@ -244,15 +375,16 @@ pub mod map_handlers {
             "tiles": TILE_SOURCES.iter().map(|s| json!({
                 "name": s.name,
                 "url_pattern": s.url_pattern,
-                "requires_api_key": s.requires_api_key,
                 "attribution": s.attribution,
             })).collect::<Vec<_>>(),
             "note": "Sources tried in order; first success wins. Never uses tile.openstreetmap.org.",
         }))
     }
 
-    /// Proxies a single raster tile from CARTO (policy-compliant, OSM ODbL).
-    /// Never uses tile.openstreetmap.org. Cached in-memory (TTL 1h, 1024 entries).
+    /// Proxies a single raster tile (policy-compliant, OSM ODbL).
+    /// Source order: self-hosted (`PINPOINT_TILE_URL`), then the demo
+    /// fallbacks. Never uses tile.openstreetmap.org. Cached in-memory
+    /// (TTL 1h, 1024 entries) with the serving source recorded.
     pub async fn tile(
         axum::extract::Path((z, x, y)): axum::extract::Path<(u32, u32, u32)>,
     ) -> impl IntoResponse {
@@ -263,9 +395,9 @@ pub mod map_handlers {
             )
                 .into_response();
         }
-        let key = (z as u8, x as u8, y as u8);
-        if let Some((bytes, inserted)) = tile_cache().lock().unwrap().get(&key) {
-            if inserted.elapsed() < TILE_TTL {
+        let key = (z, x, y);
+        if let Some(cached) = tile_cache().lock().unwrap().get(&key) {
+            if cached.inserted.elapsed() < TILE_TTL {
                 let mut headers = HeaderMap::new();
                 headers.insert(header::CONTENT_TYPE, "image/png".parse().unwrap());
                 headers.insert(
@@ -276,15 +408,20 @@ pub mod map_handlers {
                     "X-Data-Attribution",
                     "© OpenStreetMap contributors".parse().unwrap(),
                 );
-                return (StatusCode::OK, headers, bytes.clone()).into_response();
+                headers.insert("X-Tile-Source", cached.source.parse().unwrap());
+                return (StatusCode::OK, headers, cached.bytes.clone()).into_response();
             }
         }
         // Try each ODbL-compliant tile source in order; first success wins.
-        // CARTO requires CARTO_API_KEY; Wikimedia and OpenFreeMap need no key.
+        // Public providers are demo fallbacks only (ADR-0011); none needs a key.
         // Never uses tile.openstreetmap.org (OSMF policy).
         let client = match reqwest::Client::builder()
             .timeout(Duration::from_secs(10))
-            .user_agent("PinpointMap/0.2.0 (ODbL tile proxy)")
+            .user_agent(concat!(
+                "Pinpoint/",
+                env!("CARGO_PKG_VERSION"),
+                " (+https://github.com/Prince-of-Nothing/Pinpoint)"
+            ))
             .build()
         {
             Ok(c) => c,
@@ -297,6 +434,55 @@ pub mod map_handlers {
             }
         };
 
+        // Self-hosted tile server (production default). `PINPOINT_TILE_URL`
+        // is a template like `https://tiles.example.com/{z}/{x}/{y}.png`.
+        // Public providers below remain demo fallbacks; ODbL attribution is
+        // returned either way.
+        if let Ok(template) = std::env::var("PINPOINT_TILE_URL") {
+            let t = template.trim();
+            if !t.is_empty() {
+                let url = t
+                    .replace("{z}", &z.to_string())
+                    .replace("{x}", &x.to_string())
+                    .replace("{y}", &y.to_string());
+                if let Ok(resp) = client.get(&url).send().await {
+                    if resp.status().is_success() {
+                        if let Ok(body) = resp.bytes().await {
+                            if !body.is_empty() {
+                                let bytes = body.to_vec();
+                                {
+                                    let mut cache = tile_cache().lock().unwrap();
+                                    if cache.len() >= TILE_CACHE_MAX {
+                                        cache.clear();
+                                    }
+                                    cache.insert(
+                                        key,
+                                        CachedTile {
+                                            bytes: bytes.clone(),
+                                            source: "self-hosted",
+                                            inserted: Instant::now(),
+                                        },
+                                    );
+                                }
+                                let mut headers = HeaderMap::new();
+                                headers.insert(header::CONTENT_TYPE, "image/png".parse().unwrap());
+                                headers.insert(
+                                    header::CACHE_CONTROL,
+                                    "public, max-age=3600".parse().unwrap(),
+                                );
+                                headers.insert(
+                                    "X-Data-Attribution",
+                                    "© OpenStreetMap contributors".parse().unwrap(),
+                                );
+                                headers.insert("X-Tile-Source", "self-hosted".parse().unwrap());
+                                return (StatusCode::OK, headers, bytes).into_response();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         let mut last_error: Option<anyhow::Error> = None;
         for source in TILE_SOURCES {
             let mut url = source
@@ -304,53 +490,68 @@ pub mod map_handlers {
                 .replace("{z}", &z.to_string())
                 .replace("{x}", &x.to_string())
                 .replace("{y}", &y.to_string());
-            if source.requires_api_key {
+            // CARTO accepts keyless requests; the optional key raises limits.
+            if source.name.starts_with("carto") {
                 if let Ok(k) = std::env::var("CARTO_API_KEY") {
                     if !k.trim().is_empty() {
                         url = format!("{}?apikey={}", url, k.trim());
                     }
                 }
-                if !url.contains("apikey=") {
-                    continue;
-                }
             }
-            match client.get(&url).send().await {
-                Ok(resp) if resp.status().is_success() => match resp.bytes().await {
-                    Ok(body) => {
-                        let bytes = body.to_vec();
-                        {
-                            let mut cache = tile_cache().lock().unwrap();
-                            if cache.len() >= TILE_CACHE_MAX {
-                                cache.clear();
+            // Public endpoints rate-limit bursts; one short retry keeps a
+            // 15-tile screenful from falling back to a watermarked provider.
+            let mut attempt = 0u8;
+            loop {
+                match client.get(&url).send().await {
+                    Ok(resp) if resp.status().is_success() => match resp.bytes().await {
+                        Ok(body) => {
+                            let bytes = body.to_vec();
+                            {
+                                let mut cache = tile_cache().lock().unwrap();
+                                if cache.len() >= TILE_CACHE_MAX {
+                                    cache.clear();
+                                }
+                                cache.insert(
+                                    key,
+                                    CachedTile {
+                                        bytes: bytes.clone(),
+                                        source: source.name,
+                                        inserted: Instant::now(),
+                                    },
+                                );
                             }
-                            cache.insert(key, (bytes.clone(), Instant::now()));
+                            let mut headers = HeaderMap::new();
+                            headers.insert(header::CONTENT_TYPE, "image/png".parse().unwrap());
+                            headers.insert(
+                                header::CACHE_CONTROL,
+                                "public, max-age=3600".parse().unwrap(),
+                            );
+                            headers.insert(
+                                "X-Data-Attribution",
+                                "© OpenStreetMap contributors".parse().unwrap(),
+                            );
+                            headers.insert(
+                                "X-Tile-Source",
+                                header::HeaderValue::from_str(source.name).unwrap(),
+                            );
+                            return (StatusCode::OK, headers, bytes).into_response();
                         }
-                        let mut headers = HeaderMap::new();
-                        headers.insert(header::CONTENT_TYPE, "image/png".parse().unwrap());
-                        headers.insert(
-                            header::CACHE_CONTROL,
-                            "public, max-age=3600".parse().unwrap(),
-                        );
-                        headers.insert(
-                            "X-Data-Attribution",
-                            "© OpenStreetMap contributors".parse().unwrap(),
-                        );
-                        headers.insert(
-                            "X-Tile-Source",
-                            header::HeaderValue::from_str(source.name).unwrap(),
-                        );
-                        return (StatusCode::OK, headers, bytes).into_response();
+                        Err(_e) => {
+                            last_error = Some(anyhow::anyhow!("{}: read failed", source.name));
+                        }
+                    },
+                    Ok(resp) => {
+                        last_error = Some(anyhow::anyhow!("{}: {}", source.name, resp.status()));
                     }
                     Err(_e) => {
-                        last_error = Some(anyhow::anyhow!("{}: read failed", source.name));
+                        last_error = Some(anyhow::anyhow!("{}: {}", source.name, _e));
                     }
-                },
-                Ok(resp) => {
-                    last_error = Some(anyhow::anyhow!("{}: {}", source.name, resp.status()));
                 }
-                Err(_e) => {
-                    last_error = Some(anyhow::anyhow!("{}: {}", source.name, _e));
+                attempt += 1;
+                if attempt >= 2 {
+                    break;
                 }
+                tokio::time::sleep(Duration::from_millis(120)).await;
             }
         }
 
@@ -367,6 +568,364 @@ pub mod map_handlers {
         )
             .into_response()
     }
+
+    // -----------------------------------------------------------------------
+    // OSM search / reverse / routing proxies (v1.1)
+    // -----------------------------------------------------------------------
+
+    #[derive(Deserialize)]
+    pub struct SearchParams {
+        q: String,
+        lat: Option<f64>,
+        lon: Option<f64>,
+        limit: Option<usize>,
+    }
+
+    #[derive(Deserialize)]
+    pub struct ReverseParams {
+        lat: f64,
+        lon: f64,
+    }
+
+    #[derive(Deserialize)]
+    pub struct RouteParams {
+        from_lat: f64,
+        from_lon: f64,
+        to_lat: f64,
+        to_lon: f64,
+        mode: Option<String>,
+        alternatives: Option<bool>,
+    }
+
+    type MapCache = HashMap<String, (Value, Instant)>;
+    static MAP_CACHE: OnceLock<Mutex<MapCache>> = OnceLock::new();
+    static ROUTE_PERMITS: OnceLock<tokio::sync::Semaphore> = OnceLock::new();
+    const MAP_CACHE_MAX: usize = 512;
+
+    fn map_cache() -> &'static Mutex<MapCache> {
+        MAP_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+    }
+
+    fn cache_get(key: &str, ttl: Duration) -> Option<Value> {
+        let cache = map_cache().lock().unwrap();
+        let (value, inserted) = cache.get(key)?;
+        if inserted.elapsed() < ttl {
+            Some(value.clone())
+        } else {
+            None
+        }
+    }
+
+    fn cache_put(key: String, value: Value) {
+        let mut cache = map_cache().lock().unwrap();
+        if cache.len() >= MAP_CACHE_MAX {
+            cache.clear();
+        }
+        cache.insert(key, (value, Instant::now()));
+    }
+
+    fn valid_coord(lat: f64, lon: f64) -> bool {
+        lat.is_finite()
+            && lon.is_finite()
+            && (-90.0..=90.0).contains(&lat)
+            && (-180.0..=180.0).contains(&lon)
+    }
+
+    fn parse_mode(mode: Option<&str>) -> Option<TravelMode> {
+        match mode
+            .unwrap_or("driving")
+            .trim()
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "driving" => Some(TravelMode::Driving),
+            "foot" => Some(TravelMode::Foot),
+            "bike" => Some(TravelMode::Bike),
+            _ => None,
+        }
+    }
+
+    fn api_error(status: StatusCode, code: &str, message: &str) -> axum::response::Response {
+        (
+            status,
+            Json(json!({"error": {"code": code, "message": message}})),
+        )
+            .into_response()
+    }
+
+    fn upstream_error(what: &str) -> axum::response::Response {
+        api_error(
+            StatusCode::BAD_GATEWAY,
+            "OSM_UNAVAILABLE",
+            &format!("{what} is unavailable right now. Try again."),
+        )
+    }
+
+    fn distance_m(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
+        let r = 6_371_000.0_f64;
+        let (p1, p2) = (lat1.to_radians(), lat2.to_radians());
+        let dp = (lat2 - lat1).to_radians();
+        let dl = (lon2 - lon1).to_radians();
+        let a = (dp / 2.0).sin().powi(2) + p1.cos() * p2.cos() * (dl / 2.0).sin().powi(2);
+        2.0 * r * a.sqrt().atan2((1.0 - a).sqrt())
+    }
+
+    fn place_json(place: &SearchPlace, bias: Option<(f64, f64)>) -> Value {
+        let distance = bias.map(|(lat, lon)| distance_m(lat, lon, place.latitude, place.longitude));
+        json!({
+            "display_name": place.display_name,
+            "short_name": place.short_name,
+            "latitude": place.latitude,
+            "longitude": place.longitude,
+            "category": place.category,
+            "place_type": place.place_type,
+            "distance_m": distance,
+        })
+    }
+
+    fn route_json(route: &crate::osm::Route) -> Value {
+        let points: Vec<[f64; 2]> = route.points.iter().map(|(lat, lon)| [*lat, *lon]).collect();
+        let steps: Vec<Value> = route
+            .steps
+            .iter()
+            .map(|s| {
+                json!({
+                    "text": s.text,
+                    "distance_m": s.distance_m,
+                    "duration_s": s.duration_s,
+                })
+            })
+            .collect();
+        json!({
+            "distance_m": route.distance_m,
+            "duration_s": route.duration_s,
+            "summary": route.summary,
+            "points": points,
+            "steps": steps,
+        })
+    }
+
+    /// `GET /map/search?q=&lat=&lon=&limit=`
+    pub async fn search(Query(p): Query<SearchParams>) -> axum::response::Response {
+        let q = p.q.trim();
+        let len = q.chars().count();
+        if !(3..=120).contains(&len) {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                "VALIDATION_FAILED",
+                "Search needs 3–120 characters.",
+            );
+        }
+        let bias = match (p.lat, p.lon) {
+            (None, None) => None,
+            (Some(lat), Some(lon)) if valid_coord(lat, lon) => Some((lat, lon)),
+            _ => {
+                return api_error(
+                    StatusCode::BAD_REQUEST,
+                    "VALIDATION_FAILED",
+                    "lat and lon must be a valid pair.",
+                )
+            }
+        };
+        let limit = p.limit.unwrap_or(8);
+        if !(1..=10).contains(&limit) {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                "VALIDATION_FAILED",
+                "limit must be 1–10.",
+            );
+        }
+        let key = format!(
+            "search:{}:{}:{}:{}",
+            q.to_lowercase(),
+            bias.map(|(lat, _)| (lat * 1000.0).round() as i64)
+                .unwrap_or(0),
+            bias.map(|(_, lon)| (lon * 1000.0).round() as i64)
+                .unwrap_or(0),
+            limit
+        );
+        if let Some(value) = cache_get(&key, Duration::from_secs(60)) {
+            return (StatusCode::OK, Json(value)).into_response();
+        }
+        let client = match OsmClient::new() {
+            Ok(c) => c,
+            Err(_) => return upstream_error("Search"),
+        };
+        match client.search(q).await {
+            Ok(items) => {
+                let mut results: Vec<Value> = items.iter().map(|p| place_json(p, bias)).collect();
+                if bias.is_some() {
+                    results.sort_by(|a, b| {
+                        let da = a["distance_m"].as_f64().unwrap_or(f64::MAX);
+                        let db = b["distance_m"].as_f64().unwrap_or(f64::MAX);
+                        da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
+                    });
+                }
+                results.truncate(limit);
+                let value = json!({ "results": results });
+                cache_put(key, value.clone());
+                (StatusCode::OK, Json(value)).into_response()
+            }
+            Err(_) => upstream_error("Search"),
+        }
+    }
+
+    /// `GET /map/reverse?lat=&lon=`
+    pub async fn reverse(Query(p): Query<ReverseParams>) -> axum::response::Response {
+        if !valid_coord(p.lat, p.lon) {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                "VALIDATION_FAILED",
+                "lat and lon must be valid coordinates.",
+            );
+        }
+        let key = format!("reverse:{:.5}:{:.5}", p.lat, p.lon);
+        if let Some(value) = cache_get(&key, Duration::from_secs(600)) {
+            return (StatusCode::OK, Json(value)).into_response();
+        }
+        let client = match OsmClient::new() {
+            Ok(c) => c,
+            Err(_) => return upstream_error("Reverse geocoding"),
+        };
+        match client.reverse(p.lat, p.lon).await {
+            Ok(place) => {
+                let value = place_json(&place, None);
+                cache_put(key, value.clone());
+                (StatusCode::OK, Json(value)).into_response()
+            }
+            Err(_) => upstream_error("Reverse geocoding"),
+        }
+    }
+
+    /// `GET /map/route?from_lat=&from_lon=&to_lat=&to_lon=&mode=&alternatives=`
+    pub async fn route(Query(p): Query<RouteParams>) -> axum::response::Response {
+        if !valid_coord(p.from_lat, p.from_lon) || !valid_coord(p.to_lat, p.to_lon) {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                "VALIDATION_FAILED",
+                "from/to must be valid coordinates.",
+            );
+        }
+        let Some(mode) = parse_mode(p.mode.as_deref()) else {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                "VALIDATION_FAILED",
+                "mode must be driving, foot or bike.",
+            );
+        };
+        if crate::osm::osrm_base_for(mode).is_none() {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                "MODE_UNAVAILABLE",
+                "This routing profile is not configured on this server.",
+            );
+        }
+        let alternatives = p.alternatives.unwrap_or(true);
+        let key = format!(
+            "route:{:.5},{:.5};{:.5},{:.5}:{}:{}",
+            p.from_lat,
+            p.from_lon,
+            p.to_lat,
+            p.to_lon,
+            mode.profile(),
+            alternatives
+        );
+        if let Some(value) = cache_get(&key, Duration::from_secs(300)) {
+            return (StatusCode::OK, Json(value)).into_response();
+        }
+        let permits = ROUTE_PERMITS.get_or_init(|| tokio::sync::Semaphore::new(2));
+        let _permit = match permits.try_acquire() {
+            Ok(p) => p,
+            Err(_) => {
+                return api_error(
+                    StatusCode::TOO_MANY_REQUESTS,
+                    "BUSY",
+                    "Routing is busy, try again.",
+                )
+            }
+        };
+        let client = match OsmClient::new() {
+            Ok(c) => c,
+            Err(_) => return upstream_error("Routing"),
+        };
+        match client
+            .route_alternatives((p.from_lat, p.from_lon), (p.to_lat, p.to_lon), mode)
+            .await
+        {
+            Ok(mut routes) => {
+                if !alternatives {
+                    routes.truncate(1);
+                }
+                if routes.is_empty() {
+                    return api_error(
+                        StatusCode::NOT_FOUND,
+                        "NO_ROUTE",
+                        "No route found between these points.",
+                    );
+                }
+                let value = json!({ "routes": routes.iter().map(route_json).collect::<Vec<_>>() });
+                cache_put(key, value.clone());
+                (StatusCode::OK, Json(value)).into_response()
+            }
+            Err(e) if e.to_string().contains("No route") => api_error(
+                StatusCode::NOT_FOUND,
+                "NO_ROUTE",
+                "No route found between these points.",
+            ),
+            Err(_) => upstream_error("Routing"),
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn mode_parsing_is_strict() {
+            assert!(parse_mode(Some("walk")).is_none());
+            assert_eq!(parse_mode(Some("foot")), Some(TravelMode::Foot));
+            assert_eq!(parse_mode(Some("bike")), Some(TravelMode::Bike));
+            assert_eq!(parse_mode(None), Some(TravelMode::Driving));
+        }
+
+        #[test]
+        fn coordinate_validation_rejects_nan_and_out_of_range() {
+            assert!(valid_coord(47.0, 28.8));
+            assert!(!valid_coord(f64::NAN, 0.0));
+            assert!(!valid_coord(999.0, 0.0));
+            assert!(!valid_coord(0.0, 181.0));
+        }
+
+        #[test]
+        fn place_json_has_all_fields() {
+            let place = SearchPlace {
+                display_name: "Pharmacy, Chișinău".into(),
+                short_name: "Pharmacy".into(),
+                latitude: 47.0,
+                longitude: 28.8,
+                category: "pharmacy".into(),
+                place_type: "chemist".into(),
+            };
+            let value = place_json(&place, Some((47.01, 28.81)));
+            for key in [
+                "display_name",
+                "short_name",
+                "latitude",
+                "longitude",
+                "category",
+                "place_type",
+                "distance_m",
+            ] {
+                assert!(value.get(key).is_some(), "missing {key}");
+            }
+            assert!(value["distance_m"].as_f64().unwrap() > 0.0);
+        }
+
+        #[test]
+        fn upstream_failure_is_502() {
+            assert_eq!(upstream_error("Search").status(), StatusCode::BAD_GATEWAY);
+        }
+    }
 }
 
 /// Error envelope matching the Go API: `{"error": {"code": ..., "message": ...}}`.
@@ -379,3 +938,14 @@ pub fn error_envelope(code: &str, message: &str) -> axum::response::Response {
 }
 
 pub use axum::response::IntoResponse;
+
+#[cfg(test)]
+mod log_tests {
+    use super::*;
+
+    #[test]
+    fn logs_drop_query_strings() {
+        let uri = axum::http::Uri::from_static("/map/route?from_lat=47.0&to_lon=28.8");
+        assert_eq!(loggable_uri(&uri), "/map/route");
+    }
+}

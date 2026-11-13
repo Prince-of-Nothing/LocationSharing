@@ -361,6 +361,10 @@ mod postgres_impl {
                         mfa_last_step: mfa_last_step.max(0) as u64,
                         failed_login_attempts: 0,
                         locked_until: None,
+                        auth_method: "email".into(),
+                        public_key: None,
+                        recovery_code_hash: None,
+                        identity_subject: None,
                     },
                 ))
             })

@@ -1,6 +1,8 @@
 //! Locations + shares service binary (pure Rust).
 //! Run: `cargo run --bin pinpoint-locations` (BIND_ADDR default 0.0.0.0:8003).
-use pinpoint_desktop::server::{converge, locations_router, AppState, ServiceKind};
+use pinpoint_desktop::server::{
+    converge, health, locations_router, session_auth, AppState, ServiceKind,
+};
 use std::time::Duration;
 
 #[tokio::main]
@@ -19,9 +21,15 @@ async fn main() -> anyhow::Result<()> {
     println!("pinpoint-locations listening on http://{addr}/");
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     let app_state = state.clone();
+    let session_state = state.clone();
     let app = locations_router()
+        .route("/health", axum::routing::get(health))
         .with_state(state)
-        .layer(axum::middleware::from_fn_with_state(app_state, converge));
+        .layer(axum::middleware::from_fn_with_state(app_state, converge))
+        .layer(axum::middleware::from_fn_with_state(
+            session_state,
+            session_auth,
+        ));
     axum::serve(listener, app).await?;
     Ok(())
 }

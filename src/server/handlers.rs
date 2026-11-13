@@ -8,15 +8,21 @@ use serde_json::{json, Value};
 use std::time::SystemTime;
 
 use super::state::AppState;
+use super::CurrentUser;
 
-pub(crate) fn current_user(store: &crate::server::state::Store) -> Option<crate::models::User> {
-    // Demo auth: first resident is "current" for all self-scoped endpoints.
-    store
-        .users
-        .iter()
-        .find(|u| u.role == "resident")
-        .or(store.users.first())
-        .cloned()
+/// Extract the session user or return a 401 response.
+#[allow(clippy::result_large_err)] // the error is an axum Response; boxing buys nothing here
+pub(crate) fn require_current_user(
+    cu: Option<axum::extract::Extension<CurrentUser>>,
+) -> Result<CurrentUser, axum::response::Response> {
+    use axum::response::IntoResponse;
+    cu.map(|e| e.0).ok_or_else(|| {
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"error": {"code": "UNAUTHENTICATED", "message": "Sign in required."}})),
+        )
+            .into_response()
+    })
 }
 
 pub(crate) fn is_expired(expires_at: &Option<String>) -> bool {
@@ -56,7 +62,7 @@ pub(crate) fn share_json(s: &crate::models::LocationShare) -> Value {
 pub async fn health(State(state): State<AppState>) -> (StatusCode, Json<Value>) {
     let mut checks = serde_json::Map::new();
     checks.insert("status".to_string(), json!("healthy"));
-    checks.insert("version".to_string(), json!("0.2.0"));
+    checks.insert("version".to_string(), json!(env!("CARGO_PKG_VERSION")));
     checks.insert(
         "mode".to_string(),
         json!(if state.pg.is_some() {

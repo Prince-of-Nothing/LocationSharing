@@ -11,11 +11,15 @@
 
 mod friendships;
 mod locations;
+mod sessions;
 mod store;
 mod users;
 
+pub use sessions::session_idle_seconds;
+pub use sessions::StoredSession;
 pub use store::Store;
 
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
@@ -30,6 +34,8 @@ pub struct AppState {
     /// Last successful persist timestamp — used by `/sync-status` to report
     /// replication freshness across replicas.
     pub last_persist_at: Arc<Mutex<Option<SystemTime>>>,
+    /// In-memory session cache (Postgres is authoritative when configured).
+    pub sessions: Arc<Mutex<HashMap<String, StoredSession>>>,
 }
 
 /// Which deployable this `AppState` backs (controls persistence ownership).
@@ -88,6 +94,7 @@ impl AppState {
             pg: None,
             owner,
             last_persist_at: Arc::new(Mutex::new(None)),
+            sessions: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -107,6 +114,7 @@ impl AppState {
                     pg: Some(pool),
                     owner,
                     last_persist_at: Arc::new(Mutex::new(None)),
+                    sessions: Arc::new(Mutex::new(HashMap::new())),
                 };
                 app.init_postgres().await;
                 app

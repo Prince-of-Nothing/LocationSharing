@@ -1,20 +1,25 @@
 //! Locations + shares service handlers.
 use axum::{
-    extract::{Path, State},
+    extract::{Extension, Path, State},
     http::StatusCode,
     Json,
 };
 use serde_json::{json, Value};
 
-use super::handlers::{current_user, share_json};
+use super::handlers::{require_current_user, share_json};
 use super::state::AppState;
-use super::{error_envelope, IntoResponse};
+use super::{error_envelope, CurrentUser, IntoResponse};
 
 /// `POST /locations/shares`.
 pub async fn create_share(
     State(state): State<AppState>,
+    cu: Option<Extension<CurrentUser>>,
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
+    let cu = match require_current_user(cu) {
+        Ok(cu) => cu,
+        Err(resp) => return resp,
+    };
     let friendship_id = body
         .get("friendship_id")
         .and_then(Value::as_i64)
@@ -49,11 +54,11 @@ pub async fn create_share(
         return error_envelope("VALIDATION_FAILED", "friendship_id is required");
     }
     let mut store = state.store.lock().unwrap();
-    if !store
-        .friendships
-        .iter()
-        .any(|f| f.id == friendship_id && f.status == "accepted")
-    {
+    if !store.friendships.iter().any(|f| {
+        f.id == friendship_id
+            && f.status == "accepted"
+            && (f.requester_id == cu.user_id || f.receiver_id == cu.user_id)
+    }) {
         return error_envelope(
             "FRIENDSHIP_NOT_FOUND",
             "Friendship not found or not accepted.",
@@ -61,16 +66,10 @@ pub async fn create_share(
     }
     let id = store.next_share_id;
     store.next_share_id += 1;
-    let owner = store
-        .users
-        .iter()
-        .find(|u| u.role == "resident")
-        .unwrap_or(&store.users[0])
-        .clone();
     let share = crate::models::LocationShare {
         id,
         friendship_id,
-        owner_id: owner.id,
+        owner_id: cu.user_id,
         direction: direction.clone(),
         precision_level: precision.clone(),
         is_active: true,
@@ -83,21 +82,39 @@ pub async fn create_share(
 }
 
 /// `GET /locations/shares`.
-pub async fn list_shares(State(state): State<AppState>) -> impl IntoResponse {
+pub async fn list_shares(
+    State(state): State<AppState>,
+    cu: Option<Extension<CurrentUser>>,
+) -> impl IntoResponse {
+    let cu = match require_current_user(cu) {
+        Ok(cu) => cu,
+        Err(resp) => return resp,
+    };
     let store = state.store.lock().unwrap();
-    let shares: Vec<Value> = store.shares.iter().map(share_json).collect();
-    (StatusCode::OK, Json(shares))
+    let shares: Vec<Value> = store
+        .shares
+        .iter()
+        .filter(|s| s.owner_id == cu.user_id)
+        .map(share_json)
+        .collect();
+    (StatusCode::OK, Json(shares)).into_response()
 }
 
 /// `PATCH /locations/shares/{id}`.
 pub async fn update_share(
     State(state): State<AppState>,
+    cu: Option<Extension<CurrentUser>>,
     Path(id): Path<i64>,
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
+    let cu = match require_current_user(cu) {
+        Ok(cu) => cu,
+        Err(resp) => return resp,
+    };
     let mut store = state.store.lock().unwrap();
     let share = match store.shares.iter_mut().find(|s| s.id == id) {
-        Some(s) => s,
+        Some(s) if s.owner_id == cu.user_id => s,
+        Some(_) => return error_envelope("SHARE_NOT_FOUND", "Share not found."),
         None => return error_envelope("SHARE_NOT_FOUND", "Share not found."),
     };
     if let Some(active) = body.get("is_active").and_then(Value::as_bool) {
@@ -134,13 +151,24 @@ pub async fn update_share(
 }
 
 /// `DELETE /locations/shares/{id}` — revoke a share permanently.
-pub async fn delete_share(State(state): State<AppState>, Path(id): Path<i64>) -> impl IntoResponse {
+pub async fn delete_share(
+    State(state): State<AppState>,
+    cu: Option<Extension<CurrentUser>>,
+    Path(id): Path<i64>,
+) -> impl IntoResponse {
+    let cu = match require_current_user(cu) {
+        Ok(cu) => cu,
+        Err(resp) => return resp,
+    };
     {
         let mut store = state.store.lock().unwrap();
         let pos = match store.shares.iter().position(|s| s.id == id) {
             Some(p) => p,
             None => return error_envelope("SHARE_NOT_FOUND", "Share not found."),
         };
+        if store.shares[pos].owner_id != cu.user_id {
+            return error_envelope("SHARE_NOT_FOUND", "Share not found.");
+        }
         store.shares.remove(pos);
     }
     state.sql_delete_share(id).await;
@@ -150,8 +178,13 @@ pub async fn delete_share(State(state): State<AppState>, Path(id): Path<i64>) ->
 /// `POST /locations/me` — publish current location.
 pub async fn publish_location(
     State(state): State<AppState>,
+    cu: Option<Extension<CurrentUser>>,
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
+    let cu = match require_current_user(cu) {
+        Ok(cu) => cu,
+        Err(resp) => return resp,
+    };
     let lat = body.get("latitude").and_then(Value::as_f64).unwrap_or(0.0);
     let lon = body.get("longitude").and_then(Value::as_f64).unwrap_or(0.0);
     let accuracy = body.get("accuracy").and_then(Value::as_f64);
@@ -162,13 +195,7 @@ pub async fn publish_location(
         );
     }
     let mut store = state.store.lock().unwrap();
-    // Upsert: update or create location for the current demo user.
-    let user_id = store
-        .users
-        .iter()
-        .find(|u| u.role == "resident")
-        .map(|u| u.id)
-        .unwrap_or(1);
+    let user_id = cu.user_id;
     let user_name = store
         .find_user_by_id(user_id)
         .map(|u| u.full_name.clone())
@@ -200,19 +227,22 @@ pub async fn publish_location(
 /// `GET /locations/friends` — locations visible to the caller.
 /// Consent model: returns only locations for users with an accepted
 /// friendship + active share (or all demo users in the demo store).
-pub async fn list_friend_locations(State(state): State<AppState>) -> impl IntoResponse {
+pub async fn list_friend_locations(
+    State(state): State<AppState>,
+    cu: Option<Extension<CurrentUser>>,
+) -> impl IntoResponse {
+    let cu = match require_current_user(cu) {
+        Ok(cu) => cu,
+        Err(resp) => return resp,
+    };
     let store = state.store.lock().unwrap();
+    let me = cu.user_id;
     // Demo store: return all locations (seeded demo + published).
     // Production would filter by accepted friendships + active shares.
     let locations: Vec<Value> = store
         .locations
         .iter()
-        .filter(|l| {
-            let me = current_user(&store).map(|u| u.id).unwrap_or(-1);
-            // Hide my own dot from "friends" only if an explicit row exists;
-            // demo keeps all rows visible for map parity.
-            l.user_id != me || store.locations.len() <= 2
-        })
+        .filter(|l| l.user_id != me || store.locations.len() <= 2)
         .map(|l| {
             let (lat, lon) = match l.precision_level.as_str() {
                 "exact" => (l.latitude, l.longitude),
@@ -236,17 +266,20 @@ pub async fn list_friend_locations(State(state): State<AppState>) -> impl IntoRe
             })
         })
         .collect();
-    (StatusCode::OK, Json(locations))
+    (StatusCode::OK, Json(locations)).into_response()
 }
 
 /// `GET /locations/me` — my own latest published location (or 404).
-pub async fn get_my_location(State(state): State<AppState>) -> impl IntoResponse {
-    let store = state.store.lock().unwrap();
-    let me = match current_user(&store) {
-        Some(u) => u,
-        None => return error_envelope("USER_NOT_FOUND", "User not found."),
+pub async fn get_my_location(
+    State(state): State<AppState>,
+    cu: Option<Extension<CurrentUser>>,
+) -> impl IntoResponse {
+    let cu = match require_current_user(cu) {
+        Ok(cu) => cu,
+        Err(resp) => return resp,
     };
-    match store.locations.iter().find(|l| l.user_id == me.id) {
+    let store = state.store.lock().unwrap();
+    match store.locations.iter().find(|l| l.user_id == cu.user_id) {
         Some(l) => (
             StatusCode::OK,
             Json(json!({
@@ -264,8 +297,13 @@ pub async fn get_my_location(State(state): State<AppState>) -> impl IntoResponse
 /// `POST /locations/check-ins` — create a check-in (manual/scheduled/trip).
 pub async fn create_check_in(
     State(state): State<AppState>,
+    cu: Option<Extension<CurrentUser>>,
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
+    let cu = match require_current_user(cu) {
+        Ok(cu) => cu,
+        Err(resp) => return resp,
+    };
     let lat = body.get("latitude").and_then(Value::as_f64).unwrap_or(0.0);
     let lon = body.get("longitude").and_then(Value::as_f64).unwrap_or(0.0);
     if !(-90.0..=90.0).contains(&lat) || !(-180.0..=180.0).contains(&lon) {
@@ -291,7 +329,7 @@ pub async fn create_check_in(
         );
     }
     let mut store = state.store.lock().unwrap();
-    let me = match current_user(&store) {
+    let me = match store.find_user_by_id(cu.user_id).cloned() {
         Some(u) => u,
         None => return error_envelope("USER_NOT_FOUND", "User not found."),
     };
@@ -361,8 +399,13 @@ pub async fn delete_check_in(
 /// `POST /locations/emergency` — panic share: records an alert + activates all shares.
 pub async fn trigger_emergency(
     State(state): State<AppState>,
+    cu: Option<Extension<CurrentUser>>,
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
+    let cu = match require_current_user(cu) {
+        Ok(cu) => cu,
+        Err(resp) => return resp,
+    };
     let lat = body.get("latitude").and_then(Value::as_f64).unwrap_or(0.0);
     let lon = body.get("longitude").and_then(Value::as_f64).unwrap_or(0.0);
     if !(-90.0..=90.0).contains(&lat) || !(-180.0..=180.0).contains(&lon) {
@@ -372,7 +415,7 @@ pub async fn trigger_emergency(
         );
     }
     let mut store = state.store.lock().unwrap();
-    let me = match current_user(&store) {
+    let me = match store.find_user_by_id(cu.user_id).cloned() {
         Some(u) => u,
         None => return error_envelope("USER_NOT_FOUND", "User not found."),
     };

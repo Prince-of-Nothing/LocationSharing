@@ -93,6 +93,10 @@ impl Store {
             mfa_last_step: 0,
             failed_login_attempts: 0,
             locked_until: None,
+            auth_method: "email".into(),
+            public_key: None,
+            recovery_code_hash: None,
+            identity_subject: None,
         };
         self.next_user_id += 1;
         let alice = User {
@@ -111,6 +115,10 @@ impl Store {
             mfa_last_step: 0,
             failed_login_attempts: 0,
             locked_until: None,
+            auth_method: "email".into(),
+            public_key: None,
+            recovery_code_hash: None,
+            identity_subject: None,
         };
         self.next_user_id += 1;
         let bob = User {
@@ -129,6 +137,10 @@ impl Store {
             mfa_last_step: 0,
             failed_login_attempts: 0,
             locked_until: None,
+            auth_method: "email".into(),
+            public_key: None,
+            recovery_code_hash: None,
+            identity_subject: None,
         };
         self.next_user_id += 1;
 
