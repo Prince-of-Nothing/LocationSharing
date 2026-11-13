@@ -13,6 +13,7 @@ const APP_JS: &str = include_str!("../../web/app/app.js");
 const MAP_JS: &str = include_str!("../../web/app/map.js");
 const NAV_JS: &str = include_str!("../../web/app/nav.js");
 const SHARING_JS: &str = include_str!("../../web/app/sharing.js");
+const APPEARANCE_JS: &str = include_str!("../../web/app/appearance.js");
 const ADMIN_JS: &str = include_str!("../../web/app/admin.js");
 const ADMIN_OVERVIEW_JS: &str = include_str!("../../web/app/admin/overview.js");
 const ADMIN_USERS_JS: &str = include_str!("../../web/app/admin/users.js");
@@ -88,6 +89,10 @@ pub async fn nav_js() -> Response {
 
 pub async fn sharing_js() -> Response {
     module_js(SHARING_JS)
+}
+
+pub async fn appearance_js() -> Response {
+    module_js(APPEARANCE_JS)
 }
 
 fn module_js(content: &'static str) -> Response {

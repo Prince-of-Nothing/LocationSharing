@@ -802,3 +802,68 @@ header { height: 60px; }
   box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.2);
   font-size: 0.68rem;
 }
+
+:root {
+  --map-label-size: 12px;
+  --map-pin-size: 26px;
+}
+
+.pin-friend .pin-dot {
+  width: var(--map-pin-size);
+  height: var(--map-pin-size);
+  font-size: calc(var(--map-pin-size) * 0.28);
+}
+.pin-selected .pin-dot {
+  width: calc(var(--map-pin-size) * 0.77);
+  height: calc(var(--map-pin-size) * 0.77);
+}
+.pin-self .pin-dot {
+  width: calc(var(--map-pin-size) * 0.64);
+  height: calc(var(--map-pin-size) * 0.64);
+}
+.pin-route-end .pin-dot.pin-a,
+.pin-route-end .pin-dot.pin-b,
+.pin-route-end .pin-dot.pin-stop {
+  width: calc(var(--map-pin-size) * 0.92);
+  height: calc(var(--map-pin-size) * 0.92);
+  font-size: calc(var(--map-pin-size) * 0.26);
+}
+.pin-friend .pin-label,
+.pin-selected .pin-label,
+.pin-self .pin-label {
+  font-size: var(--map-label-size);
+}
+.leaflet-tooltip { font-size: var(--map-label-size); }
+
+.route-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin: 0.55rem 0 0.35rem;
+}
+.rp-node {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+.rp-node.next {
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.16);
+}
+.rp-line {
+  flex: 1;
+  height: 2px;
+  background: var(--border);
+}
+.route-next { font-size: 0.8rem; margin-bottom: 0.4rem; }
+
+#map-label-size, #map-icon-size { padding: 0; background: transparent; }

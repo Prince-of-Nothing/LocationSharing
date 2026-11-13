@@ -12,6 +12,13 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [FEATURE] **Map appearance settings**: label size (10–18 px) and icon size
+  (18–40 px) sliders, persisted on the device; pins, labels, tooltips and
+  route markers follow the setting.
+- [FEATURE] **Route progress and next-stop ETA**: A → numbered stops → B
+  progress bar, next stop highlighted, and per-leg distance/time from OSRM
+  (`legs` in the route JSON); route sharing copies a summary or uses the Web
+  Share API, with GPX export as the fallback.
 - [FEATURE] **Route options**: multi-stop routing (add stops by clicking the
   map, numbered markers, remove), GPX 1.1 export from the route panel, and
   avoid-motorway/toll/ferry controls. Avoid needs a self-hosted OSRM profile;

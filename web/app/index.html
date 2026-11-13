@@ -204,10 +204,13 @@
               </div>
             </div>
             <div id="route-summary" class="route-summary muted"></div>
+            <div id="route-progress" class="route-progress hidden" aria-label="Route progress"></div>
+            <div id="route-next" class="route-next muted"></div>
             <div id="route-alternatives" class="route-alternatives"></div>
             <ol id="route-steps" class="route-steps"></ol>
             <div class="row">
               <button type="button" id="route-start">Navigate</button>
+              <button type="button" id="route-share" class="secondary">Share</button>
               <button type="button" id="route-gpx" class="secondary">Export GPX</button>
               <button type="button" id="route-clear" class="secondary">Clear</button>
             </div>
@@ -262,6 +265,17 @@
             <div class="row">
               <button type="button" id="logout-all" class="secondary">Sign out everywhere</button>
             </div>
+          </div>
+
+          <div class="card">
+            <h2>Map appearance</h2>
+            <label>Label size <span id="map-label-value" class="muted"></span>
+              <input id="map-label-size" type="range" min="10" max="18" step="1" value="12" />
+            </label>
+            <label>Icon size <span id="map-icon-value" class="muted"></span>
+              <input id="map-icon-size" type="range" min="18" max="40" step="1" value="26" />
+            </label>
+            <button type="button" id="map-appearance-reset" class="secondary">Reset</button>
           </div>
         </aside>
       </section>

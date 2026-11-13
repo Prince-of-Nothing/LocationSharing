@@ -358,6 +358,7 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
     mapApi.drawRoute(chosen, route.via);
     mapApi.fitRoute(chosen);
     $("route-summary").textContent = `${formatDistance(chosen.distance_m)} · ${formatDuration(chosen.duration_s)} · ${route.mode}`;
+    renderRouteProgress(chosen);
     const steps = $("route-steps");
     steps.innerHTML = "";
     for (const step of chosen.steps || []) {
@@ -369,6 +370,59 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
     document
       .querySelectorAll("#route-alternatives button")
       .forEach((btn, i) => btn.classList.toggle("active", i === index));
+  }
+
+  function renderRouteProgress(chosen) {
+    const wrap = $("route-progress");
+    const nodes = [{ label: "A" }];
+    route.via.forEach((_, index) => nodes.push({ label: String(index + 1) }));
+    nodes.push({ label: "B" });
+    wrap.innerHTML = nodes
+      .map(
+        (node, index) =>
+          `<span class="rp-node">${node.label}</span>${
+            index < nodes.length - 1 ? '<span class="rp-line"></span>' : ""
+          }`,
+      )
+      .join("");
+    wrap.classList.remove("hidden");
+
+    const next = $("route-next");
+    if (route.via.length && chosen.legs?.length) {
+      const leg = chosen.legs[0];
+      next.textContent = `Next stop 1 · ${formatDistance(leg.distance_m)} · ${formatDuration(leg.duration_s)}`;
+      wrap.querySelectorAll(".rp-node")[1]?.classList.add("next");
+    } else {
+      next.textContent = `Destination · ${formatDistance(chosen.distance_m)} · ${formatDuration(chosen.duration_s)}`;
+      wrap.querySelectorAll(".rp-node")[nodes.length - 1]?.classList.add("next");
+    }
+  }
+
+  async function shareRoute() {
+    const chosen = route.routes[route.index];
+    if (!chosen) {
+      setStatus("Plan a route first.", true);
+      return;
+    }
+    const steps = (chosen.steps || [])
+      .slice(0, 10)
+      .map((step, index) => `${index + 1}. ${step.text}`)
+      .join("\n");
+    const text = `Pinpoint route: ${route.origin?.label || "A"} → ${route.destination?.label || "B"}\n${formatDistance(chosen.distance_m)} · ${formatDuration(chosen.duration_s)}\n${steps}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "Pinpoint route", text });
+      } else {
+        await navigator.clipboard.writeText(text);
+        setStatus("Route copied to clipboard.");
+        return;
+      }
+      setStatus("Route shared.");
+    } catch (err) {
+      if (err?.name !== "AbortError") {
+        setStatus("Clipboard blocked — use Export GPX instead.", true);
+      }
+    }
   }
 
   function renderAlternatives() {
@@ -471,6 +525,8 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
       input.checked = false;
     });
     $("route-stops").innerHTML = "";
+    $("route-progress").classList.add("hidden");
+    $("route-next").textContent = "";
     mapApi.clearRoute();
     routePanel.classList.add("hidden");
     $("route-steps").innerHTML = "";
@@ -682,6 +738,7 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
     });
   });
   $("route-gpx").addEventListener("click", downloadGpx);
+  $("route-share").addEventListener("click", shareRoute);
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {

@@ -129,6 +129,7 @@ async fn admin_assets_are_served() {
         "/admin/users.js",
         "/admin/placeholder.js",
         "/sharing.js",
+        "/appearance.js",
     ] {
         let resp = app
             .clone()

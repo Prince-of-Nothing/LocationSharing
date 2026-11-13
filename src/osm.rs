@@ -115,12 +115,19 @@ pub struct RouteStep {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct RouteLeg {
+    pub distance_m: f64,
+    pub duration_s: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Route {
     pub points: Vec<(f64, f64)>,
     pub distance_m: f64,
     pub duration_s: f64,
     pub steps: Vec<RouteStep>,
     pub summary: String,
+    pub legs: Vec<RouteLeg>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -201,6 +208,10 @@ struct OsrmRoute {
 struct OsrmLeg {
     #[serde(default)]
     summary: String,
+    #[serde(default)]
+    distance: f64,
+    #[serde(default)]
+    duration: f64,
     #[serde(default)]
     steps: Vec<OsrmStep>,
 }
@@ -499,6 +510,14 @@ fn route_from_osrm(r: OsrmRoute) -> Route {
         .first()
         .map(|l| l.summary.clone())
         .unwrap_or_default();
+    let legs: Vec<RouteLeg> = r
+        .legs
+        .iter()
+        .map(|l| RouteLeg {
+            distance_m: l.distance,
+            duration_s: l.duration,
+        })
+        .collect();
     let steps: Vec<RouteStep> = r
         .legs
         .into_iter()
@@ -515,6 +534,7 @@ fn route_from_osrm(r: OsrmRoute) -> Route {
         duration_s: r.duration,
         steps,
         summary,
+        legs,
     }
 }
 
@@ -725,6 +745,7 @@ mod tests {
             duration_s: 900.0,
             steps: vec![],
             summary: "Main".into(),
+            legs: vec![],
         };
         let gpx = route_to_gpx(&route, "Cafe & <Bar>");
         assert!(gpx.contains("<gpx version=\"1.1\""));

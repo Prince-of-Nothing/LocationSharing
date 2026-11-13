@@ -152,6 +152,7 @@ pub fn router(state: AppState) -> Router {
         .route("/map.js", get(web_handlers::map_js))
         .route("/nav.js", get(web_handlers::nav_js))
         .route("/sharing.js", get(web_handlers::sharing_js))
+        .route("/appearance.js", get(web_handlers::appearance_js))
         .route("/admin.js", get(web_handlers::admin_js))
         .route("/admin/overview.js", get(web_handlers::admin_overview_js))
         .route("/admin/users.js", get(web_handlers::admin_users_js))
@@ -761,12 +762,23 @@ pub mod map_handlers {
                 })
             })
             .collect();
+        let legs: Vec<Value> = route
+            .legs
+            .iter()
+            .map(|leg| {
+                json!({
+                    "distance_m": leg.distance_m,
+                    "duration_s": leg.duration_s,
+                })
+            })
+            .collect();
         json!({
             "distance_m": route.distance_m,
             "duration_s": route.duration_s,
             "summary": route.summary,
             "points": points,
             "steps": steps,
+            "legs": legs,
         })
     }
 

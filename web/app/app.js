@@ -5,6 +5,7 @@ import { createMap } from "./map.js";
 import { initNavigation } from "./nav.js";
 import { createAdminConsole } from "./admin.js";
 import { initSharing } from "./sharing.js";
+import { initAppearance } from "./appearance.js";
 
 const state = {
   csrf: null,
@@ -552,6 +553,8 @@ drawerToggle.addEventListener("click", () => {
 });
 
 // Initial session check (cookie may already be valid).
+initAppearance();
+
 (async () => {
   try {
     const me = await api("/api/v1/auth/me");
