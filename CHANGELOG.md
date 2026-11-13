@@ -11,6 +11,8 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+
+## [1.1.0] - 2026-11-13
 ### Added
 - [FEATURE] **Export and hand-off to other maps**: place/route links for
   Google Maps and Organic Maps, Magic Earth `magicearth://` links

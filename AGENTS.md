@@ -2,7 +2,7 @@
 
 ## Repo shape (active — Rust only)
 
-- **Rust multiplatform client** (root crate `pinpoint-desktop` v1.0.0):
+- **Rust multiplatform client** (root crate `pinpoint-desktop` v1.1.0):
   `src/lib.rs` (portable core) + `src/main.rs` (desktop), eframe/egui UI +
   `reqwest`. One codebase for desktop / Android (`cargo-apk`) / iOS
   (`cargo-xcodebuild`) / wasm stub — see `docs/adr/0007-rust-multiplatform.md`.
@@ -82,7 +82,7 @@ All platform code lives in `src/platform.rs`; all OS branches are there.
 - `src/i18n.rs` — 79-language registry + `t()` + auto-detect.
 - `src/security/` — one mechanism per file (validation, rate_limit, encryption, audit, session, signing, mfa, password).
 - `src/patterns/` — Repository (InMemory + Postgres), Strategy, Command, State, Observer, Factory, Decorator, Proxy.
-- `src/server/` — Axum services: `mod.rs` (routers, /health, convergence middleware), `state/` (mod, store facade, users, friendships, locations), `*_handlers.rs`, `migrations.rs` (v1–v12).
+- `src/server/` — Axum services: `mod.rs` (routers, /health, convergence middleware), `state/` (mod, store facade, users, friendships, locations, sessions), `*_handlers.rs`, `migrations.rs` (v1–14).
 - `src/webapp/` — portable web clients (admin, kiosk, view-model).
 - `src/mobile/` — platform adapters (android, ios).
 - `src/bin/` — one binary per deployable.
