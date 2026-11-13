@@ -12,6 +12,18 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [FEATURE] **Headless Alice/Bob demo clients**: `pinpoint-demo-client` signs in
+  through the API and publishes locations on an interval, so the demo runs the
+  two accounts as real client containers (`docker compose --profile demo up
+  alice bob`) instead of server-side seed rows. Adds an explicit exact-host
+  `PINPOINT_ALLOW_PLAINTEXT_HOSTS` opt-in for internal container DNS; HTTPS
+  remains the default.
+- [FEATURE] **Diagnostics and audit split ports**: `pinpoint-diag` on 8005
+  ingests PII-free, user-initiated reports (category + message + public
+  handle only), and `pinpoint-admin` on 8006 serves the role-gated admin API.
+  Migration 15 adds `pinpoint_diagnostic_reports`, append-only
+  `pinpoint_admin_audit` and `users.created_at`; the admin console now has
+  real Diagnostics (triage) and Audit modules instead of placeholders.
 - [FEATURE] **Generated public usernames and private profiles**: every account
   gets a stable handle such as `calm-otter-42`; friends add each other by exact
   username, pending requests show handles only, and real names/emails are

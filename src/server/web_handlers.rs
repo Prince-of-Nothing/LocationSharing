@@ -17,7 +17,8 @@ const APPEARANCE_JS: &str = include_str!("../../web/app/appearance.js");
 const ADMIN_JS: &str = include_str!("../../web/app/admin.js");
 const ADMIN_OVERVIEW_JS: &str = include_str!("../../web/app/admin/overview.js");
 const ADMIN_USERS_JS: &str = include_str!("../../web/app/admin/users.js");
-const ADMIN_PLACEHOLDER_JS: &str = include_str!("../../web/app/admin/placeholder.js");
+const ADMIN_DIAGNOSTICS_JS: &str = include_str!("../../web/app/admin/diagnostics.js");
+const ADMIN_AUDIT_JS: &str = include_str!("../../web/app/admin/audit.js");
 const APP_CSS: &str = include_str!("../../web/app/app.css");
 const FAVICON: &str = include_str!("../../web/app/favicon.svg");
 const LEAFLET_JS: &str = include_str!("../../web/app/vendor/leaflet.js");
@@ -116,8 +117,12 @@ pub async fn admin_users_js() -> Response {
     module_js(ADMIN_USERS_JS)
 }
 
-pub async fn admin_placeholder_js() -> Response {
-    module_js(ADMIN_PLACEHOLDER_JS)
+pub async fn admin_diagnostics_js() -> Response {
+    module_js(ADMIN_DIAGNOSTICS_JS)
+}
+
+pub async fn admin_audit_js() -> Response {
+    module_js(ADMIN_AUDIT_JS)
 }
 
 pub async fn app_css() -> Response {

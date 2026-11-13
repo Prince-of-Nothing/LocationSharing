@@ -35,6 +35,15 @@ pub(crate) fn is_expired(expires_at: &Option<String>) -> bool {
     }
 }
 
+pub(crate) fn not_found(code: &str, message: &str) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    (
+        StatusCode::NOT_FOUND,
+        Json(json!({"error": {"code": code, "message": message}})),
+    )
+        .into_response()
+}
+
 pub(crate) fn user_json(u: &crate::models::User) -> Value {
     json!({
         "id": u.id,

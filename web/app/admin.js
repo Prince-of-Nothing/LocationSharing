@@ -4,28 +4,12 @@
 
 import { overviewModule } from "./admin/overview.js";
 import { usersModule } from "./admin/users.js";
-import { createPlaceholderModule } from "./admin/placeholder.js";
+import { diagnosticsModule } from "./admin/diagnostics.js";
+import { auditModule } from "./admin/audit.js";
 
 const $ = (id) => document.getElementById(id);
 
-const BUILTIN = [
-  overviewModule,
-  usersModule,
-  createPlaceholderModule({
-    id: "diagnostics",
-    title: "Diagnostics",
-    order: 30,
-    description:
-      "Diagnostic reports will appear here once the dedicated ingestion port and table are wired.",
-  }),
-  createPlaceholderModule({
-    id: "audit",
-    title: "Audit",
-    order: 40,
-    description:
-      "Admin actions (role changes, deletions, report triage) will be listed here with actor and timestamp.",
-  }),
-];
+const BUILTIN = [overviewModule, usersModule, diagnosticsModule, auditModule];
 
 export function createAdminConsole({ api, setStatus, getUser }) {
   const overlay = $("admin-panel");

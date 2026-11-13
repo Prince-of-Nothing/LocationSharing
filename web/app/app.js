@@ -557,6 +557,26 @@ $("friend-form").addEventListener("submit", async (e) => {
   await sendFriendRequest($("friend-username").value.trim());
 });
 
+$("diagnostic-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const message = $("diagnostic-message").value.trim();
+  if (!message) return;
+  try {
+    const report = await api("/api/v1/diagnostics/report", {
+      method: "POST",
+      body: {
+        category: $("diagnostic-category").value,
+        message,
+        platform: "web",
+      },
+    });
+    $("diagnostic-message").value = "";
+    setStatus(`Report #${report.id} sent. Thank you.`);
+  } catch (err) {
+    setStatus(err.message, true);
+  }
+});
+
 $("locate-button").addEventListener("click", async () => {
   try {
     const fix = await ensureMap().locate();

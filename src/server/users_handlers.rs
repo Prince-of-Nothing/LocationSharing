@@ -6,8 +6,8 @@ use axum::{
 };
 use serde_json::{json, Value};
 
-use super::admin_handlers::require_admin;
-use super::handlers::{require_current_user, user_json};
+use super::admin_handlers::{record_admin_action, require_admin};
+use super::handlers::{not_found, require_current_user, user_json};
 use super::state::AppState;
 use super::usernames::{find_user_by_username, public_json, username_for};
 use super::{error_envelope, CurrentUser, IntoResponse};
@@ -23,14 +23,6 @@ fn friend_json(u: &crate::models::User) -> Value {
         "email": u.email,
         "auth_method": u.auth_method,
     })
-}
-
-fn not_found(code: &str, message: &str) -> axum::response::Response {
-    (
-        StatusCode::NOT_FOUND,
-        Json(json!({"error": {"code": code, "message": message}})),
-    )
-        .into_response()
 }
 
 /// `GET /users/` — admin-only private listing.
@@ -258,12 +250,13 @@ pub async fn update_user(
             );
         }
     }
-    {
+    let (old_role, old_active) = {
         let mut store = state.store.lock().unwrap();
         let user = match store.users.iter_mut().find(|u| u.id == id) {
             Some(u) => u,
             None => return error_envelope("USER_NOT_FOUND", "User not found."),
         };
+        let old = (user.role.clone(), user.is_active);
         if let Some(name) = full_name.as_ref() {
             user.full_name = name.clone();
         }
@@ -276,10 +269,33 @@ pub async fn update_user(
         if let Some(flag) = must_change {
             user.must_change_password = flag;
         }
-    }
+        old
+    };
     state
         .sql_update_user(id, full_name.as_deref(), role.as_deref(), is_active)
         .await;
+    if privileged {
+        if let Some(r) = role.as_deref() {
+            record_admin_action(
+                &state,
+                cu.user_id,
+                "user.role_change",
+                &format!("user:{id}"),
+                Some(&format!("{old_role} -> {r}")),
+            )
+            .await;
+        }
+        if let Some(a) = is_active {
+            record_admin_action(
+                &state,
+                cu.user_id,
+                "user.active_change",
+                &format!("user:{id}"),
+                Some(&format!("{old_active} -> {a}")),
+            )
+            .await;
+        }
+    }
     let store = state.store.lock().unwrap();
     let view = user_json(store.find_user_by_id(id).unwrap());
     (StatusCode::OK, Json(view)).into_response()
@@ -295,7 +311,7 @@ pub async fn delete_user(
         Ok(cu) => cu,
         Err(resp) => return resp,
     };
-    {
+    let handle = {
         let mut store = state.store.lock().unwrap();
         let pos = match store.users.iter().position(|u| u.id == id) {
             Some(p) => p,
@@ -308,6 +324,7 @@ pub async fn delete_user(
                 "Cannot delete your own account via admin endpoint.",
             );
         }
+        let handle = username_for(store.users[pos].id);
         store.users.remove(pos);
         store
             .friendships
@@ -316,9 +333,18 @@ pub async fn delete_user(
         store.locations.retain(|l| l.user_id != id);
         store.check_ins.retain(|c| c.user_id != id);
         store.emergencies.retain(|e| e.user_id != id);
-    }
+        handle
+    };
     // DB mirror (Auth owns wipe-rewrites; delete the row directly).
     state.sql_delete_user(id).await;
+    record_admin_action(
+        &state,
+        cu.user_id,
+        "user.delete",
+        &format!("user:{id}"),
+        Some(&format!("@{handle} deleted")),
+    )
+    .await;
     (StatusCode::OK, Json(json!({"message": "User deleted."}))).into_response()
 }
 
@@ -424,7 +450,7 @@ pub async fn create_friendship(
         requester_name: username_for(requester.id),
         receiver_name: username_for(receiver.id),
         status: "pending".into(),
-        created_at: Some("2026-11-08T12:00:00Z".into()),
+        created_at: Some(chrono::Utc::now().to_rfc3339()),
         responded_at: None,
     };
     store.friendships.push(friendship.clone());
@@ -493,7 +519,7 @@ pub async fn respond_friendship(
         "reject" => "rejected".into(),
         _ => return error_envelope("VALIDATION_FAILED", "action must be accept or reject"),
     };
-    friendship.responded_at = Some("2026-11-08T12:00:00Z".into());
+    friendship.responded_at = Some(chrono::Utc::now().to_rfc3339());
     let resp = json!({
         "id": friendship.id,
         "requester_id": friendship.requester_id,

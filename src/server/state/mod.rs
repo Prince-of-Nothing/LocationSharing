@@ -9,6 +9,7 @@
 
 #![allow(clippy::type_complexity, clippy::field_reassign_with_default)]
 
+mod diagnostics;
 mod friendships;
 mod locations;
 mod sessions;
@@ -47,6 +48,10 @@ pub enum ServiceKind {
     Users,
     Locations,
     MapOnly,
+    /// Diagnostics ingestion service (port 8005): reports only.
+    Diag,
+    /// Admin API service (port 8006): users, audit, report triage.
+    Admin,
 }
 
 impl ServiceKind {
@@ -68,6 +73,12 @@ impl ServiceKind {
     pub fn owns_emergencies(self) -> bool {
         matches!(self, Self::All | Self::Locations)
     }
+    pub fn owns_reports(self) -> bool {
+        matches!(self, Self::All | Self::Diag | Self::Admin)
+    }
+    pub fn owns_audit(self) -> bool {
+        matches!(self, Self::All | Self::Admin)
+    }
     pub fn owns_snapshot(self) -> bool {
         matches!(self, Self::All)
     }
@@ -79,6 +90,8 @@ impl ServiceKind {
             Self::Users => 3,
             Self::Locations => 4,
             Self::MapOnly => 5,
+            Self::Diag => 6,
+            Self::Admin => 7,
         }
     }
 }
@@ -161,11 +174,14 @@ impl AppState {
         store.next_share_id = 1;
         store.next_check_in_id = 1;
         store.next_emergency_id = 1;
+        store.next_report_id = 1;
+        store.next_audit_id = 1;
         if !self.load_users(&mut store).await {
             return false;
         }
         self.load_friendships(&mut store).await;
         self.load_locations_domain(&mut store).await;
+        self.load_diagnostics(&mut store).await;
         *self.store.lock().unwrap() = store;
         true
     }
@@ -218,6 +234,18 @@ impl AppState {
                 .execute(&mut *tx)
                 .await;
         }
+        if self.owner.owns_reports() {
+            let _ = sqlx::query("UPDATE pinpoint_counters SET next_report_id=$1 WHERE id=1")
+                .bind(store.next_report_id)
+                .execute(&mut *tx)
+                .await;
+        }
+        if self.owner.owns_audit() {
+            let _ = sqlx::query("UPDATE pinpoint_counters SET next_audit_id=$1 WHERE id=1")
+                .bind(store.next_audit_id)
+                .execute(&mut *tx)
+                .await;
+        }
         let _ = tx.commit().await;
         *self.last_persist_at.lock().unwrap() = Some(SystemTime::now());
     }
@@ -249,6 +277,13 @@ mod tests {
         assert!(!ServiceKind::MapOnly.owns_users());
         assert!(!ServiceKind::MapOnly.owns_friendships());
         assert!(!ServiceKind::MapOnly.owns_locations());
+        assert!(ServiceKind::Diag.owns_reports());
+        assert!(!ServiceKind::Diag.owns_audit());
+        assert!(!ServiceKind::Diag.owns_users());
+        assert!(ServiceKind::Admin.owns_reports());
+        assert!(ServiceKind::Admin.owns_audit());
+        assert!(!ServiceKind::Admin.owns_users());
+        assert!(!ServiceKind::Admin.owns_snapshot());
         assert!(ServiceKind::All.owns_users());
         assert!(ServiceKind::All.owns_snapshot());
         assert!(!ServiceKind::Auth.owns_snapshot());
@@ -262,6 +297,8 @@ mod tests {
             ServiceKind::Users,
             ServiceKind::Locations,
             ServiceKind::MapOnly,
+            ServiceKind::Diag,
+            ServiceKind::Admin,
         ];
         let keys: Vec<i64> = kinds.iter().map(|k| k.lock_key()).collect();
         let mut deduped = keys.clone();

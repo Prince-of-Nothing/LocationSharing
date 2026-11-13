@@ -18,6 +18,25 @@ verification path.
 | Web (Rust/WASM) | `src/bin/pinpoint-web.rs` + `web/` | `trunk serve --config web/Trunk.toml --release` | Static shell + wasm hook (`cargo check --target wasm32-unknown-unknown` in CI) |
 | Web Admin `weba` | `src/bin/pinpoint-weba.rs` + `web/weba/` | `trunk serve --config web/weba/Trunk.toml --release` | Modular admin console shell; server-side authz authoritative |
 | Web Kiosk `webk` | `src/bin/pinpoint-webk.rs` + `web/webk/` | `trunk serve --config web/webk/Trunk.toml --release` | Modular kiosk/check-in shell; token/share-link adapter points |
+| Headless demo clients | `src/bin/demo_client.rs` (`pinpoint-demo-client`) | `Dockerfile.service` with `BIN=pinpoint-demo-client` | Alice/Bob containers log in via the API and publish locations; compose profile `demo` |
+
+## Headless demo clients
+
+`pinpoint-demo-client` is the honest replacement for server-side seed rows. It
+uses the same public API as every other client:
+
+1. `POST /api/v1/auth/login` with `PINPOINT_EMAIL` / `PINPOINT_PASSWORD`.
+2. `POST /api/v1/locations/me` every `PINPOINT_INTERVAL_SECS` (default 30).
+3. Re-authenticate when a publish fails (expired or admin-revoked session).
+
+```bash
+docker compose --profile demo up -d alice bob
+docker logs -f pinpoint-alice
+```
+
+Only the public handle and demo coordinates are printed — never the password
+or email. Plain HTTP to the internal `gateway` hostname requires the explicit
+`PINPOINT_ALLOW_PLAINTEXT_HOSTS=gateway` opt-in; HTTPS remains the default.
 
 ## Mobile strategy (dual apps)
 

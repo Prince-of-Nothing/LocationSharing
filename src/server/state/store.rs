@@ -9,7 +9,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::models::{CheckIn, EmergencyAlert, FriendLocation, Friendship, LocationShare, User};
+use crate::models::{
+    AdminAuditEntry, CheckIn, DiagnosticReport, EmergencyAlert, FriendLocation, Friendship,
+    LocationShare, User,
+};
 
 /// Per-domain slices of the shared aggregate. `Store` keeps them as
 /// separate fields (not one blob) so handlers and persistence already
@@ -29,6 +32,10 @@ pub struct Store {
     #[serde(default)]
     pub emergencies: Vec<EmergencyAlert>,
     #[serde(default)]
+    pub diagnostic_reports: Vec<DiagnosticReport>,
+    #[serde(default)]
+    pub admin_audit: Vec<AdminAuditEntry>,
+    #[serde(default)]
     pub next_user_id: i64,
     #[serde(default)]
     pub next_friendship_id: i64,
@@ -38,6 +45,10 @@ pub struct Store {
     pub next_check_in_id: i64,
     #[serde(default)]
     pub next_emergency_id: i64,
+    #[serde(default)]
+    pub next_report_id: i64,
+    #[serde(default)]
+    pub next_audit_id: i64,
 }
 
 impl Store {
@@ -48,6 +59,8 @@ impl Store {
             next_share_id: 1,
             next_check_in_id: 1,
             next_emergency_id: 1,
+            next_report_id: 1,
+            next_audit_id: 1,
             ..Default::default()
         };
         s.seed_demo();
@@ -63,11 +76,15 @@ impl Store {
             locations: self.locations.clone(),
             check_ins: self.check_ins.clone(),
             emergencies: self.emergencies.clone(),
+            diagnostic_reports: self.diagnostic_reports.clone(),
+            admin_audit: self.admin_audit.clone(),
             next_user_id: self.next_user_id,
             next_friendship_id: self.next_friendship_id,
             next_share_id: self.next_share_id,
             next_check_in_id: self.next_check_in_id,
             next_emergency_id: self.next_emergency_id,
+            next_report_id: self.next_report_id,
+            next_audit_id: self.next_audit_id,
         }
     }
 

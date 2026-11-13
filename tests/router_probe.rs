@@ -487,6 +487,162 @@ async fn usernames_are_exact_lookup_and_profiles_are_private() {
 }
 
 #[tokio::test]
+async fn diagnostics_reports_and_audit_are_role_gated() {
+    use pinpoint_desktop::server::{router, AppState};
+
+    let state = AppState::new();
+    let (alice_sid, alice_csrf) = state.create_session(2, "email", false).await;
+    let (admin_sid, admin_csrf) = state.create_session(1, "email", false).await;
+    let app = router(state);
+
+    // Signed-in report, with CSRF.
+    let body = serde_json::json!({
+        "category": "map",
+        "message": "Tiles failed near the station",
+        "platform": "web"
+    })
+    .to_string();
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/diagnostics/report")
+                .header("cookie", format!("session_id={alice_sid}"))
+                .header("x-csrf-token", &alice_csrf)
+                .header("content-type", "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+
+    // Anonymous report: accepted, but stored without an account link.
+    let body = serde_json::json!({
+        "category": "other",
+        "message": "Signed-out crash on the login screen",
+        "platform": "web"
+    })
+    .to_string();
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/diagnostics/report")
+                .header("content-type", "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+
+    // Reports are not visible to non-admins.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/admin/diagnostics")
+                .header("cookie", format!("session_id={alice_sid}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+
+    // Admin listing exposes handles only.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/admin/diagnostics")
+                .header("cookie", format!("session_id={admin_sid}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(json["total"], 2);
+    assert_eq!(json["open"], 2);
+    let reports = json["reports"].as_array().unwrap();
+    assert_eq!(reports[0]["reporter"], "anonymous");
+    assert_eq!(reports[1]["reporter"], "bright-badger-2");
+    assert!(reports[1].get("email").is_none());
+    assert!(reports[1].get("latitude").is_none());
+    let report_id = reports[1]["id"].as_i64().unwrap();
+
+    // Triage writes a status and an audit entry.
+    let body = serde_json::json!({ "status": "triaged" }).to_string();
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri(format!("/api/v1/admin/diagnostics/{report_id}"))
+                .header("cookie", format!("session_id={admin_sid}"))
+                .header("x-csrf-token", &admin_csrf)
+                .header("content-type", "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // Deleting an account also lands in the append-only audit trail.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri("/api/v1/admin/users/3")
+                .header("cookie", format!("session_id={admin_sid}"))
+                .header("x-csrf-token", &admin_csrf)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/admin/audit")
+                .header("cookie", format!("session_id={admin_sid}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let actions: Vec<&str> = json["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|e| e["action"].as_str())
+        .collect();
+    assert!(actions.contains(&"diagnostic.triage"));
+    assert!(actions.contains(&"user.delete"));
+    assert!(
+        !json.to_string().contains("bob@example.com"),
+        "audit must not store emails"
+    );
+}
+
+#[tokio::test]
 async fn map_capabilities_lists_driving() {
     let app = pinpoint_desktop::server::map_router()
         .with_state(pinpoint_desktop::server::AppState::new());

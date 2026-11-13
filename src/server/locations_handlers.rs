@@ -232,7 +232,7 @@ pub async fn publish_location(
         loc.latitude = lat;
         loc.longitude = lon;
         loc.accuracy = accuracy;
-        loc.updated_at = "2026-11-08T12:00:00Z".into();
+        loc.updated_at = chrono::Utc::now().to_rfc3339();
     } else {
         store.locations.push(crate::models::FriendLocation {
             user_id,
@@ -240,7 +240,7 @@ pub async fn publish_location(
             latitude: lat,
             longitude: lon,
             precision_level: "exact".into(),
-            updated_at: "2026-11-08T12:00:00Z".into(),
+            updated_at: chrono::Utc::now().to_rfc3339(),
             accuracy,
         });
     }
@@ -371,7 +371,7 @@ pub async fn create_check_in(
         longitude: lon,
         note,
         kind,
-        created_at: "2026-11-08T12:00:00Z".into(),
+        created_at: chrono::Utc::now().to_rfc3339(),
     };
     store.check_ins.push(ci.clone());
     (
@@ -451,7 +451,7 @@ pub async fn trigger_emergency(
     if let Some(loc) = store.locations.iter_mut().find(|l| l.user_id == me.id) {
         loc.latitude = lat;
         loc.longitude = lon;
-        loc.updated_at = "2026-11-08T12:00:00Z".into();
+        loc.updated_at = chrono::Utc::now().to_rfc3339();
     } else {
         store.locations.push(crate::models::FriendLocation {
             user_id: me.id,
@@ -459,7 +459,7 @@ pub async fn trigger_emergency(
             latitude: lat,
             longitude: lon,
             precision_level: "exact".into(),
-            updated_at: "2026-11-08T12:00:00Z".into(),
+            updated_at: chrono::Utc::now().to_rfc3339(),
             accuracy: None,
         });
     }
@@ -476,7 +476,7 @@ pub async fn trigger_emergency(
         user_name: me.full_name.clone(),
         latitude: lat,
         longitude: lon,
-        created_at: "2026-11-08T12:00:00Z".into(),
+        created_at: chrono::Utc::now().to_rfc3339(),
         resolved: false,
     };
     store.emergencies.push(alert.clone());

@@ -34,6 +34,18 @@ name = "pinpoint-map"
 path = "src/bin/map.rs"
 
 [[bin]]
+name = "pinpoint-diag"
+path = "src/bin/diag.rs"
+
+[[bin]]
+name = "pinpoint-admin"
+path = "src/bin/admin.rs"
+
+[[bin]]
+name = "pinpoint-demo-client"
+path = "src/bin/demo_client.rs"
+
+[[bin]]
 name = "pinpoint-web"
 path = "src/bin/pinpoint-web.rs"
 

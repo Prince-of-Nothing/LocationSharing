@@ -19,8 +19,15 @@ production-hardened. See the functional-state matrix and per-item
   list/revoke, logout-all, lockout, TOTP MFA.
 - **Web UI at `/`** — map-first Leaflet UI (locally vendored), place search,
   A→B routing with alternatives/steps (drive; walk/bike when self-hosted),
-  saved/recent places per account, locate-me, plus the 1.0 auth, publish,
-  friends, shares and sessions surfaces in a drawer.
+  saved/recent places per account, locate-me, plus the auth, publish, friends,
+  shares and sessions surfaces in a drawer.
+- **Identity & privacy** — every account has a generated public handle
+  (`calm-otter-42`); friends add by exact username, pending requests show
+  handles only, and real names/emails are revealed to accepted friends.
+- **Admin console** — role-gated modules: overview, all accounts (including
+  anonymous and never-signed-in), role/active changes, safe purge, PII-free
+  diagnostics with triage, and an append-only audit trail. Dedicated services
+  run on 8005 (diagnostics) and 8006 (admin API).
 - **Desktop client** — map, Nominatim search, OSRM routing (drive/walk/bike),
   Overpass POIs, bookmarks, check-ins, emergency, offline tile packs.
 - **Consent model** — directional, precision-scoped (`exact` / `approximate` /
@@ -32,11 +39,9 @@ production-hardened. See the functional-state matrix and per-item
   `PINPOINT_OSRM_URL`, `PINPOINT_OVERPASS_URL`; public providers are demo
   fallbacks only.
 
-**Not in 1.0.0:** Alice/Bob as client containers (still seeded), Postgres
-write-through for users/locations, OAuth/passkeys/magic links, Android/iOS
-builds. (Web search + A→B routing landed after the 1.0.0 tag — see
-`CHANGELOG.md`.) See [`ROADMAP.md`](./ROADMAP.md) and
-[`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
+**Still pending:** Postgres write-through for API-created users/locations,
+OAuth/passkeys/magic links, and Android/iOS builds. See
+[`ROADMAP.md`](./ROADMAP.md) and [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ---
 
@@ -62,12 +67,20 @@ cargo run -- --backend http://127.0.0.1:8000
 
 ```bash
 docker compose up --build -d
-# gateway → http://127.0.0.1:8000/
+# gateway → http://127.0.0.1:8000/  · diagnostics :8005 · admin API :8006
+# Alice/Bob as real headless clients:
+docker compose --profile demo up -d alice bob
 ```
+
+`pinpoint-demo-client` signs in through `/api/v1/auth/login` and publishes
+locations through `/api/v1/locations/me`; it is not a server-side seed. The
+internal gateway name is allowed to use plaintext HTTP only through the
+explicit `PINPOINT_ALLOW_PLAINTEXT_HOSTS=gateway` opt-in (exact hostnames,
+no wildcard); HTTPS remains the default everywhere else.
 
 ### Release artifact
 
-Unzip `dist/pinpoint-1.0.0-windows-x64.zip`, run `pinpoint-server.exe`, open
+Unzip `dist/pinpoint-1.1.0-windows-x64.zip`, run `pinpoint-server.exe`, open
 `http://127.0.0.1:8080/`.
 
 ---

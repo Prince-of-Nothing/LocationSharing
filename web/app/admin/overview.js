@@ -12,7 +12,8 @@ export const overviewModule = {
       ["Sessions", data.sessions],
       ["Friendships", data.friendships],
       ["Shares", data.shares],
-      ["Diagnostics", data.diagnostics],
+      ["Open reports", data.diagnostics],
+      ["Audit events", data.audit_events],
     ];
     el.innerHTML = `
       <p class="muted">All accounts, including anonymous and never-signed-in users. Pinpoint ${escapeHtml(data.version || "")} · in-memory view when no database is configured.</p>
@@ -27,7 +28,7 @@ export const overviewModule = {
           )
           .join("")}
       </div>
-      <p class="muted">Modules are registered independently; diagnostics and audit will appear as they are wired.</p>`;
+      <p class="muted">Diagnostics counts open reports. Audit lists role changes, deletions and triage actions.</p>`;
   },
 };
 

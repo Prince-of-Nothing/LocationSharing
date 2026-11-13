@@ -22,18 +22,37 @@ use url::Url;
 ///
 /// HTTP is allowed only for loopback hosts (`localhost`, `127.0.0.1`,
 /// `::1`) so development keeps working while releases are forced onto TLS.
+/// Internal container deployments may opt in explicitly with
+/// `PINPOINT_ALLOW_PLAINTEXT_HOSTS=gateway,server` (comma-separated exact
+/// hostnames); there is no wildcard and HTTPS remains the default.
 pub fn validate_backend_url(raw: &str) -> anyhow::Result<Url> {
+    let allowed = std::env::var("PINPOINT_ALLOW_PLAINTEXT_HOSTS")
+        .unwrap_or_default()
+        .split(',')
+        .map(|h| h.trim().to_ascii_lowercase())
+        .filter(|h| !h.is_empty())
+        .collect::<Vec<_>>();
+    validate_backend_url_with_allowlist(raw, &allowed)
+}
+
+fn validate_backend_url_with_allowlist(raw: &str, allowed: &[String]) -> anyhow::Result<Url> {
     let url = Url::parse(raw.trim()).map_err(|e| anyhow::anyhow!("invalid backend URL: {e}"))?;
     match url.scheme() {
         "https" => Ok(url),
         "http" => {
+            let host = match url.host() {
+                Some(url::Host::Domain(d)) => d.to_ascii_lowercase(),
+                Some(url::Host::Ipv4(ip)) => ip.to_string(),
+                Some(url::Host::Ipv6(ip)) => ip.to_string(),
+                None => String::new(),
+            };
             let loopback = match url.host() {
                 Some(url::Host::Domain(d)) => d.eq_ignore_ascii_case("localhost"),
                 Some(url::Host::Ipv4(ip)) => ip.is_loopback(),
                 Some(url::Host::Ipv6(ip)) => ip.is_loopback(),
                 None => false,
             };
-            if loopback {
+            if loopback || allowed.iter().any(|h| h == &host) {
                 Ok(url)
             } else {
                 Err(anyhow::anyhow!(
@@ -872,7 +891,7 @@ impl crate::backend::Backend for ApiClient {
 
 #[cfg(test)]
 mod tests {
-    use super::validate_backend_url;
+    use super::validate_backend_url_with_allowlist;
 
     #[test]
     fn accepts_loopback_http_development_urls() {
@@ -883,7 +902,7 @@ mod tests {
             "http://LOCALHOST:8000",
         ] {
             assert!(
-                validate_backend_url(url).is_ok(),
+                validate_backend_url_with_allowlist(url, &[]).is_ok(),
                 "{url} should be accepted"
             );
         }
@@ -893,10 +912,23 @@ mod tests {
     fn accepts_https_everywhere() {
         for url in ["https://api.example.com", "https://10.0.0.5:8443"] {
             assert!(
-                validate_backend_url(url).is_ok(),
+                validate_backend_url_with_allowlist(url, &[]).is_ok(),
                 "{url} should be accepted"
             );
         }
+    }
+
+    // Internal container DNS is an explicit, exact-host opt-in — never a
+    // wildcard and never the default.
+    #[test]
+    fn accepts_explicitly_allowed_plaintext_internal_host() {
+        let allowed = vec!["gateway".to_string()];
+        assert!(validate_backend_url_with_allowlist("http://gateway", &allowed).is_ok());
+        assert!(validate_backend_url_with_allowlist("http://GATEWAY:8000", &allowed).is_ok());
+        assert!(
+            validate_backend_url_with_allowlist("http://db:5432", &allowed).is_err(),
+            "only the listed host may use plaintext"
+        );
     }
 
     // Fail closed: non-loopback plain HTTP is the exact regression this
@@ -909,14 +941,20 @@ mod tests {
             "http://192.168.1.10:8000",
             "http://10.0.2.2:8000",
         ] {
-            assert!(validate_backend_url(url).is_err(), "{url} must be rejected");
+            assert!(
+                validate_backend_url_with_allowlist(url, &[]).is_err(),
+                "{url} must be rejected"
+            );
         }
     }
 
     #[test]
     fn rejects_unsupported_schemes_and_garbage() {
         for url in ["ftp://example.com", "ws://localhost:8000", "not a url", ""] {
-            assert!(validate_backend_url(url).is_err(), "{url} must be rejected");
+            assert!(
+                validate_backend_url_with_allowlist(url, &[]).is_err(),
+                "{url} must be rejected"
+            );
         }
     }
 }

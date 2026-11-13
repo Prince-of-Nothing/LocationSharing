@@ -10,6 +10,20 @@ GRANT ALL ON pinpoint_counters TO pinpoint_auth;
 -- users service (pinpoint-users): profile + friendships (+ own counters).
 GRANT ALL ON pinpoint_users, pinpoint_friendships, pinpoint_state TO pinpoint_users;
 GRANT ALL ON pinpoint_counters TO pinpoint_users;
+-- admin service (pinpoint-admin) reuses the users role and adds observability.
+GRANT SELECT, UPDATE ON pinpoint_sessions TO pinpoint_users;
+GRANT SELECT, INSERT, UPDATE ON pinpoint_diagnostic_reports TO pinpoint_users;
+GRANT SELECT, INSERT ON pinpoint_admin_audit TO pinpoint_users;
+GRANT USAGE, SELECT ON SEQUENCE pinpoint_report_id_seq, pinpoint_audit_id_seq TO pinpoint_users;
+--
+-- diag service (pinpoint-diag): reports only; no credentials, no audit writes.
+GRANT SELECT ON pinpoint_users, pinpoint_friendships, pinpoint_shares,
+      pinpoint_locations, pinpoint_checkins, pinpoint_emergencies,
+      pinpoint_diagnostic_reports TO pinpoint_diag;
+GRANT SELECT, UPDATE ON pinpoint_sessions TO pinpoint_diag;
+GRANT INSERT ON pinpoint_diagnostic_reports TO pinpoint_diag;
+GRANT UPDATE (next_report_id) ON pinpoint_counters TO pinpoint_diag;
+GRANT USAGE, SELECT ON SEQUENCE pinpoint_report_id_seq TO pinpoint_diag;
 --
 -- locations service (pinpoint-locations): shares/locations/check-ins/emergencies;
 -- read-only users+friendships for current_user/consent checks.

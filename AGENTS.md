@@ -82,10 +82,10 @@ All platform code lives in `src/platform.rs`; all OS branches are there.
 - `src/i18n.rs` — 79-language registry + `t()` + auto-detect.
 - `src/security/` — one mechanism per file (validation, rate_limit, encryption, audit, session, signing, mfa, password).
 - `src/patterns/` — Repository (InMemory + Postgres), Strategy, Command, State, Observer, Factory, Decorator, Proxy.
-- `src/server/` — Axum services: `mod.rs` (routers, /health, convergence middleware), `state/` (mod, store facade, users, friendships, locations, sessions), `*_handlers.rs`, `migrations.rs` (v1–14).
+- `src/server/` — Axum services: `mod.rs` (routers, /health, convergence middleware), `state/` (mod, store facade, users, friendships, locations, sessions, diagnostics), `*_handlers.rs`, `migrations.rs` (v1–15).
+- `src/bin/` — one binary per deployable (`pinpoint-server`, `auth`, `users`, `locations`, `map`, `diag` 8005, `admin` 8006).
 - `src/webapp/` — portable web clients (admin, kiosk, view-model).
 - `src/mobile/` — platform adapters (android, ios).
-- `src/bin/` — one binary per deployable.
 
 Additive seams (never rewrite): new table → migration + domain module; new screen → `src/ui/<name>.rs`; new service → router + binary + gateway; new language → `Lang` variant + block; new platform → `platform.rs` only.
 ## Changelog & auto-commit on "push"

@@ -48,6 +48,45 @@ pub struct User {
     pub identity_subject: Option<String>,
 }
 
+/// A user-initiated diagnostic report. Deliberately minimal: category and
+/// message only, plus the public handle of a signed-in reporter. No IP,
+/// location, device identifier or email is stored.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DiagnosticReport {
+    pub id: i64,
+    #[serde(default)]
+    pub user_id: Option<i64>,
+    #[serde(default)]
+    pub username: Option<String>,
+    pub category: String,
+    pub message: String,
+    #[serde(default)]
+    pub app_version: String,
+    #[serde(default)]
+    pub platform: String,
+    #[serde(default = "default_report_status")]
+    pub status: String,
+    pub created_at: String,
+}
+
+fn default_report_status() -> String {
+    "open".to_string()
+}
+
+/// Append-only admin accountability record (who changed what). Stores ids and
+/// public handles only — never email addresses or location data.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AdminAuditEntry {
+    pub id: i64,
+    pub actor_id: i64,
+    pub actor_username: String,
+    pub action: String,
+    pub target: String,
+    #[serde(default)]
+    pub detail: Option<String>,
+    pub created_at: String,
+}
+
 fn default_auth_method() -> String {
     "email".to_string()
 }

@@ -63,6 +63,26 @@ fn admin_user_json(u: &crate::models::User) -> Value {
     })
 }
 
+/// Record an admin action in the append-only audit table (ids/handles only).
+pub(crate) async fn record_admin_action(
+    state: &AppState,
+    actor_id: i64,
+    action: &str,
+    target: &str,
+    detail: Option<&str>,
+) {
+    let actor_username = {
+        let store = state.store.lock().unwrap();
+        store
+            .find_user_by_id(actor_id)
+            .map(|u| super::usernames::username_for(u.id))
+            .unwrap_or_else(|| format!("user-{actor_id}"))
+    };
+    state
+        .record_audit(actor_id, &actor_username, action, target, detail)
+        .await;
+}
+
 /// `GET /api/v1/admin/overview` — counters for the console landing page.
 pub async fn overview(
     State(state): State<AppState>,
@@ -73,13 +93,19 @@ pub async fn overview(
     }
     // A replica may have started before accounts were created elsewhere.
     state.refresh_from_db().await;
-    let (users, active, friendships, shares) = {
+    let (users, active, friendships, shares, diagnostics, audit_events) = {
         let store = state.store.lock().unwrap();
         (
             store.users.len(),
             store.users.iter().filter(|u| u.is_active).count(),
             store.friendships.len(),
             store.shares.len(),
+            store
+                .diagnostic_reports
+                .iter()
+                .filter(|r| r.status == "open")
+                .count(),
+            store.admin_audit.len(),
         )
     };
     let sessions = state.sessions.lock().unwrap().len();
@@ -92,7 +118,8 @@ pub async fn overview(
             "sessions": sessions,
             "friendships": friendships,
             "shares": shares,
-            "diagnostics": 0,
+            "diagnostics": diagnostics,
+            "audit_events": audit_events,
         })),
     )
         .into_response()
@@ -137,19 +164,50 @@ pub async fn update_user(
         }
     }
     let is_active = body.get("is_active").and_then(Value::as_bool);
-    {
+    let changes = {
         let mut store = state.store.lock().unwrap();
         let Some(user) = store.users.iter_mut().find(|u| u.id == id) else {
             return error_envelope("USER_NOT_FOUND", "User not found.");
         };
-        if let Some(role) = role {
-            user.role = role;
+        let old_role = user.role.clone();
+        let old_active = user.is_active;
+        if let Some(role) = role.as_ref() {
+            user.role = role.clone();
         }
         if let Some(active) = is_active {
             user.is_active = active;
         }
-    }
+        (
+            old_role != user.role,
+            old_role,
+            user.role.clone(),
+            old_active != user.is_active,
+            old_active,
+            user.is_active,
+        )
+    };
     state.persist().await;
+    let (role_changed, old_role, new_role, active_changed, old_active, new_active) = changes;
+    if role_changed {
+        record_admin_action(
+            &state,
+            admin.user_id,
+            "user.role_change",
+            &format!("user:{id}"),
+            Some(&format!("{old_role} -> {new_role}")),
+        )
+        .await;
+    }
+    if active_changed {
+        record_admin_action(
+            &state,
+            admin.user_id,
+            "user.active_change",
+            &format!("user:{id}"),
+            Some(&format!("{old_active} -> {new_active}")),
+        )
+        .await;
+    }
     (StatusCode::OK, Json(json!({"message": "User updated."}))).into_response()
 }
 
@@ -170,11 +228,13 @@ pub async fn delete_user(
             "Cannot delete your own account from the admin console.",
         );
     }
-    {
+    let handle = {
         let mut store = state.store.lock().unwrap();
-        if !store.users.iter().any(|u| u.id == id) {
+        let Some(user) = store.users.iter().find(|u| u.id == id) else {
             return error_envelope("USER_NOT_FOUND", "User not found.");
-        }
+        };
+        // Handles only in the audit trail — no email or legal name.
+        let handle = super::usernames::username_for(user.id);
         store.users.retain(|u| u.id != id);
         store
             .friendships
@@ -183,10 +243,18 @@ pub async fn delete_user(
         store.locations.retain(|l| l.user_id != id);
         store.check_ins.retain(|c| c.user_id != id);
         store.emergencies.retain(|e| e.user_id != id);
-    }
+        handle
+    };
     state.delete_user_sessions(id).await;
     state.sql_delete_user(id).await;
     state.persist().await;
-    eprintln!("[AUDIT] admin {} deleted user {}", admin.user_id, id);
+    record_admin_action(
+        &state,
+        admin.user_id,
+        "user.delete",
+        &format!("user:{id}"),
+        Some(&format!("@{handle} deleted")),
+    )
+    .await;
     (StatusCode::OK, Json(json!({"message": "User deleted."}))).into_response()
 }

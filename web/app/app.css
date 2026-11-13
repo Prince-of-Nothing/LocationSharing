@@ -711,8 +711,29 @@ header { height: 60px; }
 }
 .admin-value { display: block; font-size: 1.7rem; font-weight: 800; color: var(--accent); }
 .admin-label { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
-.admin-toolbar { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
+.admin-toolbar { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; align-items: center; }
 .admin-toolbar input { margin: 0; max-width: 360px; }
+.admin-toolbar select { margin: 0; max-width: 180px; }
+.admin-report {
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--panel);
+  padding: 0.75rem 0.9rem;
+  margin-bottom: 0.6rem;
+}
+.admin-report header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+  margin-bottom: 0.4rem;
+}
+.admin-report-message {
+  white-space: pre-wrap;
+  margin: 0.4rem 0 0.6rem;
+  font-size: 0.92rem;
+}
+.admin-report label { font-size: 0.78rem; }
 .admin-table {
   width: 100%;
   border-collapse: collapse;

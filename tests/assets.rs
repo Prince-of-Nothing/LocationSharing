@@ -127,7 +127,8 @@ async fn admin_assets_are_served() {
         "/admin.js",
         "/admin/overview.js",
         "/admin/users.js",
-        "/admin/placeholder.js",
+        "/admin/diagnostics.js",
+        "/admin/audit.js",
         "/sharing.js",
         "/appearance.js",
     ] {

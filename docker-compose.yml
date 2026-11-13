@@ -48,6 +48,7 @@ services:
       AUTH_DB_PWD: ${AUTH_DB_PWD:-pinpoint-auth-dev}
       USERS_DB_PWD: ${USERS_DB_PWD:-pinpoint-users-dev}
       LOCATIONS_DB_PWD: ${LOCATIONS_DB_PWD:-pinpoint-locations-dev}
+      DIAG_DB_PWD: ${DIAG_DB_PWD:-pinpoint-diag-dev}
     volumes:
       - pinpoint-db-data:/var/lib/postgresql/data
       # Per-service least-privilege roles (db/init/01-roles.sh runs once).
@@ -218,6 +219,66 @@ services:
       - "8004"
 
   ###########################################################################
+  # diag — diagnostics ingestion service (:8005), PII-free reports only
+  ###########################################################################
+  diag:
+    build:
+      context: .
+      dockerfile: Dockerfile.service
+      args:
+        BIN: pinpoint-diag
+    image: pinpoint:pinpoint-diag
+    container_name: pinpoint-diag
+    restart: unless-stopped
+    environment:
+      BIND_ADDR: 0.0.0.0:8005
+      INTERNAL_PORT: "8005"
+      DATABASE_URL: postgresql://pinpoint_diag:${DIAG_DB_PWD:-pinpoint-diag-dev}@db:5432/pinpoint
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8005/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - pinpoint-net
+    ports:
+      - "8005:8005"
+
+  ###########################################################################
+  # admin — dedicated admin API (:8006), every route role-gated
+  ###########################################################################
+  admin:
+    build:
+      context: .
+      dockerfile: Dockerfile.service
+      args:
+        BIN: pinpoint-admin
+    image: pinpoint:pinpoint-admin
+    container_name: pinpoint-admin
+    restart: unless-stopped
+    environment:
+      BIND_ADDR: 0.0.0.0:8006
+      INTERNAL_PORT: "8006"
+      DATABASE_URL: postgresql://pinpoint_users:${USERS_DB_PWD:-pinpoint-users-dev}@db:5432/pinpoint
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8006/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - pinpoint-net
+    ports:
+      - "8006:8006"
+
+  ###########################################################################
   # gateway — nginx reverse proxy (single entrypoint for clients)
   # Single container today; `restart: unless-stopped` covers crash recovery.
   # Two gateways behind your own LB is the production step (published port
@@ -238,6 +299,10 @@ services:
       locations:
         condition: service_healthy
       map:
+        condition: service_healthy
+      diag:
+        condition: service_healthy
+      admin:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1/health"]
@@ -271,6 +336,61 @@ services:
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - pinpoint-data:/home/pinpoint/.pinpoint
+    networks:
+      - pinpoint-net
+
+  ###########################################################################
+  # alice / bob — headless demo clients (profile "demo")
+  # They log in and publish real locations through the gateway; no seeding.
+  # Usage: docker compose --profile demo up -d alice bob
+  ###########################################################################
+  alice:
+    profiles: ["demo"]
+    build:
+      context: .
+      dockerfile: Dockerfile.service
+      args:
+        BIN: pinpoint-demo-client
+    image: pinpoint:pinpoint-demo-client
+    container_name: pinpoint-alice
+    restart: unless-stopped
+    environment:
+      PINPOINT_BACKEND: http://gateway
+      PINPOINT_ALLOW_PLAINTEXT_HOSTS: gateway
+      PINPOINT_EMAIL: alice@example.com
+      PINPOINT_PASSWORD: DemoPass123!
+      PINPOINT_LAT: "47.0105"
+      PINPOINT_LON: "28.8638"
+      PINPOINT_ACCURACY: "8"
+      PINPOINT_INTERVAL_SECS: "30"
+    depends_on:
+      gateway:
+        condition: service_healthy
+    networks:
+      - pinpoint-net
+
+  bob:
+    profiles: ["demo"]
+    build:
+      context: .
+      dockerfile: Dockerfile.service
+      args:
+        BIN: pinpoint-demo-client
+    image: pinpoint:pinpoint-demo-client
+    container_name: pinpoint-bob
+    restart: unless-stopped
+    environment:
+      PINPOINT_BACKEND: http://gateway
+      PINPOINT_ALLOW_PLAINTEXT_HOSTS: gateway
+      PINPOINT_EMAIL: bob@example.com
+      PINPOINT_PASSWORD: DemoPass456!
+      PINPOINT_LAT: "47.0056"
+      PINPOINT_LON: "28.8575"
+      PINPOINT_ACCURACY: "10"
+      PINPOINT_INTERVAL_SECS: "30"
+    depends_on:
+      gateway:
+        condition: service_healthy
     networks:
       - pinpoint-net
 

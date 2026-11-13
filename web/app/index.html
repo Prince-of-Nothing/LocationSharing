@@ -283,6 +283,26 @@
           </div>
 
           <div class="card">
+            <h2>Help &amp; diagnostics</h2>
+            <p class="muted">Sends only the category and message — no location, IP address or device ID.</p>
+            <form id="diagnostic-form">
+              <label>Category
+                <select id="diagnostic-category">
+                  <option value="map">Map</option>
+                  <option value="routing">Routing</option>
+                  <option value="connectivity">Connectivity</option>
+                  <option value="crash">Crash</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+              <label>What happened?
+                <textarea id="diagnostic-message" rows="3" maxlength="2000" required></textarea>
+              </label>
+              <button type="submit" class="secondary">Send report</button>
+            </form>
+          </div>
+
+          <div class="card">
             <h2>Active sessions</h2>
             <ul id="sessions-list" class="list"></ul>
             <div class="row">

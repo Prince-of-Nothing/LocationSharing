@@ -97,6 +97,22 @@ pub const MIGRATIONS: &[(u32, &str, &[&str])] = &[
             "CREATE INDEX IF NOT EXISTS idx_sessions_user ON pinpoint_sessions(user_id)",
         ],
     ),
+    (
+        15,
+        "observability",
+        &[
+            "ALTER TABLE pinpoint_users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now()",
+            "CREATE SEQUENCE IF NOT EXISTS pinpoint_report_id_seq",
+            "CREATE SEQUENCE IF NOT EXISTS pinpoint_audit_id_seq",
+            "CREATE TABLE IF NOT EXISTS pinpoint_diagnostic_reports (id BIGINT PRIMARY KEY, user_id BIGINT, username TEXT, category TEXT NOT NULL, message TEXT NOT NULL, app_version TEXT NOT NULL DEFAULT '', platform TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'open', created_at TIMESTAMPTZ NOT NULL DEFAULT now())",
+            "CREATE INDEX IF NOT EXISTS idx_diagnostic_reports_created ON pinpoint_diagnostic_reports(created_at DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_diagnostic_reports_status ON pinpoint_diagnostic_reports(status)",
+            "CREATE TABLE IF NOT EXISTS pinpoint_admin_audit (id BIGINT PRIMARY KEY, actor_id BIGINT NOT NULL, actor_username TEXT NOT NULL, action TEXT NOT NULL, target TEXT NOT NULL, detail TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT now())",
+            "CREATE INDEX IF NOT EXISTS idx_admin_audit_created ON pinpoint_admin_audit(created_at DESC)",
+            "ALTER TABLE pinpoint_counters ADD COLUMN IF NOT EXISTS next_report_id BIGINT DEFAULT 1",
+            "ALTER TABLE pinpoint_counters ADD COLUMN IF NOT EXISTS next_audit_id BIGINT DEFAULT 1",
+        ],
+    ),
 ];
 
 /// Apply all pending migrations (idempotent, recorded in version table).
@@ -176,4 +192,38 @@ pub async fn apply_migrations(pool: &sqlx::PgPool) -> Vec<u32> {
         };
     }
     newly
+}
+
+#[cfg(test)]
+mod tests {
+    use super::MIGRATIONS;
+
+    #[test]
+    fn observability_migration_is_ordered_and_complete() {
+        let (version, _name, statements) = MIGRATIONS
+            .iter()
+            .find(|(_, name, _)| *name == "observability")
+            .expect("migration 15 must exist");
+        assert_eq!(*version, 15);
+        let sql = statements.join("\n");
+        for needle in [
+            "pinpoint_diagnostic_reports",
+            "pinpoint_admin_audit",
+            "created_at",
+            "next_report_id",
+        ] {
+            assert!(sql.contains(needle), "missing {needle}");
+        }
+    }
+
+    #[test]
+    fn migration_versions_are_unique_and_sequential() {
+        for (index, (version, _, _)) in MIGRATIONS.iter().enumerate() {
+            assert_eq!(
+                *version as usize,
+                index + 1,
+                "migration versions must be 1..N"
+            );
+        }
+    }
 }

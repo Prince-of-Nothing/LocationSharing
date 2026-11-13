@@ -20,6 +20,7 @@
 
 mod admin_handlers;
 mod auth_handlers;
+mod diagnostic_handlers;
 mod handlers;
 mod locations_handlers;
 mod migrations;
@@ -148,6 +149,7 @@ pub fn router(state: AppState) -> Router {
         .merge(locations_router())
         .merge(map_router())
         .merge(admin_router())
+        .merge(diagnostic_router())
         .route("/", get(web_handlers::index))
         .route("/app.js", get(web_handlers::app_js))
         .route("/map.js", get(web_handlers::map_js))
@@ -158,9 +160,10 @@ pub fn router(state: AppState) -> Router {
         .route("/admin/overview.js", get(web_handlers::admin_overview_js))
         .route("/admin/users.js", get(web_handlers::admin_users_js))
         .route(
-            "/admin/placeholder.js",
-            get(web_handlers::admin_placeholder_js),
+            "/admin/diagnostics.js",
+            get(web_handlers::admin_diagnostics_js),
         )
+        .route("/admin/audit.js", get(web_handlers::admin_audit_js))
         .route("/app.css", get(web_handlers::app_css))
         .route("/favicon.svg", get(web_handlers::favicon))
         .route("/favicon.ico", get(web_handlers::favicon))
@@ -225,6 +228,25 @@ pub fn admin_router() -> Router<AppState> {
             "/api/v1/admin/users/:id",
             patch(admin_handlers::update_user).delete(admin_handlers::delete_user),
         )
+        .route(
+            "/api/v1/admin/diagnostics",
+            get(diagnostic_handlers::list_reports),
+        )
+        .route(
+            "/api/v1/admin/diagnostics/:id",
+            patch(diagnostic_handlers::update_report),
+        )
+        .route("/api/v1/admin/audit", get(diagnostic_handlers::list_audit))
+}
+
+/// Diagnostics ingestion routes. The dedicated `pinpoint-diag` binary mounts
+/// this on port 8005; the combined server also merges it so the web client can
+/// report on the same origin (same data when Postgres is configured).
+pub fn diagnostic_router() -> Router<AppState> {
+    Router::new().route(
+        "/api/v1/diagnostics/report",
+        post(diagnostic_handlers::submit_report),
+    )
 }
 
 /// Users + friendships service routes. Independently scalable.
