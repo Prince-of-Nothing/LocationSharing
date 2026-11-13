@@ -93,27 +93,57 @@ pub const WIKIMEDIA_BASE: &str = "https://maps.wikimedia.org/osm-intl";
 pub const CARTO_VOYAGER_BASE: &str = "https://a.basemaps.cartocdn.com/rastertiles/voyager";
 
 /// Candidate ODbL-compliant tile URLs for `(z, x, y)` in fallback order.
-/// Never uses `tile.openstreetmap.org` (OSMF policy).
-pub fn tile_candidate_urls(z: u32, x: u32, y: u32) -> Vec<String> {
+/// A self-hosted server (`PINPOINT_TILE_URL`, e.g.
+/// `https://tiles.example.com/{z}/{x}/{y}.png`) is tried first; the public
+/// providers are demo fallbacks. Never uses `tile.openstreetmap.org`.
+/// Candidate tile URLs including a **Pinpoint backend proxy first**, then
+/// `PINPOINT_TILE_URL` (self-hosted), then public demo fallbacks. Routing the
+/// desktop's offline packs through the backend keeps third-party requests on
+/// the server, where the operator can self-host everything (ADR-0011).
+pub fn tile_candidate_urls_via(z: u32, x: u32, y: u32, backend_url: Option<&str>) -> Vec<String> {
+    let mut urls = Vec::new();
+    if let Some(base) = backend_url {
+        let base = base.trim().trim_end_matches('/');
+        if !base.is_empty() {
+            urls.push(format!("{base}/map/tiles/{z}/{x}/{y}"));
+        }
+    }
+    if let Ok(template) = std::env::var("PINPOINT_TILE_URL") {
+        let t = template.trim();
+        if !t.is_empty() {
+            urls.push(
+                t.replace("{z}", &z.to_string())
+                    .replace("{x}", &x.to_string())
+                    .replace("{y}", &y.to_string()),
+            );
+        }
+    }
     let key_param = match std::env::var("CARTO_API_KEY") {
         Ok(k) if !k.trim().is_empty() => format!("?apikey={}", k.trim()),
         _ => String::new(),
     };
-    vec![
+    urls.extend([
         format!("{CARTO_BASE}/{z}/{x}/{y}.png{key_param}"),
         format!("{WIKIMEDIA_BASE}/{z}/{x}/{y}.png"),
         format!("{CARTO_VOYAGER_BASE}/{z}/{x}/{y}.png{key_param}"),
-    ]
+    ]);
+    urls
 }
 
-/// CARTO now requires an API key (free: https://carto.com/basemaps/apikey).
-/// Operators set `CARTO_API_KEY`; otherwise fallback ODbL sources are tried.
-/// Download `tiles` (z/x/y triples, from [`bbox_tiles`] or a bookmark) into
-/// `tiles/{z}/{x}/{y}.png` under the app data dir. Skips files already
-/// present (resume-safe). Returns (downloaded, skipped, failed).
+/// Candidate URLs without a backend hint (self-hosted env + demo fallbacks).
+pub fn tile_candidate_urls(z: u32, x: u32, y: u32) -> Vec<String> {
+    tile_candidate_urls_via(z, x, y, None)
+}
+
+/// Prefer the Pinpoint backend proxy (`backend_url/map/tiles/...`), then
+/// `PINPOINT_TILE_URL`, then demo fallbacks. Download `tiles` (z/x/y triples,
+/// from [`bbox_tiles`] or a bookmark) into `tiles/{z}/{x}/{y}.png` under the
+/// app data dir. Skips files already present (resume-safe).
+/// Returns (downloaded, skipped, failed).
 pub async fn download_pack(
     tiles: &[(u32, u32, u32)],
     client: Option<reqwest::Client>,
+    backend_url: Option<&str>,
 ) -> (usize, usize, usize) {
     let Some(base) = platform::app_data_dir() else {
         return (0, 0, tiles.len());
@@ -123,7 +153,11 @@ pub async fn download_pack(
         Some(c) => c,
         None => match reqwest::Client::builder()
             .timeout(Duration::from_secs(15))
-            .user_agent("PinpointTiles/0.2.0 (offline packs, user-initiated)")
+            .user_agent(concat!(
+                "Pinpoint/",
+                env!("CARGO_PKG_VERSION"),
+                " (+https://github.com/Prince-of-Nothing/Pinpoint)"
+            ))
             .build()
         {
             Ok(c) => c,
@@ -143,7 +177,7 @@ pub async fn download_pack(
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
         let mut fetched_bytes = None;
-        for url in tile_candidate_urls(*z, *x, *y) {
+        for url in tile_candidate_urls_via(*z, *x, *y, backend_url) {
             if let Ok(resp) = client.get(&url).send().await {
                 if resp.status().is_success() {
                     if let Ok(body) = resp.bytes().await {
@@ -207,8 +241,8 @@ fn walk_files(dir: &std::path::Path) -> Result<Vec<PathBuf>, std::io::Error> {
 #[cfg(test)]
 mod tests {
     use super::{
-        bbox_tiles, latlon_to_tile, latlon_to_world_px, tile_candidate_urls, tile_to_latlon,
-        world_px_to_latlon,
+        bbox_tiles, latlon_to_tile, latlon_to_world_px, tile_candidate_urls,
+        tile_candidate_urls_via, tile_to_latlon, world_px_to_latlon,
     };
 
     #[test]
@@ -251,5 +285,15 @@ mod tests {
         for u in &urls {
             assert!(!u.contains("tile.openstreetmap.org"));
         }
+    }
+
+    #[test]
+    fn backend_proxy_is_preferred_for_client_downloads() {
+        let urls = tile_candidate_urls_via(13, 4752, 2880, Some("https://pinpoint.example/"));
+        assert_eq!(
+            urls.first().map(String::as_str),
+            Some("https://pinpoint.example/map/tiles/13/4752/2880"),
+            "desktop packs must go through the Pinpoint server, not a CDN"
+        );
     }
 }
