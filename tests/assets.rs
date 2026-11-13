@@ -98,6 +98,37 @@ async fn csp_is_same_origin_and_blocks_remote_fonts() {
         !csp.contains("https:") && !csp.contains('*'),
         "CSP must not allow remote origins: {csp}"
     );
+
+    let headers = resp.headers();
+    assert_eq!(
+        headers
+            .get("cross-origin-embedder-policy")
+            .and_then(|v| v.to_str().ok()),
+        Some("require-corp")
+    );
+    assert_eq!(
+        headers
+            .get("cross-origin-opener-policy")
+            .and_then(|v| v.to_str().ok()),
+        Some("same-origin")
+    );
+    assert_eq!(
+        headers
+            .get("cross-origin-resource-policy")
+            .and_then(|v| v.to_str().ok()),
+        Some("same-origin")
+    );
+    let permissions = headers
+        .get("permissions-policy")
+        .and_then(|v| v.to_str().ok())
+        .expect("permissions policy");
+    assert!(permissions.contains("geolocation=(self)"));
+    assert!(permissions.contains("camera=()"));
+    assert_eq!(
+        headers.get("cache-control").and_then(|v| v.to_str().ok()),
+        Some("no-store"),
+        "HTML must not be cached"
+    );
 }
 
 #[tokio::test]

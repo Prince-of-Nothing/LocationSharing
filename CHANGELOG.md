@@ -12,6 +12,22 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-11-14
+### Security
+- [SECURITY] **ZAP baseline hardening**: `Permissions-Policy`,
+  `Cross-Origin-Embedder-Policy`, `Cross-Origin-Opener-Policy` and
+  `Cross-Origin-Resource-Policy` are set on every web response. Re-scan is
+  0 high / 0 medium / 0 low; raw evidence in
+  `docs/evidence/zap-baseline.*` and the summary in
+  `docs/evidence/zap-baseline-1.2.1.md`.
+- [SECURITY] Static JS/CSS now use `Cache-Control: no-cache` (revalidate)
+  while HTML keeps `no-store`.
+
+### Fixed
+- [FIX] OS-keychain tests skip cleanly when Windows returns
+  `ERROR_NO_SUCH_LOGON_SESSION` (headless/sessionless runs) instead of
+  failing the suite.
+
 ## [1.2.0] - 2026-11-13
 ### Added
 - [FEATURE] **Headless Alice/Bob demo clients**: `pinpoint-demo-client` signs in
@@ -31,6 +47,24 @@ The per-item flagged list for this release is in
   username, pending requests show handles only, and real names/emails are
   revealed to accepted friends. Numeric user IDs are no longer walkable and
   free-text user search is admin-only.
+
+### Fixed
+- [FIX] **DB bootstrap on Windows checkouts**: `db/init/01-roles.sh` is forced
+  to LF (`*.sh text eol=lf`), so the container entrypoint no longer fails with
+  `set: illegal option -` on a fresh volume.
+- [FIX] **Real timestamps on publish**: location updates, emergency alerts,
+  check-ins and friend requests use the current UTC clock instead of the seed
+  date; friends see a truthful `updated_at`.
+- [FIX] Duplicate friend requests are rejected; unknown/pending profiles no
+  longer leak email or legal names.
+
+### Infrastructure
+- [INFRA] **Postgres verified**: migrations 1–15 applied against live Postgres
+  16; a new user and location survived a restart; 8005 ingestion and 8006
+  triage shared sessions and the report/audit tables.
+- [INFRA] New binaries: `pinpoint-diag`, `pinpoint-admin`,
+  `pinpoint-demo-client`; compose adds diag/admin services, gateway routes and
+  the `demo` profile.
 
 ## [1.1.0] - 2026-11-13
 ### Added
