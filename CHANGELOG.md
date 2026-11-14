@@ -15,6 +15,8 @@ The per-item flagged list for this release is in
 - [FEATURE] Native map proxy: search, reverse geocoding and routing now call the Pinpoint backend with map-centre bias, stops, avoid classes, alternatives and capability gating.
 - [FEATURE] Native route planner: place-based A/B, stops, avoid classes, swap, car/walk/bike, alternatives, step list, route sharing and KML/GeoJSON export.
 - [FEATURE] Per-friend sharing sheet: existing-share lookup, enable/pause, precision, duration presets, incoming status and revoke; accepted friends are listed with Sharing/Remove actions.
+- [FEATURE] Native route following: locate/self marker, 1 Hz fix polling, next-stop advancement and exit navigation.
+- [FIX] Mobile locate no longer publishes a location; the publish sheet is reachable from the drawer and the drawer now has a refresh action.
 - [FEATURE] mobile: Port webapp Kiosk check-in mode & Admin console to Android app and eframe UI, with deep links `pinpoint://kiosk?token=...` and `pinpoint://admin`.
 - [FEATURE] Android APK: cargo-apk 0.10 build with NativeActivity/`android_main`, eframe `android-native-activity`, API 35 manifest metadata and launcher icons; runs on the API 37 x86_64 emulator.
 - [FEATURE] Mobile map-first shell: web-loyal full-bleed dark map with floating search, zoom/locate/menu controls, bottom drawer, publish/place sheets, touch-sized controls, compact login/register forms, live tiles and scrollable locations.

@@ -958,6 +958,12 @@ impl PinpointApp {
         result
     }
 
+    /// Read the current device fix without publishing it. The caller decides
+    /// whether to show a self marker, centre the map, or publish.
+    pub fn locate(&self) -> Option<(f64, f64, f64)> {
+        crate::platform::default_gps_provider().current_position()
+    }
+
     /// Publish the device's current GPS fix (if any). Returns an error
     /// when no GPS provider is available (desktop / unsupported target)
     /// or the fix cannot be obtained, so callers can fall back to a

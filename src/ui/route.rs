@@ -292,6 +292,81 @@ pub fn magic_route_url(plan: &RoutePlan) -> Option<String> {
 }
 
 impl super::PinpointAppUI {
+    /// Poll the platform fix once per second while navigation is active and
+    /// advance the next-stop counter when close enough. The env/file provider
+    /// is the current Android/desktop fallback; a real LocationManager bridge
+    /// can replace it without touching this loop.
+    pub(crate) fn tick_navigation(&mut self) {
+        if !self.route_plan.following {
+            return;
+        }
+        let now = std::time::Instant::now();
+        if self
+            .route_nav_last_fix
+            .map(|last| now.duration_since(last).as_secs_f64() < 1.0)
+            .unwrap_or(false)
+        {
+            return;
+        }
+        self.route_nav_last_fix = Some(now);
+        let Some((lat, lon, accuracy)) = self.app.locate() else {
+            if !self.route_nav_gps_warned {
+                self.route_nav_gps_warned = true;
+                self.app.set_error(Some(
+                    "Navigation is waiting for a GPS fix (no fix available).".to_string(),
+                ));
+            }
+            return;
+        };
+        self.route_nav_gps_warned = false;
+        let data = self.app.data();
+        let mut d = data.lock().unwrap();
+        let (user_id, user_name) = d
+            .user
+            .as_ref()
+            .map(|u| (u.id, u.full_name.clone()))
+            .unwrap_or((0, "Me".to_string()));
+        d.my_location = Some(crate::models::FriendLocation {
+            user_id,
+            user_name,
+            latitude: lat,
+            longitude: lon,
+            precision_level: "exact".to_string(),
+            updated_at: chrono::Utc::now().to_rfc3339(),
+            accuracy: Some(accuracy),
+        });
+        d.map_center_lat = lat;
+        d.map_center_lon = lon;
+        d.map_zoom = d.map_zoom.max(15);
+        drop(d);
+
+        if self.route_plan.next_stop < self.route_plan.stops.len() {
+            if let Some(stop) = self.route_plan.stops.get(self.route_plan.next_stop) {
+                if haversine_m(lat, lon, stop.lat, stop.lon) < 60.0 {
+                    self.route_plan.next_stop += 1;
+                }
+            }
+        }
+    }
+
+    /// Human-readable next-step line for the following banner.
+    pub(crate) fn navigation_status(&self) -> Option<String> {
+        if !self.route_plan.following {
+            return None;
+        }
+        let route = self.route_plan.selected_route()?;
+        let step = route.steps.get(self.route_plan.next_stop);
+        let target = if self.route_plan.next_stop < self.route_plan.stops.len() {
+            format!("stop {}", self.route_plan.next_stop + 1)
+        } else {
+            "destination".to_string()
+        };
+        Some(match step {
+            Some(step) => format!("Next: {} ({})", step.text, target),
+            None => format!("Heading to {target}"),
+        })
+    }
+
     /// Consume one map tap: set B when the route sheet is open, otherwise
     /// reverse-geocode it into the place sheet.
     pub(crate) fn handle_map_click(&mut self, ctx: &egui::Context) {
@@ -527,6 +602,9 @@ impl super::PinpointAppUI {
                                     if let Some(summary) = plan.summary() {
                                         ui.label(RichText::new(summary).size(14.0).strong());
                                     }
+                                    if let Some(status) = self.navigation_status() {
+                                        ui.colored_label(accent, RichText::new(status).size(12.0));
+                                    }
                                     for step in &route.steps {
                                         let distance = step
                                             .distance_m
@@ -540,7 +618,11 @@ impl super::PinpointAppUI {
                                     }
                                 }
                                 ui.horizontal_wrapped(|ui| {
-                                    if ui.button("Navigate").clicked() {
+                                    if plan.following {
+                                        if ui.button("Exit navigation").clicked() {
+                                            plan.following = false;
+                                        }
+                                    } else if ui.button("Navigate").clicked() {
                                         navigate = true;
                                     }
                                     if ui.button("Share").clicked() {

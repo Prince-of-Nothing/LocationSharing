@@ -602,7 +602,7 @@ impl PinpointAppUI {
             data.map_dark = !data.map_dark;
         }
         if locate {
-            self.spawn_action(PendingAction::PublishGpsLocation, ctx);
+            self.spawn_action(PendingAction::Locate, ctx);
         }
         if menu {
             self.mobile_nav_open = !self.mobile_nav_open;

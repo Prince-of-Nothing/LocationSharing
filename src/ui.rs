@@ -128,6 +128,7 @@ enum PendingAction {
         full_name: String,
     },
     PublishGpsLocation,
+    Locate,
     ExportGpx {
         name: String,
     },
@@ -211,6 +212,8 @@ pub struct PinpointAppUI {
     // Route planner
     route_plan: RoutePlan,
     route_result_seq: u64,
+    route_nav_last_fix: Option<std::time::Instant>,
+    route_nav_gps_warned: bool,
     // Per-friend sharing sheet
     share_sheet: Option<share_sheet::ShareSheet>,
     // Mobile shell
@@ -266,6 +269,8 @@ impl PinpointAppUI {
             kiosk_consent_accepted: false,
             route_plan: RoutePlan::default(),
             route_result_seq: 0,
+            route_nav_last_fix: None,
+            route_nav_gps_warned: false,
             share_sheet: None,
             mobile_nav_open: false,
             mobile_publish_open: false,
@@ -509,6 +514,35 @@ impl PinpointAppUI {
                 PendingAction::PublishGpsLocation => {
                     let _ = app.publish_my_location().await;
                 }
+                PendingAction::Locate => match app.locate() {
+                    Some((lat, lon, accuracy)) => {
+                        let data = app.data();
+                        let mut d = data.lock().unwrap();
+                        let (user_id, user_name) = d
+                            .user
+                            .as_ref()
+                            .map(|u| (u.id, u.full_name.clone()))
+                            .unwrap_or((0, "Me".to_string()));
+                        d.my_location = Some(crate::models::FriendLocation {
+                            user_id,
+                            user_name,
+                            latitude: lat,
+                            longitude: lon,
+                            precision_level: "exact".to_string(),
+                            updated_at: chrono::Utc::now().to_rfc3339(),
+                            accuracy: Some(accuracy),
+                        });
+                        d.map_center_lat = lat;
+                        d.map_center_lon = lon;
+                        d.map_zoom = d.map_zoom.max(14);
+                        drop(d);
+                        app.set_notice(Some(format!("Located: {lat:.5}, {lon:.5}")));
+                    }
+                    None => app.set_error(Some(
+                        "Location unavailable — no GPS fix. Set PINPOINT_GPS_FIX or publish manually."
+                            .to_string(),
+                    )),
+                },
                 PendingAction::ExportGpx { name } => {
                     let route = app.data().lock().unwrap().last_route.clone();
                     match route {
@@ -847,6 +881,7 @@ impl PinpointAppUI {
 impl eframe::App for PinpointAppUI {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.sync_route_results();
+        self.tick_navigation();
         if Self::is_compact(ctx) && self.mobile_selected_place.is_none() {
             if let Some(place) = self.app.data().lock().unwrap().selected_place.clone() {
                 self.mobile_selected_place = Some(place);
@@ -886,6 +921,8 @@ impl eframe::App for PinpointAppUI {
             let current = self.app.current_screen();
             let mut chosen: Option<CurrentScreen> = None;
             let mut chosen_lang: Option<Lang> = None;
+            let mut publish_requested = false;
+            let mut refresh_requested = false;
             egui::TopBottomPanel::bottom("mobile_nav")
                 .resizable(false)
                 .exact_height(380.0)
@@ -898,6 +935,14 @@ impl eframe::App for PinpointAppUI {
                     ui.add_space(4.0);
                     egui::ScrollArea::vertical().show(ui, |ui| {
                         ui.heading(i18n::t(lang, key::APP_TITLE));
+                        ui.horizontal_wrapped(|ui| {
+                            if ui.button("Publish location").clicked() {
+                                publish_requested = true;
+                            }
+                            if ui.button("Refresh").clicked() {
+                                refresh_requested = true;
+                            }
+                        });
                         ui.separator();
                         for (screen, key_str) in [
                             (CurrentScreen::Map, key::MAP),
@@ -938,6 +983,15 @@ impl eframe::App for PinpointAppUI {
             }
             if let Some(l) = chosen_lang {
                 self.lang = l;
+            }
+            if publish_requested {
+                self.app.set_screen(CurrentScreen::Map);
+                self.mobile_publish_open = true;
+                self.mobile_nav_open = false;
+            }
+            if refresh_requested {
+                self.spawn_action(PendingAction::RefreshAll, ctx);
+                self.mobile_nav_open = false;
             }
         }
 
