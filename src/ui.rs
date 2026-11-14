@@ -779,6 +779,10 @@ impl eframe::App for PinpointAppUI {
         }
 
         let compact = Self::is_compact(ctx);
+        let auth_screen = matches!(
+            self.app.current_screen(),
+            CurrentScreen::Login | CurrentScreen::Register
+        );
         if compact && self.mobile_nav_open {
             let lang = self.lang;
             let current = self.app.current_screen();
@@ -836,6 +840,56 @@ impl eframe::App for PinpointAppUI {
             }
             if let Some(l) = chosen_lang {
                 self.lang = l;
+            }
+        }
+
+        if compact && !auth_screen && !self.mobile_nav_open {
+            let current = self.app.current_screen();
+            let mut chosen: Option<CurrentScreen> = None;
+            egui::TopBottomPanel::bottom("mobile_tabbar")
+                .resizable(false)
+                .exact_height(58.0)
+                .frame(
+                    egui::Frame::NONE
+                        .fill(Color32::from_rgb(15, 23, 42))
+                        .inner_margin(egui::Margin::symmetric(4, 4)),
+                )
+                .show(ctx, |ui| {
+                    ui.spacing_mut().item_spacing.x = 0.0;
+                    let tab_width = ui.available_width() / 5.0;
+                    ui.horizontal(|ui| {
+                        for (screen, label) in [
+                            (CurrentScreen::Map, "Map"),
+                            (CurrentScreen::Friends, "Friends"),
+                            (CurrentScreen::Sharing, "Share"),
+                            (CurrentScreen::Bookmarks, "Saved"),
+                            (CurrentScreen::Profile, "Me"),
+                        ] {
+                            let selected = current == screen;
+                            let fill = if selected {
+                                Color32::from_rgb(52, 211, 153)
+                            } else {
+                                Color32::from_rgb(15, 23, 42)
+                            };
+                            let text_color = if selected {
+                                Color32::from_rgb(5, 46, 27)
+                            } else {
+                                Color32::from_rgb(229, 231, 235)
+                            };
+                            let button = egui::Button::new(
+                                RichText::new(label).size(12.0).strong().color(text_color),
+                            )
+                            .fill(fill)
+                            .min_size(egui::vec2(tab_width, 46.0))
+                            .corner_radius(egui::CornerRadius::same(10));
+                            if ui.add(button).clicked() {
+                                chosen = Some(screen);
+                            }
+                        }
+                    });
+                });
+            if let Some(screen) = chosen {
+                self.app.set_screen(screen);
             }
         }
 

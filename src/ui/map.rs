@@ -401,8 +401,53 @@ impl PinpointAppUI {
             self.spawn_action(PendingAction::SearchPlaces { query }, ctx);
         }
 
-        // Search results dropdown (web `.search-results`).
+        // Category chips when there are no results (web `.category-chips`).
         let results = self.app.data().lock().unwrap().search_results.clone();
+        if results.is_empty() {
+            let mut chip_query: Option<&'static str> = None;
+            egui::Area::new(egui::Id::new("mobile_map_chips"))
+                .order(egui::Order::Foreground)
+                .fixed_pos(egui::pos2(12.0, top + 64.0))
+                .show(ctx, |ui| {
+                    ui.set_width(width - 24.0);
+                    egui::ScrollArea::horizontal().show(ui, |ui| {
+                        ui.set_width(width - 76.0);
+                        ui.horizontal(|ui| {
+                            for (label, query) in [
+                                ("Food", "restaurant"),
+                                ("Cafe", "cafe"),
+                                ("Fuel", "fuel"),
+                                ("Pharmacy", "pharmacy"),
+                                ("Hospital", "hospital"),
+                                ("Parking", "parking"),
+                                ("ATM", "atm"),
+                                ("Hotel", "hotel"),
+                                ("Park", "park"),
+                            ] {
+                                let button = egui::Button::new(RichText::new(label).size(12.0))
+                                    .fill(panel)
+                                    .stroke(egui::Stroke::new(1.0_f32, border))
+                                    .corner_radius(egui::CornerRadius::same(14))
+                                    .min_size(egui::vec2(0.0, 30.0));
+                                if ui.add(button).clicked() {
+                                    chip_query = Some(query);
+                                }
+                            }
+                        });
+                    });
+                });
+            if let Some(query) = chip_query {
+                self.search_query = query.to_string();
+                self.spawn_action(
+                    PendingAction::SearchPlaces {
+                        query: query.to_string(),
+                    },
+                    ctx,
+                );
+            }
+        }
+
+        // Search results dropdown (web `.search-results`).
         if !results.is_empty() {
             let mut chosen = None;
             egui::Area::new(egui::Id::new("mobile_search_results"))
@@ -453,9 +498,11 @@ impl PinpointAppUI {
         let mut zoom_delta = 0i8;
         let mut locate = false;
         let mut menu = false;
+        let mut toggle_style = false;
+        let map_dark = self.app.data().lock().unwrap().map_dark;
         egui::Area::new(egui::Id::new("mobile_map_controls"))
             .order(egui::Order::Foreground)
-            .fixed_pos(egui::pos2(width - 56.0, top + 78.0))
+            .fixed_pos(egui::pos2(width - 56.0, top + 120.0))
             .show(ctx, |ui| {
                 ui.vertical(|ui| {
                     if ui
@@ -490,6 +537,21 @@ impl PinpointAppUI {
                     }
                     if ui
                         .add(
+                            egui::Button::new(if map_dark { "L" } else { "D" })
+                                .min_size(egui::vec2(40.0, 40.0))
+                                .corner_radius(egui::CornerRadius::same(20)),
+                        )
+                        .on_hover_text(if map_dark {
+                            "Use light map"
+                        } else {
+                            "Use dark map"
+                        })
+                        .clicked()
+                    {
+                        toggle_style = true;
+                    }
+                    if ui
+                        .add(
                             egui::Button::new("☰")
                                 .min_size(egui::vec2(40.0, 40.0))
                                 .corner_radius(egui::CornerRadius::same(20)),
@@ -505,6 +567,11 @@ impl PinpointAppUI {
             let mut data = binding.lock().unwrap();
             let next = (data.map_zoom as i8 + zoom_delta).clamp(2, 18);
             data.map_zoom = next as u8;
+        }
+        if toggle_style {
+            let binding = self.app.data();
+            let mut data = binding.lock().unwrap();
+            data.map_dark = !data.map_dark;
         }
         if locate {
             self.spawn_action(PendingAction::PublishGpsLocation, ctx);

@@ -345,6 +345,9 @@ pub struct AppData {
     pub last_e2e_location_ciphertext: Option<String>,
     /// Resolved kiosk/share-link view model (Kiosk screen).
     pub kiosk_resolved: Option<crate::webapp::kiosk::KioskShareView>,
+    /// Map raster style: false = clean light OSM (Organic/Magic-Earth-like),
+    /// true = the web client's dark treatment.
+    pub map_dark: bool,
 }
 
 #[cfg(test)]

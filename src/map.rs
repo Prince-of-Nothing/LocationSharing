@@ -48,27 +48,39 @@ pub fn project_to_rect(
 }
 
 /// Try to load or retrieve a cached tile texture from disk (`tiles/{z}/{x}/{y}.png`).
-fn load_tile_texture(ctx: &egui::Context, z: u8, x: u32, y: u32) -> Option<TextureHandle> {
-    let id = egui::Id::new(("pinpoint_tile_tex", z, x, y));
+fn load_tile_texture(
+    ctx: &egui::Context,
+    z: u8,
+    x: u32,
+    y: u32,
+    dark: bool,
+) -> Option<TextureHandle> {
+    let id = egui::Id::new(("pinpoint_tile_tex", z, x, y, dark));
     if let Some(handle) = ctx.data_mut(|d| d.get_temp::<TextureHandle>(id)) {
         return Some(handle);
     }
     let path = cached_tile_path(z, x, y)?;
     let bytes = std::fs::read(path).ok()?;
-    let mut img = image::load_from_memory(&bytes).ok()?.to_rgba8();
-    // Match the web's `.tiles-dark`: invert, rotate hue by 180° (restoring
-    // the original road/water/park hues), dim and soften contrast.
-    for pixel in img.pixels_mut() {
-        let [r, g, b, a] = pixel.0;
-        pixel.0 = [255 - r, 255 - g, 255 - b, a];
-    }
-    let img = image::imageops::huerotate(&img, 180);
-    let img = image::imageops::brighten(&img, -20);
-    let img = image::imageops::contrast(&img, -5.0);
+    let img = image::load_from_memory(&bytes).ok()?.to_rgba8();
+    // Dark mode matches the web's `.tiles-dark`: invert, rotate hue by 180°
+    // (restoring road/water/park hues), dim and soften contrast. Light mode
+    // keeps the clean OSM raster (Organic/Magic-Earth-like).
+    let img = if dark {
+        let mut img = img;
+        for pixel in img.pixels_mut() {
+            let [r, g, b, a] = pixel.0;
+            pixel.0 = [255 - r, 255 - g, 255 - b, a];
+        }
+        let img = image::imageops::huerotate(&img, 180);
+        let img = image::imageops::brighten(&img, -20);
+        image::imageops::contrast(&img, -5.0)
+    } else {
+        img
+    };
     let size = [img.width() as usize, img.height() as usize];
     let color_img = egui::ColorImage::from_rgba_unmultiplied(size, img.as_raw());
     let handle = ctx.load_texture(
-        format!("tile_{z}_{x}_{y}"),
+        format!("tile_{z}_{x}_{y}_{}", if dark { "dark" } else { "light" }),
         color_img,
         egui::TextureOptions::LINEAR,
     );
@@ -244,7 +256,7 @@ pub fn render_map_with(
                     Vec2::splat(TILE_SIZE as f32),
                 );
 
-                if let Some(tex) = load_tile_texture(ui.ctx(), z, utx, uty) {
+                if let Some(tex) = load_tile_texture(ui.ctx(), z, utx, uty, state.map_dark) {
                     painter.image(
                         tex.id(),
                         tile_rect,
@@ -271,6 +283,66 @@ pub fn render_map_with(
                         Color32::from_rgb(71, 85, 105),
                     );
                 }
+            }
+        }
+
+        // Route line (A → stops → B), drawn under the pins.
+        if let Some(route) = &state.last_route {
+            let points: Vec<Pos2> = route
+                .points
+                .iter()
+                .map(|(lat, lon)| {
+                    project_to_rect(
+                        *lat,
+                        *lon,
+                        state.map_center_lat,
+                        state.map_center_lon,
+                        z,
+                        map_rect,
+                    )
+                })
+                .collect();
+            if points.len() > 1 {
+                painter.add(egui::Shape::line(
+                    points.clone(),
+                    Stroke::new(8.0_f32, Color32::from_rgb(2, 6, 23)),
+                ));
+                painter.add(egui::Shape::line(
+                    points,
+                    Stroke::new(4.0_f32, Color32::from_rgb(52, 211, 153)),
+                ));
+            }
+            for (index, (lat, lon)) in route.points.iter().enumerate() {
+                let is_endpoint = index == 0 || index + 1 == route.points.len();
+                if !is_endpoint {
+                    continue;
+                }
+                let p = project_to_rect(
+                    *lat,
+                    *lon,
+                    state.map_center_lat,
+                    state.map_center_lon,
+                    z,
+                    map_rect,
+                );
+                if !map_rect.expand(20.0).contains(p) {
+                    continue;
+                }
+                let label = if index == 0 { "A" } else { "B" };
+                let color = if index == 0 {
+                    Color32::from_rgb(52, 211, 153)
+                } else {
+                    Color32::from_rgb(248, 113, 113)
+                };
+                painter.circle_filled(p, 12.0, color);
+                painter.circle_stroke(p, 12.0, Stroke::new(2.0_f32, Color32::BLACK));
+                painter.text(
+                    p,
+                    egui::Align2::CENTER_CENTER,
+                    label,
+                    egui::FontId::proportional(11.0),
+                    Color32::from_rgb(5, 46, 27),
+                );
             }
         }
 
