@@ -24,7 +24,7 @@ impl Default for MobileLaunchConfig {
     fn default() -> Self {
         Self {
             backend: BackendConfig::from_env(),
-            offline_first: true,
+            offline_first: false,
             app_kind: crate::webapp::WebAppKind::Web,
         }
     }
@@ -81,9 +81,7 @@ pub enum MobileDeepLink {
     /// App-internal route (`pinpoint://map`, `pinpoint://emergency`, etc.).
     Screen(crate::app::CurrentScreen),
     /// Kiosk share-link deep link (`pinpoint://kiosk?token=XYZ` or `pinpoint://share?token=XYZ`).
-    Kiosk {
-        token: Option<String>,
-    },
+    Kiosk { token: Option<String> },
 }
 
 impl MobileDeepLink {
@@ -153,9 +151,12 @@ mod tests {
     use crate::app::CurrentScreen;
 
     #[test]
-    fn mobile_launch_config_defaults_to_offline_first() {
+    fn mobile_launch_config_defaults_to_online_first() {
         let cfg = MobileLaunchConfig::default();
-        assert!(cfg.offline_first);
+        assert!(
+            !cfg.offline_first,
+            "mobile should use the live backend and cached tiles when available"
+        );
         assert_eq!(cfg.app_kind, crate::webapp::WebAppKind::Web);
         let label = mobile_backend_label(&cfg.backend);
         assert!(label.contains('@'));

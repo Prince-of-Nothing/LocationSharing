@@ -52,7 +52,11 @@ fn validate_backend_url_with_allowlist(raw: &str, allowed: &[String]) -> anyhow:
                 Some(url::Host::Ipv6(ip)) => ip.is_loopback(),
                 None => false,
             };
-            if loopback || allowed.iter().any(|h| h == &host) {
+            // Android emulator host loopback. Debug-only: release APKs must
+            // use HTTPS (the manifest also disables cleartext in release).
+            let android_emulator =
+                cfg!(all(target_os = "android", debug_assertions)) && host == "10.0.2.2";
+            if loopback || android_emulator || allowed.iter().any(|h| h == &host) {
                 Ok(url)
             } else {
                 Err(anyhow::anyhow!(
