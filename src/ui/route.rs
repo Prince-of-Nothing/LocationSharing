@@ -438,7 +438,10 @@ impl super::PinpointAppUI {
         let area = if compact {
             egui::Area::new(egui::Id::new("route_sheet"))
                 .order(egui::Order::Foreground)
-                .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -8.0))
+                .anchor(
+                    egui::Align2::CENTER_BOTTOM,
+                    egui::vec2(0.0, if compact { -66.0 } else { -8.0 }),
+                )
         } else {
             egui::Area::new(egui::Id::new("route_sheet"))
                 .order(egui::Order::Foreground)
@@ -462,7 +465,11 @@ impl super::PinpointAppUI {
                         });
                     });
                     egui::ScrollArea::vertical()
-                        .max_height(if compact { 420.0 } else { 520.0 })
+                        .max_height(if compact {
+                            (ctx.screen_rect().height() - top - 130.0).max(240.0)
+                        } else {
+                            520.0
+                        })
                         .show(ui, |ui| {
                             ui.add_space(4.0);
                             let origin_label = plan
