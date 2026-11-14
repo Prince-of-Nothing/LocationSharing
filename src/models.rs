@@ -355,6 +355,13 @@ pub struct AppData {
     /// Map appearance overrides (web appearance.js parity).
     pub map_label_size: Option<f32>,
     pub map_icon_size: Option<f32>,
+    /// Admin console payloads (web `admin/*.js` parity).
+    pub admin_overview: Option<serde_json::Value>,
+    pub admin_users: Vec<serde_json::Value>,
+    pub admin_audit: Vec<AdminAuditEntry>,
+    pub admin_reports: Vec<DiagnosticReport>,
+    pub admin_report_total: i64,
+    pub admin_report_open: i64,
     // New feature state (populated by the server where applicable).
     pub my_location: Option<FriendLocation>,
     pub check_ins: Vec<CheckIn>,

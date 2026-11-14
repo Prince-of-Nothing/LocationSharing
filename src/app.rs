@@ -1191,6 +1191,49 @@ impl PinpointApp {
         Ok(())
     }
 
+    pub async fn admin_load_overview(&self) -> anyhow::Result<()> {
+        let overview = self.backend.admin_overview().await?;
+        self.data.lock().unwrap().admin_overview = Some(overview);
+        Ok(())
+    }
+
+    pub async fn admin_load_users(&self) -> anyhow::Result<()> {
+        let users = self.backend.admin_users().await?;
+        self.data.lock().unwrap().admin_users = users;
+        Ok(())
+    }
+
+    pub async fn admin_update_user(&self, id: i64, body: serde_json::Value) -> anyhow::Result<()> {
+        self.backend.admin_update_user(id, body).await?;
+        self.admin_load_users().await
+    }
+
+    pub async fn admin_delete_user(&self, id: i64) -> anyhow::Result<()> {
+        self.backend.admin_delete_user(id).await?;
+        self.admin_load_users().await
+    }
+
+    pub async fn admin_load_diagnostics(&self, status: Option<String>) -> anyhow::Result<()> {
+        let (reports, total, open) = self.backend.admin_diagnostics(status.as_deref()).await?;
+        let data = self.data();
+        let mut d = data.lock().unwrap();
+        d.admin_reports = reports;
+        d.admin_report_total = total;
+        d.admin_report_open = open;
+        Ok(())
+    }
+
+    pub async fn admin_update_report(&self, id: i64, status: String) -> anyhow::Result<()> {
+        self.backend.admin_update_report(id, &status).await?;
+        self.admin_load_diagnostics(None).await
+    }
+
+    pub async fn admin_load_audit(&self) -> anyhow::Result<()> {
+        let entries = self.backend.admin_audit().await?;
+        self.data.lock().unwrap().admin_audit = entries;
+        Ok(())
+    }
+
     pub async fn refresh_my_location(&self) -> anyhow::Result<()> {
         match self.backend.get_my_location().await {
             Ok(loc) => {

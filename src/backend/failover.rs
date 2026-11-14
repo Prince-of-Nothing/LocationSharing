@@ -11,7 +11,8 @@
 
 use crate::backend::{Backend, BackendFuture, DynBackend};
 use crate::models::{
-    CheckIn, EmergencyAlert, FriendLocation, Friendship, LocationShare, SessionInfo, User,
+    AdminAuditEntry, CheckIn, DiagnosticReport, EmergencyAlert, FriendLocation, Friendship,
+    LocationShare, SessionInfo, User,
 };
 use crate::osm::{MapCapabilities, Route, SearchPlace};
 use crate::security::circuit_breaker::CircuitBreaker;
@@ -609,6 +610,80 @@ impl Backend for FailoverBackend {
             self.try_all("delete_user", |b| {
                 let b = b.clone();
                 async move { b.delete_user(id).await }
+            })
+            .await
+        })
+    }
+
+    fn admin_overview(&self) -> BackendFuture<'_, serde_json::Value> {
+        Box::pin(async move {
+            self.try_all("admin_overview", |b| {
+                let b = b.clone();
+                async move { b.admin_overview().await }
+            })
+            .await
+        })
+    }
+
+    fn admin_users(&self) -> BackendFuture<'_, Vec<serde_json::Value>> {
+        Box::pin(async move {
+            self.try_all("admin_users", |b| {
+                let b = b.clone();
+                async move { b.admin_users().await }
+            })
+            .await
+        })
+    }
+
+    fn admin_update_user<'a>(&'a self, id: i64, body: serde_json::Value) -> BackendFuture<'a, ()> {
+        Box::pin(async move {
+            self.try_all("admin_update_user", |b| {
+                let b = b.clone();
+                let body = body.clone();
+                async move { b.admin_update_user(id, body).await }
+            })
+            .await
+        })
+    }
+
+    fn admin_delete_user<'a>(&'a self, id: i64) -> BackendFuture<'a, ()> {
+        Box::pin(async move {
+            self.try_all("admin_delete_user", |b| {
+                let b = b.clone();
+                async move { b.admin_delete_user(id).await }
+            })
+            .await
+        })
+    }
+
+    fn admin_diagnostics<'a>(
+        &'a self,
+        status: Option<&'a str>,
+    ) -> BackendFuture<'a, (Vec<DiagnosticReport>, i64, i64)> {
+        Box::pin(async move {
+            self.try_all("admin_diagnostics", |b| {
+                let b = b.clone();
+                async move { b.admin_diagnostics(status).await }
+            })
+            .await
+        })
+    }
+
+    fn admin_update_report<'a>(&'a self, id: i64, status: &'a str) -> BackendFuture<'a, ()> {
+        Box::pin(async move {
+            self.try_all("admin_update_report", |b| {
+                let b = b.clone();
+                async move { b.admin_update_report(id, status).await }
+            })
+            .await
+        })
+    }
+
+    fn admin_audit(&self) -> BackendFuture<'_, Vec<AdminAuditEntry>> {
+        Box::pin(async move {
+            self.try_all("admin_audit", |b| {
+                let b = b.clone();
+                async move { b.admin_audit().await }
             })
             .await
         })

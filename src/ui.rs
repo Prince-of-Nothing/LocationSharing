@@ -159,12 +159,23 @@ enum PendingAction {
     KioskSubmitCheckIn {
         request: crate::webapp::kiosk::KioskCheckInRequest,
     },
-    AdminLoadUsers {
-        query: String,
+    AdminLoadOverview,
+    AdminLoadUsers,
+    AdminLoadAudit,
+    AdminLoadDiagnostics {
+        status: Option<String>,
     },
-    AdminSetUserActive {
-        user_id: i64,
-        is_active: bool,
+    AdminUpdateUser {
+        id: i64,
+        role: Option<String>,
+        is_active: Option<bool>,
+    },
+    AdminDeleteUser {
+        id: i64,
+    },
+    AdminUpdateReport {
+        id: i64,
+        status: String,
     },
 }
 
@@ -223,8 +234,11 @@ pub struct PinpointAppUI {
     change_password_current: String,
     change_password_new: String,
     change_password_confirm: String,
-    // Admin screen query input
+    // Admin screen
     pub(crate) admin_search_query: String,
+    admin_tab: String,
+    admin_loaded: bool,
+    admin_diag_filter: String,
     // Kiosk screen state
     pub(crate) kiosk_token_input: String,
     pub(crate) kiosk_note_input: String,
@@ -290,6 +304,9 @@ impl PinpointAppUI {
             change_password_new: String::new(),
             change_password_confirm: String::new(),
             admin_search_query: String::new(),
+            admin_tab: "overview".to_string(),
+            admin_loaded: false,
+            admin_diag_filter: String::new(),
             kiosk_token_input: String::new(),
             kiosk_note_input: String::new(),
             kiosk_consent_accepted: false,
@@ -682,46 +699,37 @@ impl PinpointAppUI {
                         }
                     }
                 }
-                PendingAction::AdminLoadUsers { query } => {
-                    let mut admin_state = crate::webapp::admin::AdminState {
-                        query,
-                        ..Default::default()
-                    };
-                    let backend = app.backend();
-                    match crate::webapp::admin::load_users(&backend, &mut admin_state).await {
-                        Ok(()) => {
-                            app.data().lock().unwrap().users = admin_state.users;
-                            if let Some(n) = admin_state.notice {
-                                app.set_notice(Some(n));
-                            }
-                        }
-                        Err(e) => app.set_error(Some(format!("Admin load users failed: {e}"))),
-                    }
+                PendingAction::AdminLoadOverview => {
+                    let _ = app.admin_load_overview().await;
                 }
-                PendingAction::AdminSetUserActive { user_id, is_active } => {
-                    let mut admin_state = crate::webapp::admin::AdminState::default();
-                    let backend = app.backend();
-                    match crate::webapp::admin::set_user_active(
-                        &backend,
-                        &mut admin_state,
-                        user_id,
-                        is_active,
-                    )
-                    .await
-                    {
-                        Ok(()) => {
-                            if let Some(n) = admin_state.notice {
-                                app.set_notice(Some(n));
-                            }
-                            let mut reload_state = crate::webapp::admin::AdminState::default();
-                            if let Ok(()) =
-                                crate::webapp::admin::load_users(&backend, &mut reload_state).await
-                            {
-                                app.data().lock().unwrap().users = reload_state.users;
-                            }
-                        }
-                        Err(e) => app.set_error(Some(format!("Admin user update failed: {e}"))),
+                PendingAction::AdminLoadUsers => {
+                    let _ = app.admin_load_users().await;
+                }
+                PendingAction::AdminLoadAudit => {
+                    let _ = app.admin_load_audit().await;
+                }
+                PendingAction::AdminLoadDiagnostics { status } => {
+                    let _ = app.admin_load_diagnostics(status).await;
+                }
+                PendingAction::AdminUpdateUser {
+                    id,
+                    role,
+                    is_active,
+                } => {
+                    let mut body = serde_json::json!({});
+                    if let Some(role) = role {
+                        body["role"] = serde_json::Value::String(role);
                     }
+                    if let Some(active) = is_active {
+                        body["is_active"] = serde_json::Value::Bool(active);
+                    }
+                    let _ = app.admin_update_user(id, body).await;
+                }
+                PendingAction::AdminDeleteUser { id } => {
+                    let _ = app.admin_delete_user(id).await;
+                }
+                PendingAction::AdminUpdateReport { id, status } => {
+                    let _ = app.admin_update_report(id, status).await;
                 }
             }
         });

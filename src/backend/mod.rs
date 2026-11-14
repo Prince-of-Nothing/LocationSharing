@@ -21,7 +21,8 @@ pub mod health;
 pub mod rest;
 
 use crate::models::{
-    CheckIn, EmergencyAlert, FriendLocation, Friendship, LocationShare, SessionInfo, User,
+    AdminAuditEntry, CheckIn, DiagnosticReport, EmergencyAlert, FriendLocation, Friendship,
+    LocationShare, SessionInfo, User,
 };
 use crate::osm::{MapCapabilities, Route, SearchPlace};
 use std::future::Future;
@@ -169,6 +170,16 @@ pub trait Backend: BackendBounds {
     fn search_users<'a>(&'a self, q: &'a str) -> BackendFuture<'a, Vec<User>>;
     fn update_user<'a>(&'a self, id: i64, body: serde_json::Value) -> BackendFuture<'a, ()>;
     fn delete_user<'a>(&'a self, id: i64) -> BackendFuture<'a, ()>;
+    fn admin_overview(&self) -> BackendFuture<'_, serde_json::Value>;
+    fn admin_users(&self) -> BackendFuture<'_, Vec<serde_json::Value>>;
+    fn admin_update_user<'a>(&'a self, id: i64, body: serde_json::Value) -> BackendFuture<'a, ()>;
+    fn admin_delete_user<'a>(&'a self, id: i64) -> BackendFuture<'a, ()>;
+    fn admin_diagnostics<'a>(
+        &'a self,
+        status: Option<&'a str>,
+    ) -> BackendFuture<'a, (Vec<DiagnosticReport>, i64, i64)>;
+    fn admin_update_report<'a>(&'a self, id: i64, status: &'a str) -> BackendFuture<'a, ()>;
+    fn admin_audit(&self) -> BackendFuture<'_, Vec<AdminAuditEntry>>;
 
     fn create_check_in<'a>(
         &'a self,

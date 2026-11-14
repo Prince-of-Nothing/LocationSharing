@@ -12,8 +12,8 @@
 //!   else must be HTTPS (fail closed â€” see ADR-0006).
 
 use crate::models::{
-    CheckIn, EmergencyAlert, FriendLocation, Friendship, LocationShare, LoginResponse, SessionInfo,
-    User,
+    AdminAuditEntry, CheckIn, DiagnosticReport, EmergencyAlert, FriendLocation, Friendship,
+    LocationShare, LoginResponse, SessionInfo, User,
 };
 use crate::osm::{MapCapabilities, Route, SearchPlace};
 use serde::{Deserialize, Serialize};
@@ -745,6 +745,82 @@ impl ApiClient {
         Ok(())
     }
 
+    pub async fn admin_overview(&self) -> anyhow::Result<serde_json::Value> {
+        let response = self
+            .request(reqwest::Method::GET, "/api/v1/admin/overview", None)
+            .await?;
+        let response = Self::check(response, "Failed to load admin overview").await?;
+        Ok(response.json().await?)
+    }
+
+    pub async fn admin_users(&self) -> anyhow::Result<Vec<serde_json::Value>> {
+        let response = self
+            .request(reqwest::Method::GET, "/api/v1/admin/users", None)
+            .await?;
+        let response = Self::check(response, "Failed to load admin users").await?;
+        let body: AdminUsersResponse = response.json().await?;
+        Ok(body.users)
+    }
+
+    pub async fn admin_update_user(&self, id: i64, body: serde_json::Value) -> anyhow::Result<()> {
+        let response = self
+            .request(
+                reqwest::Method::PATCH,
+                &format!("/api/v1/admin/users/{id}"),
+                Some(body),
+            )
+            .await?;
+        Self::check(response, "Failed to update admin user").await?;
+        Ok(())
+    }
+
+    pub async fn admin_delete_user(&self, id: i64) -> anyhow::Result<()> {
+        let response = self
+            .request(
+                reqwest::Method::DELETE,
+                &format!("/api/v1/admin/users/{id}"),
+                None,
+            )
+            .await?;
+        Self::check(response, "Failed to delete admin user").await?;
+        Ok(())
+    }
+
+    pub async fn admin_diagnostics(
+        &self,
+        status: Option<&str>,
+    ) -> anyhow::Result<(Vec<DiagnosticReport>, i64, i64)> {
+        let path = match status.filter(|s| !s.is_empty()) {
+            Some(status) => format!("/api/v1/admin/diagnostics?status={}", urlencoding(status)),
+            None => "/api/v1/admin/diagnostics".to_string(),
+        };
+        let response = self.request(reqwest::Method::GET, &path, None).await?;
+        let response = Self::check(response, "Failed to load diagnostics").await?;
+        let body: AdminDiagnosticsResponse = response.json().await?;
+        Ok((body.reports, body.total, body.open))
+    }
+
+    pub async fn admin_update_report(&self, id: i64, status: &str) -> anyhow::Result<()> {
+        let response = self
+            .request(
+                reqwest::Method::PATCH,
+                &format!("/api/v1/admin/diagnostics/{id}"),
+                Some(serde_json::json!({ "status": status })),
+            )
+            .await?;
+        Self::check(response, "Failed to triage diagnostic").await?;
+        Ok(())
+    }
+
+    pub async fn admin_audit(&self) -> anyhow::Result<Vec<AdminAuditEntry>> {
+        let response = self
+            .request(reqwest::Method::GET, "/api/v1/admin/audit", None)
+            .await?;
+        let response = Self::check(response, "Failed to load audit log").await?;
+        let body: AdminAuditResponse = response.json().await?;
+        Ok(body.entries)
+    }
+
     pub async fn create_check_in(
         &self,
         lat: f64,
@@ -887,6 +963,27 @@ struct AnonymousResponse {
     recovery_code: String,
     #[serde(default)]
     csrf_token: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct AdminUsersResponse {
+    users: Vec<serde_json::Value>,
+}
+
+#[derive(serde::Deserialize)]
+struct AdminDiagnosticsResponse {
+    #[serde(default)]
+    reports: Vec<DiagnosticReport>,
+    #[serde(default)]
+    total: i64,
+    #[serde(default)]
+    open: i64,
+}
+
+#[derive(serde::Deserialize)]
+struct AdminAuditResponse {
+    #[serde(default)]
+    entries: Vec<AdminAuditEntry>,
 }
 
 fn update_share_body(
@@ -1262,6 +1359,40 @@ impl crate::backend::Backend for ApiClient {
     }
     fn delete_user<'a>(&'a self, id: i64) -> crate::backend::BackendFuture<'a, ()> {
         Box::pin(async move { ApiClient::delete_user(self, id).await })
+    }
+    fn admin_overview(&self) -> crate::backend::BackendFuture<'_, serde_json::Value> {
+        Box::pin(async move { ApiClient::admin_overview(self).await })
+    }
+    fn admin_users(&self) -> crate::backend::BackendFuture<'_, Vec<serde_json::Value>> {
+        Box::pin(async move { ApiClient::admin_users(self).await })
+    }
+    fn admin_update_user<'a>(
+        &'a self,
+        id: i64,
+        body: serde_json::Value,
+    ) -> crate::backend::BackendFuture<'a, ()> {
+        Box::pin(async move { ApiClient::admin_update_user(self, id, body).await })
+    }
+    fn admin_delete_user<'a>(&'a self, id: i64) -> crate::backend::BackendFuture<'a, ()> {
+        Box::pin(async move { ApiClient::admin_delete_user(self, id).await })
+    }
+    fn admin_diagnostics<'a>(
+        &'a self,
+        status: Option<&'a str>,
+    ) -> crate::backend::BackendFuture<'a, (Vec<crate::models::DiagnosticReport>, i64, i64)> {
+        Box::pin(async move { ApiClient::admin_diagnostics(self, status).await })
+    }
+    fn admin_update_report<'a>(
+        &'a self,
+        id: i64,
+        status: &'a str,
+    ) -> crate::backend::BackendFuture<'a, ()> {
+        Box::pin(async move { ApiClient::admin_update_report(self, id, status).await })
+    }
+    fn admin_audit(
+        &self,
+    ) -> crate::backend::BackendFuture<'_, Vec<crate::models::AdminAuditEntry>> {
+        Box::pin(async move { ApiClient::admin_audit(self).await })
     }
     fn create_check_in<'a>(
         &'a self,
