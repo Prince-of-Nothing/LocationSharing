@@ -24,6 +24,16 @@ pub fn launch_android_ui() -> Result<(), eframe::Error> {
     let mut app = crate::ui::PinpointAppUI::new(backend, None);
     app.set_offline_mode(cfg.offline_first);
 
+    match cfg.app_kind {
+        crate::webapp::WebAppKind::Kiosk => {
+            app.set_screen(crate::app::CurrentScreen::Kiosk);
+        }
+        crate::webapp::WebAppKind::Admin => {
+            app.set_screen(crate::app::CurrentScreen::Admin);
+        }
+        crate::webapp::WebAppKind::Web => {}
+    }
+
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default().with_title("Pinpoint"),
         ..Default::default()

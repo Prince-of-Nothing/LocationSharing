@@ -13,6 +13,7 @@ pub(crate) mod auth;
 pub(crate) mod bookmarks;
 pub(crate) mod emergency;
 pub(crate) mod friends;
+pub(crate) mod kiosk;
 pub(crate) mod map;
 pub(crate) mod places;
 pub(crate) mod profile;
@@ -118,6 +119,19 @@ enum PendingAction {
         zoom: u8,
     },
     RefreshAll,
+    KioskResolveToken {
+        token: String,
+    },
+    KioskSubmitCheckIn {
+        request: crate::webapp::kiosk::KioskCheckInRequest,
+    },
+    AdminLoadUsers {
+        query: String,
+    },
+    AdminSetUserActive {
+        user_id: i64,
+        is_active: bool,
+    },
 }
 
 pub struct PinpointAppUI {
@@ -172,6 +186,12 @@ pub struct PinpointAppUI {
     change_password_current: String,
     change_password_new: String,
     change_password_confirm: String,
+    // Admin screen query input
+    pub(crate) admin_search_query: String,
+    // Kiosk screen state
+    pub(crate) kiosk_token_input: String,
+    pub(crate) kiosk_note_input: String,
+    pub(crate) kiosk_consent_accepted: bool,
 }
 
 impl PinpointAppUI {
@@ -217,6 +237,10 @@ impl PinpointAppUI {
             change_password_current: String::new(),
             change_password_new: String::new(),
             change_password_confirm: String::new(),
+            admin_search_query: String::new(),
+            kiosk_token_input: String::new(),
+            kiosk_note_input: String::new(),
+            kiosk_consent_accepted: false,
         }
     }
 
@@ -230,6 +254,10 @@ impl PinpointAppUI {
 
     pub fn set_offline_mode(&mut self, offline: bool) {
         self.app.set_offline_mode(offline);
+    }
+
+    pub fn set_screen(&mut self, screen: CurrentScreen) {
+        self.app.set_screen(screen);
     }
 
     fn spawn_action(&mut self, action: PendingAction, ctx: &egui::Context) {
@@ -438,6 +466,78 @@ impl PinpointAppUI {
                     let _ = app.refresh_emergencies().await;
                     let _ = app.refresh_users().await;
                 }
+                PendingAction::KioskResolveToken { token } => {
+                    let backend_url = app.backend().backend_url().to_string();
+                    let routes = crate::webapp::kiosk::KioskRestRoutes::default();
+                    if let Ok(adapter) =
+                        crate::webapp::kiosk_rest::RestKioskAdapter::new(&backend_url, routes)
+                    {
+                        use crate::webapp::kiosk::KioskBackend;
+                        match adapter.resolve_share_token(&token).await {
+                            Ok(view) => {
+                                app.set_notice(Some("Share token resolved.".into()));
+                                app.data().lock().unwrap().kiosk_resolved = Some(view);
+                            }
+                            Err(e) => app.set_error(Some(format!("Failed to resolve token: {e}"))),
+                        }
+                    }
+                }
+                PendingAction::KioskSubmitCheckIn { request } => {
+                    let backend_url = app.backend().backend_url().to_string();
+                    let routes = crate::webapp::kiosk::KioskRestRoutes::default();
+                    if let Ok(adapter) =
+                        crate::webapp::kiosk_rest::RestKioskAdapter::new(&backend_url, routes)
+                    {
+                        use crate::webapp::kiosk::KioskBackend;
+                        match adapter.submit_check_in(request).await {
+                            Ok(()) => {
+                                app.set_notice(Some("Check-in submitted successfully.".into()));
+                            }
+                            Err(e) => app.set_error(Some(format!("Check-in failed: {e}"))),
+                        }
+                    }
+                }
+                PendingAction::AdminLoadUsers { query } => {
+                    let mut admin_state = crate::webapp::admin::AdminState {
+                        query,
+                        ..Default::default()
+                    };
+                    let backend = app.backend();
+                    match crate::webapp::admin::load_users(&backend, &mut admin_state).await {
+                        Ok(()) => {
+                            app.data().lock().unwrap().users = admin_state.users;
+                            if let Some(n) = admin_state.notice {
+                                app.set_notice(Some(n));
+                            }
+                        }
+                        Err(e) => app.set_error(Some(format!("Admin load users failed: {e}"))),
+                    }
+                }
+                PendingAction::AdminSetUserActive { user_id, is_active } => {
+                    let mut admin_state = crate::webapp::admin::AdminState::default();
+                    let backend = app.backend();
+                    match crate::webapp::admin::set_user_active(
+                        &backend,
+                        &mut admin_state,
+                        user_id,
+                        is_active,
+                    )
+                    .await
+                    {
+                        Ok(()) => {
+                            if let Some(n) = admin_state.notice {
+                                app.set_notice(Some(n));
+                            }
+                            let mut reload_state = crate::webapp::admin::AdminState::default();
+                            if let Ok(()) =
+                                crate::webapp::admin::load_users(&backend, &mut reload_state).await
+                            {
+                                app.data().lock().unwrap().users = reload_state.users;
+                            }
+                        }
+                        Err(e) => app.set_error(Some(format!("Admin user update failed: {e}"))),
+                    }
+                }
             }
         });
         ctx.request_repaint();
@@ -511,6 +611,7 @@ impl PinpointAppUI {
             (CurrentScreen::Emergency, key::EMERGENCY),
             (CurrentScreen::Profile, key::PROFILE),
             (CurrentScreen::Admin, key::ADMIN),
+            (CurrentScreen::Kiosk, key::KIOSK),
             (CurrentScreen::ChangePassword, key::PASSWORD),
         ];
         ui.horizontal(|ui| {
@@ -668,11 +769,14 @@ impl eframe::App for PinpointAppUI {
                 }
                 CurrentScreen::Admin => {
                     if self.app.is_signed_in() {
-                        self.draw_main_toolbar(ui);
-                        self.draw_admin_screen(ui);
+                        self.draw_admin_screen(ui, ctx);
                     } else {
                         self.draw_sign_in_required(ui, ctx, "Admin");
                     }
+                }
+                CurrentScreen::Kiosk => {
+                    self.draw_main_toolbar(ui);
+                    self.draw_kiosk_screen(ui, ctx);
                 }
                 CurrentScreen::ChangePassword => {
                     if self.app.is_signed_in() {

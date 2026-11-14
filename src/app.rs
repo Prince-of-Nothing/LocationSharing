@@ -134,6 +134,7 @@ pub enum CurrentScreen {
     Profile,
     Admin,
     ChangePassword,
+    Kiosk,
 }
 
 impl PinpointApp {

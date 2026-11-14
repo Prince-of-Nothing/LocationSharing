@@ -309,6 +309,7 @@ pub mod key {
     pub const EMERGENCY: &str = "emergency";
     pub const PROFILE: &str = "profile";
     pub const ADMIN: &str = "admin";
+    pub const KIOSK: &str = "kiosk";
     pub const PASSWORD: &str = "password";
     pub const SIGN_IN: &str = "sign_in";
     pub const SIGN_OUT: &str = "sign_out";
@@ -358,6 +359,7 @@ fn en() -> HashMap<&'static str, &'static str> {
     m.insert(EMERGENCY, "Emergency");
     m.insert(PROFILE, "Profile");
     m.insert(ADMIN, "Admin");
+    m.insert(KIOSK, "Kiosk");
     m.insert(PASSWORD, "Password");
     m.insert(SIGN_IN, "Sign in");
     m.insert(SIGN_OUT, "Sign out");

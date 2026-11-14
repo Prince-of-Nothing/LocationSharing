@@ -11,6 +11,8 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+### Added
+- [FEATURE] mobile: Port webapp Kiosk check-in mode & Admin console to Android app and eframe UI, with deep links `pinpoint://kiosk?token=...` and `pinpoint://admin`.
 
 ## [1.2.1] - 2026-11-14
 ### Security

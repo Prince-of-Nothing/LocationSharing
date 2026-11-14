@@ -343,6 +343,8 @@ pub struct AppData {
     pub map_center_lon: f64,
     /// Most recent E2E-encrypted location payload produced on this device.
     pub last_e2e_location_ciphertext: Option<String>,
+    /// Resolved kiosk/share-link view model (Kiosk screen).
+    pub kiosk_resolved: Option<crate::webapp::kiosk::KioskShareView>,
 }
 
 #[cfg(test)]
