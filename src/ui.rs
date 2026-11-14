@@ -8,6 +8,7 @@
 //! this file keeps the app shell, pending actions, header/toolbar and the
 //! `eframe::App` dispatcher.
 
+pub(crate) mod about;
 pub(crate) mod admin;
 pub(crate) mod auth;
 pub(crate) mod bookmarks;
@@ -143,6 +144,7 @@ enum PendingAction {
         zoom: u8,
     },
     RefreshAll,
+    CheckForUpdates,
     RefreshSessions,
     RevokeSession {
         id: String,
@@ -234,6 +236,8 @@ pub struct PinpointAppUI {
     change_password_current: String,
     change_password_new: String,
     change_password_confirm: String,
+    // About / updates
+    about_check_started: bool,
     // Admin screen
     pub(crate) admin_search_query: String,
     admin_tab: String,
@@ -303,6 +307,7 @@ impl PinpointAppUI {
             change_password_current: String::new(),
             change_password_new: String::new(),
             change_password_confirm: String::new(),
+            about_check_started: false,
             admin_search_query: String::new(),
             admin_tab: "overview".to_string(),
             admin_loaded: false,
@@ -648,6 +653,25 @@ impl PinpointAppUI {
                     let _ = app.refresh_check_ins().await;
                     let _ = app.refresh_emergencies().await;
                     let _ = app.refresh_users().await;
+                }
+                PendingAction::CheckForUpdates => {
+                    {
+                        app.data().lock().unwrap().update_status =
+                            crate::update::UpdateStatus::Checking;
+                    }
+                    let next = match crate::update::check_latest().await {
+                        Ok(Some(latest)) => {
+                            let current = crate::update::current_version().to_string();
+                            if crate::update::is_newer(&current, &latest.tag) {
+                                crate::update::UpdateStatus::Available { current, latest }
+                            } else {
+                                crate::update::UpdateStatus::UpToDate { current }
+                            }
+                        }
+                        Ok(None) => crate::update::UpdateStatus::NoReleases,
+                        Err(e) => crate::update::UpdateStatus::Error(e.to_string()),
+                    };
+                    app.data().lock().unwrap().update_status = next;
                 }
                 PendingAction::RefreshSessions => {
                     let _ = app.refresh_sessions().await;
@@ -1013,73 +1037,206 @@ impl eframe::App for PinpointAppUI {
             let mut chosen_lang: Option<Lang> = None;
             let mut publish_requested = false;
             let mut refresh_requested = false;
-            let is_admin = {
+            let (is_admin, update_available) = {
                 let data = self.app.data();
                 let data = data.lock().unwrap();
-                data.user
+                let is_admin = data
+                    .user
                     .as_ref()
                     .map(|u| {
                         (u.role.eq_ignore_ascii_case("admin")
                             || u.role.eq_ignore_ascii_case("administrator"))
                             && u.is_active
                     })
-                    .unwrap_or(false)
+                    .unwrap_or(false);
+                (is_admin, data.update_status.is_available())
             };
             egui::TopBottomPanel::bottom("mobile_nav")
                 .resizable(false)
-                .exact_height(380.0)
+                .exact_height(500.0)
+                .frame(
+                    egui::Frame::NONE
+                        .fill(Color32::from_rgb(8, 12, 24))
+                        .inner_margin(egui::Margin::symmetric(12, 6)),
+                )
                 .show(ctx, |ui| {
-                    ui.add_space(6.0);
                     let (handle, _) =
                         ui.allocate_exact_size(egui::vec2(42.0, 4.0), egui::Sense::hover());
                     ui.painter()
                         .rect_filled(handle, 2.0, Color32::from_rgb(71, 85, 105));
-                    ui.add_space(4.0);
-                    egui::ScrollArea::vertical().show(ui, |ui| {
-                        ui.heading(i18n::t(lang, key::APP_TITLE));
-                        ui.horizontal_wrapped(|ui| {
-                            if ui.button("Publish location").clicked() {
-                                publish_requested = true;
-                            }
-                            if ui.button("Refresh").clicked() {
-                                refresh_requested = true;
+                    ui.add_space(6.0);
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("Tools").size(22.0).strong());
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.button("×").clicked() {
+                                chosen = Some(current.clone());
                             }
                         });
-                        ui.separator();
-                        for (screen, key_str) in [
-                            (CurrentScreen::Map, key::MAP),
-                            (CurrentScreen::Friends, key::FRIENDS),
-                            (CurrentScreen::Sharing, key::SHARING),
-                            (CurrentScreen::Places, key::PLACES),
-                            (CurrentScreen::Bookmarks, key::SAVED),
-                            (CurrentScreen::Trips, key::TRIPS),
-                            (CurrentScreen::Emergency, key::EMERGENCY),
-                            (CurrentScreen::Profile, key::PROFILE),
-                            (CurrentScreen::Admin, key::ADMIN),
-                            (CurrentScreen::Kiosk, key::KIOSK),
-                            (CurrentScreen::ChangePassword, key::PASSWORD),
-                        ] {
-                            if screen == CurrentScreen::Admin && !is_admin {
-                                continue;
+                    });
+                    ui.label(
+                        RichText::new("Everything Pinpoint can do, one tap away.")
+                            .size(11.0)
+                            .color(Color32::from_rgb(148, 163, 184)),
+                    );
+                    ui.add_space(8.0);
+                    egui::ScrollArea::vertical().show(ui, |ui| {
+                        let tile_width = (ui.available_width() - 8.0) / 2.0;
+                        let accent = Color32::from_rgb(52, 211, 153);
+                        ui.horizontal(|ui| {
+                            for (label, icon, requested) in [
+                                ("Publish", "+", &mut publish_requested),
+                                ("Refresh", "↻", &mut refresh_requested),
+                            ] {
+                                let button = egui::Button::new(
+                                    RichText::new(format!("{icon}\n{label}"))
+                                        .size(14.0)
+                                        .strong()
+                                        .color(Color32::WHITE),
+                                )
+                                .fill(Color32::from_rgb(24, 72, 58))
+                                .stroke(egui::Stroke::new(1.0_f32, Color32::from_rgb(52, 211, 153)))
+                                .corner_radius(egui::CornerRadius::same(14))
+                                .min_size(egui::vec2(tile_width, 64.0));
+                                if ui.add(button).clicked() {
+                                    *requested = true;
+                                }
                             }
-                            if ui
-                                .selectable_label(current == screen, i18n::t(lang, key_str))
-                                .clicked()
-                            {
-                                chosen = Some(screen);
-                            }
+                        });
+                        ui.add_space(8.0);
+                        let mut tools: Vec<(CurrentScreen, &str, &str, Color32)> = vec![
+                            (
+                                CurrentScreen::Map,
+                                "Map",
+                                "⌖",
+                                Color32::from_rgb(26, 45, 74),
+                            ),
+                            (
+                                CurrentScreen::Friends,
+                                "Friends",
+                                "👥",
+                                Color32::from_rgb(55, 35, 70),
+                            ),
+                            (
+                                CurrentScreen::Sharing,
+                                "Share",
+                                "◎",
+                                Color32::from_rgb(24, 62, 54),
+                            ),
+                            (
+                                CurrentScreen::Places,
+                                "Places",
+                                "⌖",
+                                Color32::from_rgb(30, 58, 80),
+                            ),
+                            (
+                                CurrentScreen::Bookmarks,
+                                "Saved",
+                                "★",
+                                Color32::from_rgb(72, 56, 20),
+                            ),
+                            (
+                                CurrentScreen::Trips,
+                                "Trips",
+                                "T",
+                                Color32::from_rgb(38, 45, 82),
+                            ),
+                            (
+                                CurrentScreen::Emergency,
+                                "SOS",
+                                "!",
+                                Color32::from_rgb(86, 34, 34),
+                            ),
+                            (
+                                CurrentScreen::Profile,
+                                "Profile",
+                                "P",
+                                Color32::from_rgb(42, 48, 60),
+                            ),
+                            (
+                                CurrentScreen::About,
+                                if update_available {
+                                    "Update!"
+                                } else {
+                                    "Updates"
+                                },
+                                "U",
+                                if update_available {
+                                    Color32::from_rgb(98, 62, 20)
+                                } else {
+                                    Color32::from_rgb(62, 40, 62)
+                                },
+                            ),
+                            (
+                                CurrentScreen::Admin,
+                                "Admin",
+                                "A",
+                                Color32::from_rgb(70, 48, 24),
+                            ),
+                            (
+                                CurrentScreen::Kiosk,
+                                "Kiosk",
+                                "K",
+                                Color32::from_rgb(24, 58, 66),
+                            ),
+                            (
+                                CurrentScreen::ChangePassword,
+                                "Password",
+                                "PW",
+                                Color32::from_rgb(38, 42, 52),
+                            ),
+                        ];
+                        if !is_admin {
+                            tools.retain(|(screen, _, _, _)| *screen != CurrentScreen::Admin);
                         }
-                        ui.separator();
-                        ui.label("Language");
-                        egui::ComboBox::from_id_salt("mobile_lang")
-                            .selected_text(lang.native_name())
-                            .show_ui(ui, |ui| {
-                                for l in Lang::all() {
-                                    if ui.selectable_label(lang == *l, l.native_name()).clicked() {
-                                        chosen_lang = Some(*l);
+                        egui::Grid::new("mobile_tools_grid")
+                            .num_columns(2)
+                            .spacing([8.0, 8.0])
+                            .show(ui, |ui| {
+                                for (index, (screen, label, icon, fill)) in tools.iter().enumerate()
+                                {
+                                    let selected = current == *screen;
+                                    let button = egui::Button::new(
+                                        RichText::new(format!("{icon}\n{label}"))
+                                            .size(13.0)
+                                            .strong()
+                                            .color(Color32::WHITE),
+                                    )
+                                    .fill(if selected { accent } else { *fill })
+                                    .stroke(egui::Stroke::new(
+                                        1.0_f32,
+                                        if selected {
+                                            accent
+                                        } else {
+                                            Color32::from_rgb(31, 41, 55)
+                                        },
+                                    ))
+                                    .corner_radius(egui::CornerRadius::same(14))
+                                    .min_size(egui::vec2(tile_width, 66.0));
+                                    if ui.add(button).clicked() {
+                                        chosen = Some(screen.clone());
+                                    }
+                                    if index % 2 == 1 {
+                                        ui.end_row();
                                     }
                                 }
                             });
+                        ui.add_space(8.0);
+                        ui.separator();
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new("Language").size(12.0));
+                            egui::ComboBox::from_id_salt("mobile_lang")
+                                .selected_text(lang.native_name())
+                                .show_ui(ui, |ui| {
+                                    for l in Lang::all() {
+                                        if ui
+                                            .selectable_label(lang == *l, l.native_name())
+                                            .clicked()
+                                        {
+                                            chosen_lang = Some(*l);
+                                        }
+                                    }
+                                });
+                        });
                     });
                 });
             if let Some(screen) = chosen {
@@ -1189,6 +1346,7 @@ impl eframe::App for PinpointAppUI {
                         self.draw_sign_in_required(ui, ctx, "Profile");
                     }
                 }
+                CurrentScreen::About => self.draw_about_screen(ui, ctx),
                 CurrentScreen::Friends => {
                     if self.app.is_signed_in() {
                         self.draw_main_toolbar(ui);

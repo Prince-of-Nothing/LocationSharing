@@ -3,6 +3,7 @@
 //! `friendshipResponse`, `locationShareResponse`, `locationResponse`).
 
 use crate::osm::{Route, SearchPlace};
+use crate::update::UpdateStatus;
 use serde::{Deserialize, Serialize};
 
 /// Authenticated user as returned in the `user` field of login/register.
@@ -355,6 +356,8 @@ pub struct AppData {
     /// Map appearance overrides (web appearance.js parity).
     pub map_label_size: Option<f32>,
     pub map_icon_size: Option<f32>,
+    /// Latest GitHub release check result (user-initiated).
+    pub update_status: UpdateStatus,
     /// Admin console payloads (web `admin/*.js` parity).
     pub admin_overview: Option<serde_json::Value>,
     pub admin_users: Vec<serde_json::Value>,

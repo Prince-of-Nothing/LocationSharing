@@ -517,79 +517,81 @@ impl PinpointAppUI {
         let mut toggle_style = false;
         let mut open_route = false;
         let map_dark = self.app.data().lock().unwrap().map_dark;
-        egui::Area::new(egui::Id::new("mobile_map_controls"))
-            .order(egui::Order::Foreground)
-            .fixed_pos(egui::pos2(width - 56.0, top + 120.0))
-            .show(ctx, |ui| {
-                ui.vertical(|ui| {
-                    if ui
-                        .add(
-                            egui::Button::new("+")
-                                .min_size(egui::vec2(40.0, 40.0))
-                                .corner_radius(egui::CornerRadius::same(20)),
-                        )
-                        .clicked()
-                    {
-                        zoom_delta = 1;
-                    }
-                    if ui
-                        .add(
-                            egui::Button::new("−")
-                                .min_size(egui::vec2(40.0, 40.0))
-                                .corner_radius(egui::CornerRadius::same(20)),
-                        )
-                        .clicked()
-                    {
-                        zoom_delta = -1;
-                    }
-                    if ui
-                        .add(
-                            egui::Button::new("◎")
-                                .min_size(egui::vec2(40.0, 40.0))
-                                .corner_radius(egui::CornerRadius::same(20)),
-                        )
-                        .clicked()
-                    {
-                        locate = true;
-                    }
-                    if ui
-                        .add(
-                            egui::Button::new(if map_dark { "L" } else { "D" })
-                                .min_size(egui::vec2(40.0, 40.0))
-                                .corner_radius(egui::CornerRadius::same(20)),
-                        )
-                        .on_hover_text(if map_dark {
-                            "Use light map"
-                        } else {
-                            "Use dark map"
-                        })
-                        .clicked()
-                    {
-                        toggle_style = true;
-                    }
-                    if ui
-                        .add(
-                            egui::Button::new("↗")
-                                .min_size(egui::vec2(40.0, 40.0))
-                                .corner_radius(egui::CornerRadius::same(20)),
-                        )
-                        .on_hover_text("Route")
-                        .clicked()
-                    {
-                        open_route = true;
-                    }
-                    if ui
-                        .add(
-                            egui::Button::new("☰")
-                                .min_size(egui::vec2(40.0, 40.0))
-                                .corner_radius(egui::CornerRadius::same(20)),
-                        )
-                        .clicked()
-                    {
-                        menu = true;
-                    }
+        if !self.mobile_nav_open {
+            egui::Area::new(egui::Id::new("mobile_map_controls"))
+                .order(egui::Order::Foreground)
+                .fixed_pos(egui::pos2(width - 56.0, top + 120.0))
+                .show(ctx, |ui| {
+                    ui.vertical(|ui| {
+                        if ui
+                            .add(
+                                egui::Button::new("+")
+                                    .min_size(egui::vec2(40.0, 40.0))
+                                    .corner_radius(egui::CornerRadius::same(20)),
+                            )
+                            .clicked()
+                        {
+                            zoom_delta = 1;
+                        }
+                        if ui
+                            .add(
+                                egui::Button::new("−")
+                                    .min_size(egui::vec2(40.0, 40.0))
+                                    .corner_radius(egui::CornerRadius::same(20)),
+                            )
+                            .clicked()
+                        {
+                            zoom_delta = -1;
+                        }
+                        if ui
+                            .add(
+                                egui::Button::new("◎")
+                                    .min_size(egui::vec2(40.0, 40.0))
+                                    .corner_radius(egui::CornerRadius::same(20)),
+                            )
+                            .clicked()
+                        {
+                            locate = true;
+                        }
+                        if ui
+                            .add(
+                                egui::Button::new(if map_dark { "L" } else { "D" })
+                                    .min_size(egui::vec2(40.0, 40.0))
+                                    .corner_radius(egui::CornerRadius::same(20)),
+                            )
+                            .on_hover_text(if map_dark {
+                                "Use light map"
+                            } else {
+                                "Use dark map"
+                            })
+                            .clicked()
+                        {
+                            toggle_style = true;
+                        }
+                        if ui
+                            .add(
+                                egui::Button::new("↗")
+                                    .min_size(egui::vec2(40.0, 40.0))
+                                    .corner_radius(egui::CornerRadius::same(20)),
+                            )
+                            .on_hover_text("Route")
+                            .clicked()
+                        {
+                            open_route = true;
+                        }
+                        if ui
+                            .add(
+                                egui::Button::new("☰")
+                                    .min_size(egui::vec2(40.0, 40.0))
+                                    .corner_radius(egui::CornerRadius::same(20)),
+                            )
+                            .clicked()
+                        {
+                            menu = true;
+                        }
+                    });
                 });
-            });
+        }
         if zoom_delta != 0 {
             let binding = self.app.data();
             let mut data = binding.lock().unwrap();

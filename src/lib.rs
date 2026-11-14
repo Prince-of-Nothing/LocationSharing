@@ -22,6 +22,7 @@ pub mod patterns;
 pub mod platform;
 pub mod security;
 pub mod server;
+pub mod update;
 pub mod webapp;
 // The GUI modules depend on native-only crates (tokio runtime, `which`),
 // so they are compiled out of the WebAssembly target.

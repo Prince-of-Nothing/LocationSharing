@@ -203,6 +203,11 @@ impl PinpointAppUI {
         });
         ui.add_space(8.0);
 
+        if ui.button("About & updates").clicked() {
+            self.app.set_screen(crate::app::CurrentScreen::About);
+        }
+        ui.add_space(8.0);
+
         ui.group(|ui| {
             ui.label(RichText::new("Map appearance").size(14.0).strong());
             let (mut label, mut icon) = {

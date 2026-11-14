@@ -20,6 +20,8 @@ The per-item flagged list for this release is in
 - [FEATURE] Account lifecycle: anonymous sign-in, recovery code/recovery, keychain-backed session resume, active-session list/revoke and sign out everywhere.
 - [FEATURE] Profile utilities: PII-free diagnostics report and map label/icon size sliders.
 - [FEATURE] Admin console parity: overview counters, user search/role/active/delete, audit log and diagnostics triage; accepts `admin` and `administrator` roles.
+- [FEATURE] ArtCraft-inspired mobile Tools sheet: colored tool tiles for map, friends, sharing, saved, trips, emergency, profile, updates, admin, kiosk and password, plus publish/refresh actions.
+- [FEATURE] About & updates screen: version/build identity, user-initiated GitHub release check, semver comparison, release notes and release-page hand-off.
 - [FEATURE] mobile: Port webapp Kiosk check-in mode & Admin console to Android app and eframe UI, with deep links `pinpoint://kiosk?token=...` and `pinpoint://admin`.
 - [FEATURE] Android APK: cargo-apk 0.10 build with NativeActivity/`android_main`, eframe `android-native-activity`, API 35 manifest metadata and launcher icons; runs on the API 37 x86_64 emulator.
 - [FEATURE] Mobile map-first shell: web-loyal full-bleed dark map with floating search, zoom/locate/menu controls, bottom drawer, publish/place sheets, touch-sized controls, compact login/register forms, live tiles and scrollable locations.
