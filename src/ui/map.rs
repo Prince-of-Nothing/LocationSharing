@@ -202,6 +202,9 @@ impl PinpointAppUI {
         let binding = self.app.data();
         let mut data = binding.lock().unwrap();
         map::render_map_with(ui, &mut data, 320.0, Some(&backend_url), online, false);
+        drop(data);
+        self.handle_map_click(ctx);
+        let data = binding.lock().unwrap();
         let (center_lat, center_lon, zoom) =
             (data.map_center_lat, data.map_center_lon, data.map_zoom);
         let locations: Vec<FriendLocation> = data.locations.clone();
@@ -252,15 +255,27 @@ impl PinpointAppUI {
                         ));
                         ui.add_space(4.0);
                         if ui.button(i18n::t(lang, key::NAVIGATE)).clicked() {
-                            let url = format!(
-                                "https://www.openstreetmap.org/directions?to={:.4}%2C{:.4}",
-                                loc.latitude, loc.longitude
-                            );
-                            let _ = webbrowser::open(&url);
-                            self.app.set_notice(Some(format!(
-                                "Opening OSM directions to {}",
-                                loc.user_name
-                            )));
+                            let (lat, lon, name) = {
+                                let d = self.app.data();
+                                let d = d.lock().unwrap();
+                                d.my_location
+                                    .as_ref()
+                                    .map(|l| (l.latitude, l.longitude, "My location".to_string()))
+                                    .unwrap_or((
+                                        d.map_center_lat,
+                                        d.map_center_lon,
+                                        "Map centre".to_string(),
+                                    ))
+                            };
+                            self.route_plan.origin =
+                                Some(crate::ui::route::RoutePoint::new(lat, lon, name));
+                            self.route_plan.destination = Some(crate::ui::route::RoutePoint::new(
+                                loc.latitude,
+                                loc.longitude,
+                                loc.user_name.clone(),
+                            ));
+                            self.route_plan.open = true;
+                            self.route_plan.error = None;
                         }
                         if ui.button(i18n::t(lang, key::OSM_MAP)).clicked() {
                             let url = format!(
@@ -321,16 +336,15 @@ impl PinpointAppUI {
                             self.app
                                 .set_notice(Some(format!("Saved {}", place.short_name)));
                         }
-                        if ui.button("Navigate").clicked() {
-                            let url = format!(
-                                "https://www.openstreetmap.org/directions?to={:.4}%2C{:.4}",
-                                place.latitude, place.longitude
-                            );
-                            let _ = webbrowser::open(&url);
-                            self.app.set_notice(Some(format!(
-                                "Opening OSM directions to {}",
-                                place.display_name
-                            )));
+                        if ui.button("Directions").clicked() {
+                            let data = self.app.data();
+                            let mut d = data.lock().unwrap();
+                            d.selected_place = Some(place.clone());
+                            d.map_center_lat = place.latitude;
+                            d.map_center_lon = place.longitude;
+                            d.map_zoom = 15;
+                            drop(d);
+                            self.route_plan.open_with_destination(&place);
                         }
                         if ui.button(i18n::t(lang, key::OSM_MAP)).clicked() {
                             let url = format!(
@@ -364,6 +378,7 @@ impl PinpointAppUI {
             let mut data = binding.lock().unwrap();
             crate::map::render_map_with(ui, &mut data, height, Some(&backend_url), online, true);
         }
+        self.handle_map_click(ctx);
 
         let panel = Color32::from_rgba_unmultiplied(15, 23, 42, 246);
         let panel_solid = Color32::from_rgb(15, 23, 42);
@@ -488,6 +503,7 @@ impl PinpointAppUI {
                 data.map_center_lon = place.longitude;
                 data.map_zoom = 15;
                 data.search_results.clear();
+                data.selected_place = Some(place.clone());
                 drop(data);
                 self.mobile_selected_place = Some(place);
                 self.mobile_publish_open = false;
@@ -499,6 +515,7 @@ impl PinpointAppUI {
         let mut locate = false;
         let mut menu = false;
         let mut toggle_style = false;
+        let mut open_route = false;
         let map_dark = self.app.data().lock().unwrap().map_dark;
         egui::Area::new(egui::Id::new("mobile_map_controls"))
             .order(egui::Order::Foreground)
@@ -552,6 +569,17 @@ impl PinpointAppUI {
                     }
                     if ui
                         .add(
+                            egui::Button::new("↗")
+                                .min_size(egui::vec2(40.0, 40.0))
+                                .corner_radius(egui::CornerRadius::same(20)),
+                        )
+                        .on_hover_text("Route")
+                        .clicked()
+                    {
+                        open_route = true;
+                    }
+                    if ui
+                        .add(
                             egui::Button::new("☰")
                                 .min_size(egui::vec2(40.0, 40.0))
                                 .corner_radius(egui::CornerRadius::same(20)),
@@ -578,6 +606,20 @@ impl PinpointAppUI {
         }
         if menu {
             self.mobile_nav_open = !self.mobile_nav_open;
+        }
+        if open_route {
+            self.route_plan.open = true;
+            if self.route_plan.origin.is_none() {
+                let (lat, lon, name) = {
+                    let d = self.app.data();
+                    let d = d.lock().unwrap();
+                    d.my_location
+                        .as_ref()
+                        .map(|l| (l.latitude, l.longitude, "My location".to_string()))
+                        .unwrap_or((d.map_center_lat, d.map_center_lon, "Map centre".to_string()))
+                };
+                self.route_plan.origin = Some(crate::ui::route::RoutePoint::new(lat, lon, name));
+            }
         }
 
         // Bottom sheet: publish form or selected place.
@@ -665,8 +707,21 @@ impl PinpointAppUI {
         } else if let Some(place) = self.mobile_selected_place.clone() {
             let mut close = false;
             let mut save = false;
+            let mut directions = false;
+            let mut set_origin = false;
+            let mut copy = false;
             let mut open_url: Option<String> = None;
             let name = encode_component(&place.short_name);
+            let distance_m = {
+                let d = self.app.data();
+                let d = d.lock().unwrap();
+                crate::ui::route::haversine_m(
+                    d.map_center_lat,
+                    d.map_center_lon,
+                    place.latitude,
+                    place.longitude,
+                )
+            };
             egui::Area::new(egui::Id::new("mobile_place_sheet"))
                 .order(egui::Order::Foreground)
                 .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -10.0))
@@ -698,16 +753,27 @@ impl PinpointAppUI {
                                     .size(12.0)
                                     .color(muted),
                             );
+                            ui.label(
+                                RichText::new(format!(
+                                    "{} from map centre",
+                                    crate::ui::route::format_distance(distance_m)
+                                ))
+                                .size(11.0)
+                                .color(muted),
+                            );
                             ui.add_space(6.0);
                             ui.horizontal_wrapped(|ui| {
                                 if ui.button("Directions").clicked() {
-                                    open_url = Some(format!(
-                                        "https://www.openstreetmap.org/directions?to={:.4}%2C{:.4}",
-                                        place.latitude, place.longitude
-                                    ));
+                                    directions = true;
+                                }
+                                if ui.button("Set as origin").clicked() {
+                                    set_origin = true;
                                 }
                                 if ui.button("Save").clicked() {
                                     save = true;
+                                }
+                                if ui.button("Copy").clicked() {
+                                    copy = true;
                                 }
                                 if ui.button("OSM").clicked() {
                                     open_url = Some(format!(
@@ -741,6 +807,7 @@ impl PinpointAppUI {
                 });
             if close {
                 self.mobile_selected_place = None;
+                self.app.data().lock().unwrap().selected_place = None;
             }
             if save {
                 let store = crate::bookmarks::BookmarkStore::default_location();
@@ -748,10 +815,28 @@ impl PinpointAppUI {
                 self.app
                     .set_notice(Some(format!("Saved {}", place.short_name)));
             }
+            if copy {
+                ctx.copy_text(format!(
+                    "{} ({:.5}, {:.5})",
+                    place.short_name, place.latitude, place.longitude
+                ));
+                self.app.set_notice(Some("Place copied.".to_string()));
+            }
+            if directions {
+                self.route_plan.open_with_destination(&place);
+                self.mobile_selected_place = None;
+                self.app.data().lock().unwrap().selected_place = None;
+            }
+            if set_origin {
+                self.route_plan.open_with_origin(&place);
+                self.mobile_selected_place = None;
+                self.app.data().lock().unwrap().selected_place = None;
+            }
             if let Some(url) = open_url {
                 let _ = webbrowser::open(&url);
             }
         }
+        self.draw_route_sheet(ui, ctx, true, top);
     }
 }
 

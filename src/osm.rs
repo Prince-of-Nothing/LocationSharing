@@ -673,6 +673,45 @@ pub fn export_route_gpx(route: &Route, name: &str) -> anyhow::Result<std::path::
     Ok(path)
 }
 
+/// KML LineString for a route. Coordinates are `lon,lat,0` per KML.
+pub fn route_to_kml(route: &Route, name: &str) -> String {
+    let safe = xml_escape(name);
+    let coords = route
+        .points
+        .iter()
+        .map(|(lat, lon)| format!("{lon:.6},{lat:.6},0"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+         <kml xmlns=\"http://www.opengis.net/kml/2.2\">\n\
+         <Document><name>{safe}</name><Placemark><name>{safe}</name><LineString>\
+         <tessellate>1</tessellate><coordinates>{coords}</coordinates>\
+         </LineString></Placemark></Document></kml>\n"
+    )
+}
+
+/// GeoJSON FeatureCollection with one LineString feature for a route.
+pub fn route_to_geojson(route: &Route, name: &str) -> String {
+    let coordinates: Vec<[f64; 2]> = route.points.iter().map(|(lat, lon)| [*lon, *lat]).collect();
+    serde_json::json!({
+        "type": "FeatureCollection",
+        "features": [{
+            "type": "Feature",
+            "properties": {
+                "name": name,
+                "distance_m": route.distance_m,
+                "duration_s": route.duration_s,
+            },
+            "geometry": {
+                "type": "LineString",
+                "coordinates": coordinates,
+            }
+        }]
+    })
+    .to_string()
+}
+
 fn xml_escape(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
@@ -768,5 +807,24 @@ mod tests {
         assert!(gpx.contains("<trkpt lat=\"47.010500\" lon=\"28.863800\">"));
         assert!(gpx.contains("Cafe &amp; &lt;Bar&gt;"));
         assert!(gpx.contains("OpenStreetMap contributors"));
+    }
+
+    #[test]
+    fn route_kml_and_geojson_have_lon_lat_coordinates() {
+        use super::{route_to_geojson, route_to_kml, Route};
+        let route = Route {
+            points: vec![(47.0105, 28.8638), (47.0205, 28.8738)],
+            distance_m: 1200.0,
+            duration_s: 900.0,
+            steps: vec![],
+            summary: "Main".into(),
+            legs: vec![],
+        };
+        let kml = route_to_kml(&route, "Cafe & <Bar>");
+        assert!(kml.contains("28.863800,47.010500,0"));
+        assert!(kml.contains("Cafe &amp; &lt;Bar&gt;"));
+        let geojson = route_to_geojson(&route, "Cafe");
+        assert!(geojson.contains("\"type\":\"LineString\""));
+        assert!(geojson.contains("28.8638"));
     }
 }

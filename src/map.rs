@@ -47,6 +47,21 @@ pub fn project_to_rect(
     Pos2::new(center.x + (px - cx) as f32, center.y + (py - cy) as f32)
 }
 
+/// Convert a screen position inside the map canvas back to `(lat, lon)`.
+/// Used for tap-to-inspect and tap-to-set-destination.
+pub fn screen_to_latlon(
+    map_rect: Rect,
+    center_lat: f64,
+    center_lon: f64,
+    zoom: u8,
+    pos: Pos2,
+) -> (f64, f64) {
+    let (cx, cy) = latlon_to_world_px(center_lat, center_lon, zoom);
+    let wx = cx + (pos.x - map_rect.center().x) as f64;
+    let wy = cy + (pos.y - map_rect.center().y) as f64;
+    world_px_to_latlon(wx, wy, zoom)
+}
+
 /// Try to load or retrieve a cached tile texture from disk (`tiles/{z}/{x}/{y}.png`).
 fn load_tile_texture(
     ctx: &egui::Context,
@@ -206,6 +221,18 @@ pub fn render_map_with(
         };
         let canvas_size = Vec2::new(avail_width, height.max(220.0));
         let (map_rect, response) = ui.allocate_exact_size(canvas_size, Sense::click_and_drag());
+
+        if response.clicked() {
+            if let Some(pos) = response.interact_pointer_pos() {
+                state.map_click = Some(screen_to_latlon(
+                    map_rect,
+                    state.map_center_lat,
+                    state.map_center_lon,
+                    state.map_zoom,
+                    pos,
+                ));
+            }
+        }
 
         // Drag-to-pan in Web Mercator pixel space
         if response.dragged() {
@@ -597,5 +624,16 @@ mod tests {
     #[test]
     fn copyright_url_is_odbl_compliant() {
         assert!(OSM_COPYRIGHT_URL.contains("openstreetmap.org/copyright"));
+    }
+
+    #[test]
+    fn screen_to_latlon_round_trips_projected_points() {
+        let rect = Rect::from_min_size(Pos2::new(10.0, 20.0), Vec2::new(400.0, 300.0));
+        let center = (47.0105, 28.8638);
+        let point = (47.0205, 28.8738);
+        let p = project_to_rect(point.0, point.1, center.0, center.1, 13, rect);
+        let back = screen_to_latlon(rect, center.0, center.1, 13, p);
+        assert!((back.0 - point.0).abs() < 1e-6);
+        assert!((back.1 - point.1).abs() < 1e-6);
     }
 }

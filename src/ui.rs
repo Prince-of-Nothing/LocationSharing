@@ -17,6 +17,7 @@ pub(crate) mod kiosk;
 pub(crate) mod map;
 pub(crate) mod places;
 pub(crate) mod profile;
+pub(crate) mod route;
 pub(crate) mod sharing;
 pub(crate) mod trips;
 
@@ -25,6 +26,7 @@ use crate::backend::DynBackend;
 use crate::i18n::{self, key, Lang};
 use crate::osm::OsmClient;
 use eframe::egui::{self, Align, Color32, Direction, RichText};
+use route::RoutePlan;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 
@@ -98,6 +100,13 @@ enum PendingAction {
         to: (f64, f64),
         mode: String,
     },
+    PlanRoute {
+        from: (f64, f64),
+        to: (f64, f64),
+        mode: String,
+        via: Vec<(f64, f64)>,
+        avoid: Vec<String>,
+    },
     Poi {
         lat: f64,
         lon: f64,
@@ -161,9 +170,6 @@ pub struct PinpointAppUI {
     // Search query input (results live in AppData)
     search_query: String,
     // Places screen
-    route_mode: String,
-    route_from_lat: String,
-    route_from_lon: String,
     poi_category: String,
     reverse_label: String,
     #[allow(dead_code)]
@@ -194,6 +200,9 @@ pub struct PinpointAppUI {
     pub(crate) kiosk_token_input: String,
     pub(crate) kiosk_note_input: String,
     pub(crate) kiosk_consent_accepted: bool,
+    // Route planner
+    route_plan: RoutePlan,
+    route_result_seq: u64,
     // Mobile shell
     mobile_nav_open: bool,
     mobile_publish_open: bool,
@@ -224,9 +233,6 @@ impl PinpointAppUI {
             publish_lat: String::new(),
             publish_lon: String::new(),
             search_query: String::new(),
-            route_mode: "foot".to_string(),
-            route_from_lat: String::new(),
-            route_from_lon: String::new(),
             poi_category: "food".to_string(),
             reverse_label: String::new(),
             route_label: String::new(),
@@ -248,6 +254,8 @@ impl PinpointAppUI {
             kiosk_token_input: String::new(),
             kiosk_note_input: String::new(),
             kiosk_consent_accepted: false,
+            route_plan: RoutePlan::default(),
+            route_result_seq: 0,
             mobile_nav_open: false,
             mobile_publish_open: false,
             mobile_selected_place: None,
@@ -403,6 +411,27 @@ impl PinpointAppUI {
                         },
                         Err(e) => app.set_error(Some(e.to_string())),
                     }
+                }
+                PendingAction::PlanRoute {
+                    from,
+                    to,
+                    mode,
+                    via,
+                    avoid,
+                } => {
+                    let result = app.map_route(from, to, &mode, &via, &avoid, true).await;
+                    let data = app.data();
+                    let mut d = data.lock().unwrap();
+                    match result {
+                        Ok(routes) => {
+                            d.route_results = routes;
+                            d.route_error = None;
+                        }
+                        Err(e) => {
+                            d.route_error = Some(e.to_string());
+                        }
+                    }
+                    d.route_result_seq = d.route_result_seq.wrapping_add(1);
                 }
                 PendingAction::Poi { lat, lon, category } => {
                     if let Ok(client) = OsmClient::new() {
@@ -778,6 +807,12 @@ struct FriendshipRef {
 
 impl eframe::App for PinpointAppUI {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.sync_route_results();
+        if Self::is_compact(ctx) && self.mobile_selected_place.is_none() {
+            if let Some(place) = self.app.data().lock().unwrap().selected_place.clone() {
+                self.mobile_selected_place = Some(place);
+            }
+        }
         // Handle screenshot mode
         if self.app.screenshot_mode() && !self.app.screenshot_taken() {
             self.app.increment_screenshot_counter();

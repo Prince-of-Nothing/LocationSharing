@@ -2,7 +2,7 @@
 //! (`backend/internal/handlers`: `userResponse`, `loginResponse`,
 //! `friendshipResponse`, `locationShareResponse`, `locationResponse`).
 
-use crate::osm::SearchPlace;
+use crate::osm::{Route, SearchPlace};
 use serde::{Deserialize, Serialize};
 
 /// Authenticated user as returned in the `user` field of login/register.
@@ -328,6 +328,10 @@ pub struct AppData {
     pub poi_results: Vec<crate::osm::Poi>,
     /// Last calculated route (summary/steps/GPX export).
     pub last_route: Option<crate::osm::Route>,
+    /// Latest backend route alternatives and their request generation.
+    pub route_results: Vec<Route>,
+    pub route_error: Option<String>,
+    pub route_result_seq: u64,
     // New feature state (populated by the server where applicable).
     pub my_location: Option<FriendLocation>,
     pub check_ins: Vec<CheckIn>,
