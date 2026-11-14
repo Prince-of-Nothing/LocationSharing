@@ -137,6 +137,7 @@ pub enum CurrentScreen {
     Trips,
     Emergency,
     Profile,
+    About,
     Admin,
     ChangePassword,
     Kiosk,
