@@ -34,6 +34,7 @@ enum PendingAction {
     Login {
         email: String,
         password: String,
+        totp: Option<String>,
     },
     Register {
         email: String,
@@ -142,6 +143,7 @@ pub struct PinpointAppUI {
     // Sign-in / sign-up form state
     login_email: String,
     login_password: String,
+    login_totp: String,
     register_email: String,
     register_password: String,
     register_full_name: String,
@@ -210,6 +212,7 @@ impl PinpointAppUI {
             lang: Lang::system(),
             login_email: String::new(),
             login_password: String::new(),
+            login_totp: String::new(),
             register_email: String::new(),
             register_password: String::new(),
             register_full_name: String::new(),
@@ -276,8 +279,12 @@ impl PinpointAppUI {
         let app = Arc::clone(&self.app);
         self.rt.spawn(async move {
             match action {
-                PendingAction::Login { email, password } => {
-                    let _ = app.login(email, password).await;
+                PendingAction::Login {
+                    email,
+                    password,
+                    totp,
+                } => {
+                    let _ = app.login(email, password, totp).await;
                 }
                 PendingAction::Register {
                     email,
@@ -720,6 +727,12 @@ impl PinpointAppUI {
                         .hint_text("Password")
                         .desired_width(250.0),
                 );
+                ui.add_space(8.0);
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.login_totp)
+                        .hint_text("Authenticator code (if MFA is on)")
+                        .desired_width(250.0),
+                );
                 ui.add_space(16.0);
                 if ui.button(i18n::t(lang, key::SIGN_IN)).clicked()
                     && !self.login_email.is_empty()
@@ -727,7 +740,22 @@ impl PinpointAppUI {
                 {
                     let email = self.login_email.clone();
                     let password = self.login_password.clone();
-                    self.spawn_action(PendingAction::Login { email, password }, ctx);
+                    let totp = {
+                        let code = self.login_totp.trim();
+                        if code.is_empty() {
+                            None
+                        } else {
+                            Some(code.to_string())
+                        }
+                    };
+                    self.spawn_action(
+                        PendingAction::Login {
+                            email,
+                            password,
+                            totp,
+                        },
+                        ctx,
+                    );
                 }
                 ui.add_space(8.0);
                 ui.label(i18n::t(lang, key::OFFLINE_MAP_HINT));

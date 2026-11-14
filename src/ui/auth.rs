@@ -30,6 +30,12 @@ impl PinpointAppUI {
                         .hint_text("Password")
                         .desired_width(field_width),
                 );
+                ui.add_space(8.0);
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.login_totp)
+                        .hint_text("Authenticator code (if MFA is on)")
+                        .desired_width(field_width),
+                );
                 ui.add_space(16.0);
                 if ui.button("Sign in").clicked()
                     && !self.login_email.is_empty()
@@ -37,7 +43,22 @@ impl PinpointAppUI {
                 {
                     let email = self.login_email.clone();
                     let password = self.login_password.clone();
-                    self.spawn_action(PendingAction::Login { email, password }, ctx);
+                    let totp = {
+                        let code = self.login_totp.trim();
+                        if code.is_empty() {
+                            None
+                        } else {
+                            Some(code.to_string())
+                        }
+                    };
+                    self.spawn_action(
+                        PendingAction::Login {
+                            email,
+                            password,
+                            totp,
+                        },
+                        ctx,
+                    );
                 }
                 ui.add_space(8.0);
                 if ui.button("Register").clicked() {

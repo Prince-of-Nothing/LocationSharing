@@ -584,7 +584,12 @@ impl PinpointApp {
         }
     }
 
-    pub async fn login(&self, email: String, password: String) -> anyhow::Result<()> {
+    pub async fn login(
+        &self,
+        email: String,
+        password: String,
+        totp: Option<String>,
+    ) -> anyhow::Result<()> {
         let email_valid = crate::security::validation::validate_email(&email);
         if !email_valid.is_valid() {
             self.set_error(Some(email_valid.errors.join("; ")));
@@ -603,7 +608,10 @@ impl PinpointApp {
         self.set_loading(true);
         self.set_error(None);
 
-        let result = self.backend.login(&email, &password).await;
+        let result = self
+            .backend
+            .login_with_totp(&email, &password, totp.as_deref())
+            .await;
 
         self.set_loading(false);
 

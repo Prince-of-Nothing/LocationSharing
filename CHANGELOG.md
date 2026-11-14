@@ -20,6 +20,7 @@ The per-item flagged list for this release is in
 - [FEATURE] On-device tile cache/prefetch through `/map/tiles` under the Android app data dir.
 
 ### Fixed
+- [FIX] Auth: native login accepts an optional TOTP code, so MFA-enabled accounts can sign in instead of always receiving `MFA_REQUIRED`.
 - [FIX] Tiles: force IPv4 for proxy/download requests and avoid the Docker gateway on 8000 by using `10.0.2.2:8080` for Android debug builds.
 
 ## [1.2.1] - 2026-11-14

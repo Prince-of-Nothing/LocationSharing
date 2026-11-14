@@ -167,6 +167,21 @@ impl Backend for FailoverBackend {
         })
     }
 
+    fn login_with_totp<'a>(
+        &'a self,
+        email: &'a str,
+        password: &'a str,
+        totp: Option<&'a str>,
+    ) -> BackendFuture<'a, User> {
+        Box::pin(async move {
+            self.try_all("login_with_totp", |b| {
+                let b = b.clone();
+                async move { b.login_with_totp(email, password, totp).await }
+            })
+            .await
+        })
+    }
+
     fn register<'a>(
         &'a self,
         email: &'a str,

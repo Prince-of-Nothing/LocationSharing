@@ -213,11 +213,22 @@ impl ApiClient {
     }
 
     pub async fn login(&self, email: &str, password: &str) -> anyhow::Result<User> {
+        self.login_with_totp(email, password, None).await
+    }
+
+    /// Login with an optional TOTP code. MFA-enabled accounts need the
+    /// 6-digit code in the request body; non-MFA accounts ignore it.
+    pub async fn login_with_totp(
+        &self,
+        email: &str,
+        password: &str,
+        totp: Option<&str>,
+    ) -> anyhow::Result<User> {
         let response = self
             .request(
                 reqwest::Method::POST,
                 "/api/v1/auth/login",
-                Some(serde_json::json!({ "email": email, "password": password })),
+                Some(login_body(email, password, totp)),
             )
             .await?;
         let response = Self::check(response, "Login failed").await?;
@@ -716,6 +727,15 @@ struct RouteResponse {
     routes: Vec<Route>,
 }
 
+fn login_body(email: &str, password: &str, totp: Option<&str>) -> serde_json::Value {
+    match totp.map(str::trim).filter(|code| !code.is_empty()) {
+        Some(code) => {
+            serde_json::json!({ "email": email, "password": password, "totp": code })
+        }
+        None => serde_json::json!({ "email": email, "password": password }),
+    }
+}
+
 /// Build the `/map/route` query string. Kept pure so the encoding is
 /// testable without a network call; commas/semicolons are legal in a query.
 fn map_route_path(
@@ -842,6 +862,14 @@ impl crate::backend::Backend for ApiClient {
         password: &'a str,
     ) -> crate::backend::BackendFuture<'a, crate::models::User> {
         Box::pin(async move { ApiClient::login(self, email, password).await })
+    }
+    fn login_with_totp<'a>(
+        &'a self,
+        email: &'a str,
+        password: &'a str,
+        totp: Option<&'a str>,
+    ) -> crate::backend::BackendFuture<'a, crate::models::User> {
+        Box::pin(async move { ApiClient::login_with_totp(self, email, password, totp).await })
     }
     fn register<'a>(
         &'a self,
@@ -1043,7 +1071,7 @@ impl crate::backend::Backend for ApiClient {
 
 #[cfg(test)]
 mod tests {
-    use super::{map_route_path, validate_backend_url_with_allowlist};
+    use super::{login_body, map_route_path, validate_backend_url_with_allowlist};
 
     #[test]
     fn accepts_loopback_http_development_urls() {
@@ -1138,6 +1166,15 @@ mod tests {
         let route: crate::osm::Route = serde_json::from_value(value).unwrap();
         assert_eq!(route.points.len(), 2);
         assert_eq!(route.steps[0].distance_m, Some(120.0));
+    }
+
+    #[test]
+    fn login_body_includes_totp_only_when_present() {
+        let with = login_body("a@b.c", "pw", Some("123456"));
+        assert_eq!(with["totp"], "123456");
+        let without = login_body("a@b.c", "pw", None);
+        assert!(without.get("totp").is_none());
+        assert!(without.get("password").is_some());
     }
 
     #[test]

@@ -60,6 +60,13 @@ pub trait Backend: BackendBounds {
     fn session_active(&self) -> bool;
 
     fn login<'a>(&'a self, email: &'a str, password: &'a str) -> BackendFuture<'a, User>;
+    /// Login with an optional TOTP code for MFA-enabled accounts.
+    fn login_with_totp<'a>(
+        &'a self,
+        email: &'a str,
+        password: &'a str,
+        totp: Option<&'a str>,
+    ) -> BackendFuture<'a, User>;
     fn register<'a>(
         &'a self,
         email: &'a str,
