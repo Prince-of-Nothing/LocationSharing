@@ -842,6 +842,18 @@ impl PinpointAppUI {
             return;
         }
         let lang = self.lang;
+        let is_admin = {
+            let data = self.app.data();
+            let data = data.lock().unwrap();
+            data.user
+                .as_ref()
+                .map(|u| {
+                    (u.role.eq_ignore_ascii_case("admin")
+                        || u.role.eq_ignore_ascii_case("administrator"))
+                        && u.is_active
+                })
+                .unwrap_or(false)
+        };
         let screens = [
             (CurrentScreen::Map, key::MAP),
             (CurrentScreen::Friends, key::FRIENDS),
@@ -857,6 +869,9 @@ impl PinpointAppUI {
         ];
         ui.horizontal(|ui| {
             for (screen, key_str) in screens {
+                if screen == CurrentScreen::Admin && !is_admin {
+                    continue;
+                }
                 if ui
                     .selectable_label(self.app.current_screen() == screen, i18n::t(lang, key_str))
                     .clicked()
@@ -998,6 +1013,18 @@ impl eframe::App for PinpointAppUI {
             let mut chosen_lang: Option<Lang> = None;
             let mut publish_requested = false;
             let mut refresh_requested = false;
+            let is_admin = {
+                let data = self.app.data();
+                let data = data.lock().unwrap();
+                data.user
+                    .as_ref()
+                    .map(|u| {
+                        (u.role.eq_ignore_ascii_case("admin")
+                            || u.role.eq_ignore_ascii_case("administrator"))
+                            && u.is_active
+                    })
+                    .unwrap_or(false)
+            };
             egui::TopBottomPanel::bottom("mobile_nav")
                 .resizable(false)
                 .exact_height(380.0)
@@ -1032,6 +1059,9 @@ impl eframe::App for PinpointAppUI {
                             (CurrentScreen::Kiosk, key::KIOSK),
                             (CurrentScreen::ChangePassword, key::PASSWORD),
                         ] {
+                            if screen == CurrentScreen::Admin && !is_admin {
+                                continue;
+                            }
                             if ui
                                 .selectable_label(current == screen, i18n::t(lang, key_str))
                                 .clicked()
