@@ -13,6 +13,12 @@ The per-item flagged list for this release is in
 ## [Unreleased]
 ### Added
 - [FEATURE] mobile: Port webapp Kiosk check-in mode & Admin console to Android app and eframe UI, with deep links `pinpoint://kiosk?token=...` and `pinpoint://admin`.
+- [FEATURE] Android APK: cargo-apk 0.10 build with NativeActivity/`android_main`, eframe `android-native-activity`, API 35 manifest metadata and launcher icons; runs on the API 37 x86_64 emulator.
+- [FEATURE] Mobile map-first shell: compact top bar + drawer, touch-sized controls, live tiles via the backend, publish sheet, scrollable locations and compact login/register forms.
+- [FEATURE] On-device tile cache/prefetch through `/map/tiles` under the Android app data dir.
+
+### Fixed
+- [FIX] Tiles: force IPv4 for proxy/download requests and avoid the Docker gateway on 8000 by using `10.0.2.2:8080` for Android debug builds.
 
 ## [1.2.1] - 2026-11-14
 ### Security

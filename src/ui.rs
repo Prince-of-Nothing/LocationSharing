@@ -24,7 +24,7 @@ use crate::app::{CurrentScreen, PinpointApp};
 use crate::backend::DynBackend;
 use crate::i18n::{self, key, Lang};
 use crate::osm::OsmClient;
-use eframe::egui::{self, Align, Color32, Direction};
+use eframe::egui::{self, Align, Color32, Direction, RichText};
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 
@@ -192,6 +192,9 @@ pub struct PinpointAppUI {
     pub(crate) kiosk_token_input: String,
     pub(crate) kiosk_note_input: String,
     pub(crate) kiosk_consent_accepted: bool,
+    // Mobile shell
+    mobile_nav_open: bool,
+    mobile_publish_open: bool,
 }
 
 impl PinpointAppUI {
@@ -241,6 +244,8 @@ impl PinpointAppUI {
             kiosk_token_input: String::new(),
             kiosk_note_input: String::new(),
             kiosk_consent_accepted: false,
+            mobile_nav_open: false,
+            mobile_publish_open: false,
         }
     }
 
@@ -258,6 +263,11 @@ impl PinpointAppUI {
 
     pub fn set_screen(&mut self, screen: CurrentScreen) {
         self.app.set_screen(screen);
+    }
+
+    /// Touch/narrow layout: below ~700 pt the desktop tab strip cannot fit.
+    fn is_compact(ctx: &egui::Context) -> bool {
+        ctx.screen_rect().width() < 700.0
     }
 
     fn spawn_action(&mut self, action: PendingAction, ctx: &egui::Context) {
@@ -547,6 +557,50 @@ impl PinpointAppUI {
         let signed_in = self.app.is_signed_in();
         let lang = self.lang;
 
+        if Self::is_compact(ctx) {
+            // Android/iOS status bar sits over the window; leave a safe inset.
+            ui.add_space(28.0);
+            let auth_screen = matches!(
+                self.app.current_screen(),
+                CurrentScreen::Login | CurrentScreen::Register
+            );
+            ui.horizontal(|ui| {
+                if auth_screen {
+                    if ui.button("←").clicked() {
+                        self.app.set_screen(CurrentScreen::Map);
+                    }
+                } else if ui.button("☰").clicked() {
+                    self.mobile_nav_open = !self.mobile_nav_open;
+                }
+                ui.label(
+                    RichText::new(i18n::t(lang, key::APP_TITLE))
+                        .size(20.0)
+                        .strong(),
+                );
+                ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                    if !auth_screen {
+                        if signed_in {
+                            if ui.button(i18n::t(lang, key::SIGN_OUT)).clicked() {
+                                self.spawn_action(PendingAction::Logout, ctx);
+                            }
+                        } else if ui.button(i18n::t(lang, key::SIGN_IN)).clicked() {
+                            self.app.set_screen(CurrentScreen::Login);
+                        }
+                    }
+                    if self.app.is_loading() {
+                        ui.spinner();
+                    }
+                });
+            });
+            if let Some(err) = self.app.error_message() {
+                ui.colored_label(Color32::RED, err);
+            } else if let Some(notice) = self.app.notice_message() {
+                ui.colored_label(Color32::from_rgb(52, 211, 153), notice);
+            }
+            ui.add_space(4.0);
+            return;
+        }
+
         ui.horizontal(|ui| {
             ui.with_layout(
                 egui::Layout::centered_and_justified(Direction::LeftToRight),
@@ -600,6 +654,9 @@ impl PinpointAppUI {
     }
 
     fn draw_main_toolbar(&mut self, ui: &mut egui::Ui) {
+        if Self::is_compact(ui.ctx()) {
+            return;
+        }
         let lang = self.lang;
         let screens = [
             (CurrentScreen::Map, key::MAP),
@@ -715,6 +772,60 @@ impl eframe::App for PinpointAppUI {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     return;
                 }
+            }
+        }
+
+        let compact = Self::is_compact(ctx);
+        if compact && self.mobile_nav_open {
+            let lang = self.lang;
+            let current = self.app.current_screen();
+            let mut chosen: Option<CurrentScreen> = None;
+            let mut chosen_lang: Option<Lang> = None;
+            egui::SidePanel::left("mobile_nav")
+                .resizable(false)
+                .default_width(280.0)
+                .show(ctx, |ui| {
+                    ui.add_space(28.0);
+                    ui.heading(i18n::t(lang, key::APP_TITLE));
+                    ui.separator();
+                    for (screen, key_str) in [
+                        (CurrentScreen::Map, key::MAP),
+                        (CurrentScreen::Friends, key::FRIENDS),
+                        (CurrentScreen::Sharing, key::SHARING),
+                        (CurrentScreen::Places, key::PLACES),
+                        (CurrentScreen::Bookmarks, key::SAVED),
+                        (CurrentScreen::Trips, key::TRIPS),
+                        (CurrentScreen::Emergency, key::EMERGENCY),
+                        (CurrentScreen::Profile, key::PROFILE),
+                        (CurrentScreen::Admin, key::ADMIN),
+                        (CurrentScreen::Kiosk, key::KIOSK),
+                        (CurrentScreen::ChangePassword, key::PASSWORD),
+                    ] {
+                        if ui
+                            .selectable_label(current == screen, i18n::t(lang, key_str))
+                            .clicked()
+                        {
+                            chosen = Some(screen);
+                        }
+                    }
+                    ui.separator();
+                    ui.label("Language");
+                    egui::ComboBox::from_id_salt("mobile_lang")
+                        .selected_text(lang.native_name())
+                        .show_ui(ui, |ui| {
+                            for l in Lang::all() {
+                                if ui.selectable_label(lang == *l, l.native_name()).clicked() {
+                                    chosen_lang = Some(*l);
+                                }
+                            }
+                        });
+                });
+            if let Some(screen) = chosen {
+                self.app.set_screen(screen);
+                self.mobile_nav_open = false;
+            }
+            if let Some(l) = chosen_lang {
+                self.lang = l;
             }
         }
 

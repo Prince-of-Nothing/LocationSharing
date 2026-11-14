@@ -5,26 +5,30 @@ use eframe::egui::{self};
 
 impl PinpointAppUI {
     pub fn draw_login_form(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        let compact = Self::is_compact(ctx);
         ui.vertical_centered(|ui| {
-            ui.heading("Pinpoint");
-            ui.label("Private location sharing for trusted friends");
+            if !compact {
+                ui.heading("Pinpoint");
+                ui.label("Private location sharing for trusted friends");
+            }
             ui.small(format!("Backend: {}", self.app.backend_url()));
-            ui.add_space(20.0);
+            ui.add_space(if compact { 10.0 } else { 20.0 });
 
             ui.group(|ui| {
                 ui.label("Sign in");
                 ui.add_space(8.0);
+                let field_width = if compact { 300.0 } else { 250.0 };
                 ui.add(
                     egui::TextEdit::singleline(&mut self.login_email)
                         .hint_text("Email")
-                        .desired_width(250.0),
+                        .desired_width(field_width),
                 );
                 ui.add_space(8.0);
                 ui.add(
                     egui::TextEdit::singleline(&mut self.login_password)
                         .password(true)
                         .hint_text("Password")
-                        .desired_width(250.0),
+                        .desired_width(field_width),
                 );
                 ui.add_space(16.0);
                 if ui.button("Sign in").clicked()
@@ -44,34 +48,38 @@ impl PinpointAppUI {
     }
 
     pub fn draw_register(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        let compact = Self::is_compact(ctx);
         ui.vertical_centered(|ui| {
-            ui.heading("Create Account");
-            ui.add_space(20.0);
+            if !compact {
+                ui.heading("Create Account");
+            }
+            ui.add_space(if compact { 10.0 } else { 20.0 });
 
             ui.group(|ui| {
                 ui.label("New to Pinpoint?");
                 ui.add_space(10.0);
+                let field_width = if compact { 300.0 } else { 200.0 };
                 ui.add(
                     egui::TextEdit::singleline(&mut self.register_email)
                         .hint_text("Email")
-                        .desired_width(200.0),
+                        .desired_width(field_width),
                 );
                 ui.add_space(5.0);
                 ui.add(
                     egui::TextEdit::singleline(&mut self.register_password)
                         .password(true)
                         .hint_text("Password")
-                        .desired_width(200.0),
+                        .desired_width(field_width),
                 );
                 ui.add_space(5.0);
                 ui.add(
                     egui::TextEdit::singleline(&mut self.register_full_name)
                         .hint_text("Full Name")
-                        .desired_width(200.0),
+                        .desired_width(field_width),
                 );
                 ui.add_space(10.0);
 
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     if ui.button("Create Account").clicked()
                         && !self.register_email.is_empty()
                         && !self.register_password.is_empty()

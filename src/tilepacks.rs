@@ -152,6 +152,7 @@ pub async fn download_pack(
     let client = match client {
         Some(c) => c,
         None => match reqwest::Client::builder()
+            .local_address(Some(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED)))
             .timeout(Duration::from_secs(15))
             .user_agent(concat!(
                 "Pinpoint/",

@@ -4,6 +4,8 @@
 use crate::models::{AppData, FriendLocation};
 use crate::tilepacks::{cached_tile_path, latlon_to_world_px, world_px_to_latlon, TILE_SIZE};
 use eframe::egui::{self, Color32, Pos2, Rect, RichText, Sense, Stroke, TextureHandle, Ui, Vec2};
+use std::collections::HashSet;
+use std::sync::{Mutex, OnceLock};
 
 /// Canonical OpenStreetMap copyright / ODbL attribution URL.
 pub const OSM_COPYRIGHT_URL: &str = "https://www.openstreetmap.org/copyright";
@@ -65,10 +67,57 @@ fn load_tile_texture(ctx: &egui::Context, z: u8, x: u32, y: u32) -> Option<Textu
     Some(handle)
 }
 
+/// Fetch one missing tile through the Pinpoint backend, then repaint.
+/// Deduplicates in-flight requests across frames.
+fn prefetch_tile(ctx: &egui::Context, backend_url: &str, z: u8, x: u32, y: u32) {
+    static PENDING: OnceLock<Mutex<HashSet<(u8, u32, u32)>>> = OnceLock::new();
+    let pending = PENDING.get_or_init(|| Mutex::new(HashSet::new()));
+    {
+        let mut set = pending.lock().unwrap();
+        if !set.insert((z, x, y)) {
+            return;
+        }
+    }
+    let base = backend_url.trim_end_matches('/').to_string();
+    let ctx = ctx.clone();
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build();
+        if let Ok(rt) = rt {
+            let _ = rt.block_on(crate::tilepacks::download_pack(
+                &[(z as u32, x, y)],
+                None,
+                Some(&base),
+            ));
+        }
+        let pending = PENDING.get_or_init(|| Mutex::new(HashSet::new()));
+        pending.lock().unwrap().remove(&(z, x, y));
+        ctx.request_repaint();
+    });
+}
+
 /// Render an interactive Slippy tile canvas showing friend locations and
-/// cached offline tiles.
+/// cached tiles at the default 320 pt height.
 pub fn render_map(ui: &mut Ui, state: &mut AppData) {
+    render_map_sized(ui, state, 320.0);
+}
+
+/// Same as [`render_map`] but with an explicit canvas height (mobile layout)
+/// and optional live tile prefetch through the Pinpoint backend.
+pub fn render_map_sized(ui: &mut Ui, state: &mut AppData, height: f32) {
+    render_map_with(ui, state, height, None, false);
+}
+
+pub fn render_map_with(
+    ui: &mut Ui,
+    state: &mut AppData,
+    height: f32,
+    backend_url: Option<&str>,
+    online: bool,
+) {
     ensure_viewport(state);
+    let compact = ui.available_width() < 520.0;
 
     // Collect all locations to display (friends + own location when available).
     let mut all_locations: Vec<FriendLocation> = state.locations.clone();
@@ -79,9 +128,11 @@ pub fn render_map(ui: &mut Ui, state: &mut AppData) {
     }
 
     ui.group(|ui| {
-        ui.horizontal(|ui| {
-            ui.label(RichText::new("Interactive Slippy Map").size(16.0).strong());
-            ui.add_space(8.0);
+        ui.horizontal_wrapped(|ui| {
+            if !compact {
+                ui.label(RichText::new("Interactive Slippy Map").size(16.0).strong());
+                ui.add_space(8.0);
+            }
             if ui.small_button("−").clicked() && state.map_zoom > 2 {
                 state.map_zoom -= 1;
             }
@@ -93,7 +144,7 @@ pub fn render_map(ui: &mut Ui, state: &mut AppData) {
             if ui.small_button("+").clicked() && state.map_zoom < 18 {
                 state.map_zoom += 1;
             }
-            if ui.small_button("Chișinău").clicked() {
+            if !compact && ui.small_button("Chișinău").clicked() {
                 state.map_center_lat = DEFAULT_CENTER_LAT;
                 state.map_center_lon = DEFAULT_CENTER_LON;
                 state.map_zoom = DEFAULT_ZOOM;
@@ -105,20 +156,22 @@ pub fn render_map(ui: &mut Ui, state: &mut AppData) {
                 state.map_center_lat = sum_lat / n;
                 state.map_center_lon = sum_lon / n;
             }
-            ui.label(
-                RichText::new(format!(
-                    "center {:.4}, {:.4}",
-                    state.map_center_lat, state.map_center_lon
-                ))
-                .size(11.0)
-                .color(Color32::from_rgb(148, 163, 184)),
-            );
+            if !compact {
+                ui.label(
+                    RichText::new(format!(
+                        "center {:.4}, {:.4}",
+                        state.map_center_lat, state.map_center_lon
+                    ))
+                    .size(11.0)
+                    .color(Color32::from_rgb(148, 163, 184)),
+                );
+            }
         });
         ui.add_space(6.0);
 
         // Allocate interactive canvas
         let avail_width = (ui.available_width() - 8.0).max(240.0);
-        let canvas_size = Vec2::new(avail_width, 320.0);
+        let canvas_size = Vec2::new(avail_width, height.max(220.0));
         let (map_rect, response) = ui.allocate_exact_size(canvas_size, Sense::click_and_drag());
 
         // Drag-to-pan in Web Mercator pixel space
@@ -178,6 +231,11 @@ pub fn render_map(ui: &mut Ui, state: &mut AppData) {
                         Color32::WHITE,
                     );
                 } else {
+                    if online {
+                        if let Some(base) = backend_url {
+                            prefetch_tile(ui.ctx(), base, z, utx, uty);
+                        }
+                    }
                     painter.rect_stroke(
                         tile_rect,
                         0.0_f32,
@@ -241,8 +299,10 @@ pub fn render_map(ui: &mut Ui, state: &mut AppData) {
         ui.add_space(6.0);
 
         // Legend
-        ui.horizontal(|ui| {
-            ui.label(RichText::new("Legend:").size(12.0).strong());
+        ui.horizontal_wrapped(|ui| {
+            if !compact {
+                ui.label(RichText::new("Legend:").size(12.0).strong());
+            }
             ui.label(
                 RichText::new("● Exact")
                     .size(12.0)
@@ -258,20 +318,22 @@ pub fn render_map(ui: &mut Ui, state: &mut AppData) {
                     .size(12.0)
                     .color(Color32::from_rgb(248, 113, 113)),
             );
-            ui.label(
-                RichText::new("(drag map to pan, scroll/+/− to zoom)")
-                    .size(11.0)
-                    .color(Color32::from_rgb(148, 163, 184)),
-            );
+            if !compact {
+                ui.label(
+                    RichText::new("(drag map to pan, scroll/+/− to zoom)")
+                        .size(11.0)
+                        .color(Color32::from_rgb(148, 163, 184)),
+                );
+            }
         });
 
         // Map provider buttons (OSM data — ODbL; see docs/sdlc/07-openstreetmap-integration.md)
         if let Some(first_loc) = all_locations.first() {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 if ui.button("OpenStreetMap").clicked() {
                     open_map_in_browser(ui.ctx(), first_loc, "osm");
                 }
-                if ui.button("Directions (OSM)").clicked() {
+                if !compact && ui.button("Directions (OSM)").clicked() {
                     open_map_in_browser(ui.ctx(), first_loc, "directions");
                 }
                 if ui.button("Organic Maps").clicked() {
@@ -282,7 +344,7 @@ pub fn render_map(ui: &mut Ui, state: &mut AppData) {
                 }
             });
         }
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.label(
                 RichText::new("Map data © OpenStreetMap contributors (ODbL)")
                     .size(10.0)
@@ -301,6 +363,10 @@ pub fn render_map(ui: &mut Ui, state: &mut AppData) {
         ui.group(|ui| {
             ui.label(RichText::new("No friend locations shared yet").size(14.0));
         });
+    } else if compact {
+        egui::ScrollArea::vertical()
+            .max_height(180.0)
+            .show(ui, |ui| draw_location_list(ui, &all_locations));
     } else {
         draw_location_list(ui, &all_locations);
     }

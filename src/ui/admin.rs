@@ -52,7 +52,12 @@ impl PinpointAppUI {
                 }
                 if ui.button("Refresh List").clicked() {
                     self.admin_search_query.clear();
-                    self.spawn_action(PendingAction::AdminLoadUsers { query: String::new() }, ctx);
+                    self.spawn_action(
+                        PendingAction::AdminLoadUsers {
+                            query: String::new(),
+                        },
+                        ctx,
+                    );
                 }
             });
         });

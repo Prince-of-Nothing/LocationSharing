@@ -465,6 +465,7 @@ pub mod map_handlers {
         // Public providers are demo fallbacks only (ADR-0011); none needs a key.
         // Never uses tile.openstreetmap.org (OSMF policy).
         let client = match reqwest::Client::builder()
+            .local_address(Some(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED)))
             .timeout(Duration::from_secs(10))
             .user_agent(concat!(
                 "Pinpoint/",

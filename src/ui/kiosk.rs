@@ -18,7 +18,11 @@ impl PinpointAppUI {
         ui.add_space(8.0);
 
         ui.group(|ui| {
-            ui.label(RichText::new("Share Link / Check-In Token").size(14.0).strong());
+            ui.label(
+                RichText::new("Share Link / Check-In Token")
+                    .size(14.0)
+                    .strong(),
+            );
             ui.add_space(4.0);
             ui.horizontal(|ui| {
                 ui.add(
@@ -67,7 +71,10 @@ impl PinpointAppUI {
                     if let Some(loc) = &resolved.location {
                         ui.label(RichText::new("Shared Location:").strong());
                         ui.label(format!("User: {}", loc.user_name));
-                        ui.label(format!("Coordinates: {:.5}, {:.5}", loc.latitude, loc.longitude));
+                        ui.label(format!(
+                            "Coordinates: {:.5}, {:.5}",
+                            loc.latitude, loc.longitude
+                        ));
                         ui.label(format!("Precision: {}", loc.precision_level));
                         ui.label(format!("Updated: {}", loc.updated_at));
                         if ui.button("Show on Map").clicked() {

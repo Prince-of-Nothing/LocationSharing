@@ -7,6 +7,10 @@ use eframe::egui::{self, Color32, Direction, RichText};
 
 impl PinpointAppUI {
     pub fn draw_map_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        if Self::is_compact(ctx) {
+            self.draw_mobile_map_screen(ui, ctx);
+            return;
+        }
         let lang = self.lang;
         ui.horizontal(|ui| {
             ui.with_layout(
@@ -193,9 +197,11 @@ impl PinpointAppUI {
         ui.add_space(8.0);
 
         // Map visualization + location list
+        let backend_url = self.app.backend_url();
+        let online = !self.app.is_offline_mode();
         let binding = self.app.data();
         let mut data = binding.lock().unwrap();
-        map::render_map(ui, &mut data);
+        map::render_map_with(ui, &mut data, 320.0, Some(&backend_url), online);
         let (center_lat, center_lon, zoom) =
             (data.map_center_lat, data.map_center_lon, data.map_zoom);
         let locations: Vec<FriendLocation> = data.locations.clone();
@@ -340,5 +346,105 @@ impl PinpointAppUI {
                 ui.colored_label(Color32::RED, err);
             }
         });
+    }
+}
+
+impl PinpointAppUI {
+    /// Map-first touch layout: full-width map, compact actions, publish sheet.
+    fn draw_mobile_map_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        let signed_in = self.app.is_signed_in();
+        ui.horizontal(|ui| {
+            ui.label(
+                RichText::new(if signed_in { "Live map" } else { "Demo map" })
+                    .size(16.0)
+                    .strong(),
+            );
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button("📍 Locate").clicked() {
+                    self.spawn_action(PendingAction::PublishGpsLocation, ctx);
+                }
+            });
+        });
+        ui.add_space(4.0);
+
+        let height = (ui.available_height() - 150.0).clamp(260.0, 620.0);
+        let backend_url = self.app.backend_url();
+        let online = !self.app.is_offline_mode();
+        {
+            let binding = self.app.data();
+            let mut data = binding.lock().unwrap();
+            crate::map::render_map_with(ui, &mut data, height, Some(&backend_url), online);
+        }
+        ui.add_space(6.0);
+
+        ui.horizontal_wrapped(|ui| {
+            if ui.button("Publish").clicked() {
+                self.mobile_publish_open = !self.mobile_publish_open;
+            }
+            if ui.button(i18n::t(self.lang, key::FRIENDS)).clicked() {
+                self.app.set_screen(crate::app::CurrentScreen::Friends);
+            }
+            if ui.button(i18n::t(self.lang, key::SHARING)).clicked() {
+                self.app.set_screen(crate::app::CurrentScreen::Sharing);
+            }
+            if ui.button(i18n::t(self.lang, key::PLACES)).clicked() {
+                self.app.set_screen(crate::app::CurrentScreen::Places);
+            }
+            if ui.button(i18n::t(self.lang, key::SAVED)).clicked() {
+                self.app.set_screen(crate::app::CurrentScreen::Bookmarks);
+            }
+        });
+
+        if self.mobile_publish_open {
+            ui.add_space(6.0);
+            ui.group(|ui| {
+                ui.label(
+                    RichText::new(i18n::t(self.lang, key::PUBLISH_MY_LOCATION))
+                        .size(14.0)
+                        .strong(),
+                );
+                ui.horizontal(|ui| {
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.publish_lat)
+                            .hint_text(i18n::t(self.lang, key::LATITUDE))
+                            .desired_width(110.0),
+                    );
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.publish_lon)
+                            .hint_text(i18n::t(self.lang, key::LONGITUDE))
+                            .desired_width(110.0),
+                    );
+                });
+                ui.horizontal(|ui| {
+                    if ui.button(i18n::t(self.lang, key::PUBLISH)).clicked() {
+                        match (
+                            self.publish_lat.trim().parse::<f64>(),
+                            self.publish_lon.trim().parse::<f64>(),
+                        ) {
+                            (Ok(lat), Ok(lon))
+                                if (-90.0..=90.0).contains(&lat)
+                                    && (-180.0..=180.0).contains(&lon) =>
+                            {
+                                self.spawn_action(
+                                    PendingAction::PublishLocation {
+                                        lat,
+                                        lon,
+                                        accuracy: 10.0,
+                                    },
+                                    ctx,
+                                );
+                            }
+                            _ => self.app.set_error(Some(
+                                "Enter a valid latitude (-90..90) and longitude (-180..180)"
+                                    .to_string(),
+                            )),
+                        }
+                    }
+                    if ui.button("📍 Use GPS").clicked() {
+                        self.spawn_action(PendingAction::PublishGpsLocation, ctx);
+                    }
+                });
+            });
+        }
     }
 }

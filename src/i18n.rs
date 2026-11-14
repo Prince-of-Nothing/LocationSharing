@@ -477,6 +477,7 @@ fn ro() -> HashMap<&'static str, &'static str> {
     m.insert(EMERGENCY, "Urgență");
     m.insert(PROFILE, "Profil");
     m.insert(ADMIN, "Admin");
+    m.insert(KIOSK, "Kiosk");
     m.insert(PASSWORD, "Parolă");
     m.insert(SIGN_IN, "Autentificare");
     m.insert(SIGN_OUT, "Deconectare");
@@ -531,6 +532,7 @@ fn ru() -> HashMap<&'static str, &'static str> {
     m.insert(EMERGENCY, "Экстренная помощь");
     m.insert(PROFILE, "Профиль");
     m.insert(ADMIN, "Админ");
+    m.insert(KIOSK, "Kiosk");
     m.insert(PASSWORD, "Пароль");
     m.insert(SIGN_IN, "Войти");
     m.insert(SIGN_OUT, "Выйти");
@@ -585,6 +587,7 @@ fn fr() -> HashMap<&'static str, &'static str> {
     m.insert(EMERGENCY, "Urgence");
     m.insert(PROFILE, "Profil");
     m.insert(ADMIN, "Admin");
+    m.insert(KIOSK, "Kiosk");
     m.insert(PASSWORD, "Mot de passe");
     m.insert(SIGN_IN, "Se connecter");
     m.insert(SIGN_OUT, "Se déconnecter");
@@ -639,6 +642,7 @@ fn de() -> HashMap<&'static str, &'static str> {
     m.insert(EMERGENCY, "Notfall");
     m.insert(PROFILE, "Profil");
     m.insert(ADMIN, "Admin");
+    m.insert(KIOSK, "Kiosk");
     m.insert(PASSWORD, "Passwort");
     m.insert(SIGN_IN, "Anmelden");
     m.insert(SIGN_OUT, "Abmelden");
@@ -693,6 +697,7 @@ fn es() -> HashMap<&'static str, &'static str> {
     m.insert(EMERGENCY, "Emergencia");
     m.insert(PROFILE, "Perfil");
     m.insert(ADMIN, "Admin");
+    m.insert(KIOSK, "Kiosk");
     m.insert(PASSWORD, "Contraseña");
     m.insert(SIGN_IN, "Iniciar sesión");
     m.insert(SIGN_OUT, "Cerrar sesión");
@@ -747,6 +752,7 @@ fn pt() -> HashMap<&'static str, &'static str> {
     m.insert(EMERGENCY, "Emergência");
     m.insert(PROFILE, "Perfil");
     m.insert(ADMIN, "Admin");
+    m.insert(KIOSK, "Kiosk");
     m.insert(PASSWORD, "Palavra-passe");
     m.insert(SIGN_IN, "Iniciar sessão");
     m.insert(SIGN_OUT, "Terminar sessão");
@@ -801,6 +807,7 @@ fn it() -> HashMap<&'static str, &'static str> {
     m.insert(EMERGENCY, "Emergenza");
     m.insert(PROFILE, "Profilo");
     m.insert(ADMIN, "Admin");
+    m.insert(KIOSK, "Kiosk");
     m.insert(PASSWORD, "Password");
     m.insert(SIGN_IN, "Accedi");
     m.insert(SIGN_OUT, "Esci");
@@ -852,6 +859,7 @@ fn nl() -> HashMap<&'static str, &'static str> {
     m.insert(EMERGENCY, "Noodgeval");
     m.insert(PROFILE, "Profiel");
     m.insert(ADMIN, "Beheer");
+    m.insert(KIOSK, "Kiosk");
     m.insert(PASSWORD, "Wachtwoord");
     m.insert(SIGN_IN, "Inloggen");
     m.insert(SIGN_OUT, "Uitloggen");
@@ -903,6 +911,7 @@ fn pl() -> HashMap<&'static str, &'static str> {
     m.insert(EMERGENCY, "Alarm");
     m.insert(PROFILE, "Profil");
     m.insert(ADMIN, "Admin");
+    m.insert(KIOSK, "Kiosk");
     m.insert(PASSWORD, "Hasło");
     m.insert(SIGN_IN, "Zaloguj się");
     m.insert(SIGN_OUT, "Wyloguj się");
@@ -957,6 +966,7 @@ fn uk() -> HashMap<&'static str, &'static str> {
     m.insert(EMERGENCY, "Нагдопомога");
     m.insert(PROFILE, "Профіль");
     m.insert(ADMIN, "Адмін");
+    m.insert(KIOSK, "Kiosk");
     m.insert(PASSWORD, "Пароль");
     m.insert(SIGN_IN, "Увійти");
     m.insert(SIGN_OUT, "Вийти");
@@ -1011,6 +1021,7 @@ fn tr_tr() -> HashMap<&'static str, &'static str> {
     m.insert(EMERGENCY, "Acil Durum");
     m.insert(PROFILE, "Profil");
     m.insert(ADMIN, "Yönetici");
+    m.insert(KIOSK, "Kiosk");
     m.insert(PASSWORD, "Şifre");
     m.insert(SIGN_IN, "Giriş yap");
     m.insert(SIGN_OUT, "Çıkış yap");
@@ -1065,6 +1076,7 @@ fn ar() -> HashMap<&'static str, &'static str> {
     m.insert(EMERGENCY, "طوارئ");
     m.insert(PROFILE, "الملف الشخصي");
     m.insert(ADMIN, "الإدارة");
+    m.insert(KIOSK, "Kiosk");
     m.insert(PASSWORD, "كلمة المرور");
     m.insert(SIGN_IN, "تسجيل الدخول");
     m.insert(SIGN_OUT, "تسجيل الخروج");
@@ -1116,6 +1128,7 @@ fn he() -> HashMap<&'static str, &'static str> {
     m.insert(EMERGENCY, "חירום");
     m.insert(PROFILE, "פרופיל");
     m.insert(ADMIN, "ניהול");
+    m.insert(KIOSK, "Kiosk");
     m.insert(PASSWORD, "סיסמה");
     m.insert(SIGN_IN, "התחברות");
     m.insert(SIGN_OUT, "התנתקות");
@@ -1167,6 +1180,7 @@ fn zh() -> HashMap<&'static str, &'static str> {
     m.insert(EMERGENCY, "紧急");
     m.insert(PROFILE, "个人资料");
     m.insert(ADMIN, "管理");
+    m.insert(KIOSK, "Kiosk");
     m.insert(PASSWORD, "密码");
     m.insert(SIGN_IN, "登录");
     m.insert(SIGN_OUT, "退出登录");
@@ -1215,6 +1229,7 @@ fn ja() -> HashMap<&'static str, &'static str> {
     m.insert(EMERGENCY, "緊急");
     m.insert(PROFILE, "プロフィール");
     m.insert(ADMIN, "管理");
+    m.insert(KIOSK, "Kiosk");
     m.insert(PASSWORD, "パスワード");
     m.insert(SIGN_IN, "ログイン");
     m.insert(SIGN_OUT, "ログアウト");
@@ -1269,6 +1284,7 @@ fn ko() -> HashMap<&'static str, &'static str> {
     m.insert(EMERGENCY, "긴급");
     m.insert(PROFILE, "프로필");
     m.insert(ADMIN, "관리자");
+    m.insert(KIOSK, "Kiosk");
     m.insert(PASSWORD, "비밀번호");
     m.insert(SIGN_IN, "로그인");
     m.insert(SIGN_OUT, "로그아웃");
@@ -1323,6 +1339,7 @@ fn hi() -> HashMap<&'static str, &'static str> {
     m.insert(EMERGENCY, "आपातकाल");
     m.insert(PROFILE, "प्रोफ़ाइल");
     m.insert(ADMIN, "एडमिन");
+    m.insert(KIOSK, "Kiosk");
     m.insert(PASSWORD, "पासवर्ड");
     m.insert(SIGN_IN, "साइन इन");
     m.insert(SIGN_OUT, "साइन आउट");
@@ -1377,6 +1394,7 @@ fn vi() -> HashMap<&'static str, &'static str> {
     m.insert(EMERGENCY, "Khẩn cấp");
     m.insert(PROFILE, "Hồ sơ");
     m.insert(ADMIN, "Quản trị");
+    m.insert(KIOSK, "Kiosk");
     m.insert(PASSWORD, "Mật khẩu");
     m.insert(SIGN_IN, "Đăng nhập");
     m.insert(SIGN_OUT, "Đăng xuất");
@@ -1431,6 +1449,7 @@ fn th() -> HashMap<&'static str, &'static str> {
     m.insert(EMERGENCY, "ฉุกเฉิน");
     m.insert(PROFILE, "โปรไฟล์");
     m.insert(ADMIN, "ผู้ดูแล");
+    m.insert(KIOSK, "Kiosk");
     m.insert(PASSWORD, "รหัสผ่าน");
     m.insert(SIGN_IN, "เข้าสู่ระบบ");
     m.insert(SIGN_OUT, "ออกจากระบบ");
@@ -1482,6 +1501,7 @@ fn id() -> HashMap<&'static str, &'static str> {
     m.insert(EMERGENCY, "Darurat");
     m.insert(PROFILE, "Profil");
     m.insert(ADMIN, "Admin");
+    m.insert(KIOSK, "Kiosk");
     m.insert(PASSWORD, "Kata sandi");
     m.insert(SIGN_IN, "Masuk");
     m.insert(SIGN_OUT, "Keluar");
@@ -1536,6 +1556,7 @@ fn el() -> HashMap<&'static str, &'static str> {
     m.insert(EMERGENCY, "Έκτακτη ανάγκη");
     m.insert(PROFILE, "Προφίλ");
     m.insert(ADMIN, "Διαχείριση");
+    m.insert(KIOSK, "Kiosk");
     m.insert(PASSWORD, "Κωδικός");
     m.insert(SIGN_IN, "Σύνδεση");
     m.insert(SIGN_OUT, "Αποσύνδεση");
@@ -1590,6 +1611,7 @@ fn cs() -> HashMap<&'static str, &'static str> {
     m.insert(EMERGENCY, "Nouze");
     m.insert(PROFILE, "Profil");
     m.insert(ADMIN, "Správa");
+    m.insert(KIOSK, "Kiosk");
     m.insert(PASSWORD, "Heslo");
     m.insert(SIGN_IN, "Přihlásit se");
     m.insert(SIGN_OUT, "Odhlásit se");
@@ -1644,6 +1666,7 @@ fn hu() -> HashMap<&'static str, &'static str> {
     m.insert(EMERGENCY, "Vészhelyzet");
     m.insert(PROFILE, "Profil");
     m.insert(ADMIN, "Admin");
+    m.insert(KIOSK, "Kiosk");
     m.insert(PASSWORD, "Jelszó");
     m.insert(SIGN_IN, "Bejelentkezés");
     m.insert(SIGN_OUT, "Kijelentkezés");
@@ -1698,6 +1721,7 @@ fn sv() -> HashMap<&'static str, &'static str> {
     m.insert(EMERGENCY, "Nödsituation");
     m.insert(PROFILE, "Profil");
     m.insert(ADMIN, "Admin");
+    m.insert(KIOSK, "Kiosk");
     m.insert(PASSWORD, "Lösenord");
     m.insert(SIGN_IN, "Logga in");
     m.insert(SIGN_OUT, "Logga ut");
@@ -1749,6 +1773,7 @@ fn no() -> HashMap<&'static str, &'static str> {
     m.insert(EMERGENCY, "Nødsituasjon");
     m.insert(PROFILE, "Profil");
     m.insert(ADMIN, "Admin");
+    m.insert(KIOSK, "Kiosk");
     m.insert(PASSWORD, "Passord");
     m.insert(SIGN_IN, "Logg inn");
     m.insert(SIGN_OUT, "Logg ut");
@@ -1800,6 +1825,7 @@ fn da() -> HashMap<&'static str, &'static str> {
     m.insert(EMERGENCY, "Nødsituation");
     m.insert(PROFILE, "Profil");
     m.insert(ADMIN, "Admin");
+    m.insert(KIOSK, "Kiosk");
     m.insert(PASSWORD, "Adgangskode");
     m.insert(SIGN_IN, "Log ind");
     m.insert(SIGN_OUT, "Log ud");
@@ -1851,6 +1877,7 @@ fn fi() -> HashMap<&'static str, &'static str> {
     m.insert(EMERGENCY, "Hätätilanne");
     m.insert(PROFILE, "Profiili");
     m.insert(ADMIN, "Ylläpito");
+    m.insert(KIOSK, "Kiosk");
     m.insert(PASSWORD, "Salasana");
     m.insert(SIGN_IN, "Kirjaudu sisään");
     m.insert(SIGN_OUT, "Kirjaudu ulos");
