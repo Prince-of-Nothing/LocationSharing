@@ -79,6 +79,9 @@ fn parse_version(value: &str) -> (u64, u64, u64) {
 /// no releases yet (a valid state for a young project).
 pub async fn check_latest() -> anyhow::Result<Option<ReleaseInfo>> {
     let client = reqwest::Client::builder()
+        // This environment's IPv6 path is broken; the tile proxy uses the
+        // same IPv4 binding for the same reason.
+        .local_address(Some(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED)))
         .timeout(Duration::from_secs(15))
         .build()?;
     let response = client

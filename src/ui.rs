@@ -669,7 +669,10 @@ impl PinpointAppUI {
                             }
                         }
                         Ok(None) => crate::update::UpdateStatus::NoReleases,
-                        Err(e) => crate::update::UpdateStatus::Error(e.to_string()),
+                        Err(_) => crate::update::UpdateStatus::Error(
+                            "Could not reach github.com. Check your connection and try again."
+                                .to_string(),
+                        ),
                     };
                     app.data().lock().unwrap().update_status = next;
                 }
