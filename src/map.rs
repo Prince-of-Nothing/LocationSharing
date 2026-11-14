@@ -55,7 +55,16 @@ fn load_tile_texture(ctx: &egui::Context, z: u8, x: u32, y: u32) -> Option<Textu
     }
     let path = cached_tile_path(z, x, y)?;
     let bytes = std::fs::read(path).ok()?;
-    let img = image::load_from_memory(&bytes).ok()?.to_rgba8();
+    let mut img = image::load_from_memory(&bytes).ok()?.to_rgba8();
+    // Match the web's `.tiles-dark`: invert, rotate hue by 180° (restoring
+    // the original road/water/park hues), dim and soften contrast.
+    for pixel in img.pixels_mut() {
+        let [r, g, b, a] = pixel.0;
+        pixel.0 = [255 - r, 255 - g, 255 - b, a];
+    }
+    let img = image::imageops::huerotate(&img, 180);
+    let img = image::imageops::brighten(&img, -20);
+    let img = image::imageops::contrast(&img, -5.0);
     let size = [img.width() as usize, img.height() as usize];
     let color_img = egui::ColorImage::from_rgba_unmultiplied(size, img.as_raw());
     let handle = ctx.load_texture(
@@ -106,7 +115,7 @@ pub fn render_map(ui: &mut Ui, state: &mut AppData) {
 /// Same as [`render_map`] but with an explicit canvas height (mobile layout)
 /// and optional live tile prefetch through the Pinpoint backend.
 pub fn render_map_sized(ui: &mut Ui, state: &mut AppData, height: f32) {
-    render_map_with(ui, state, height, None, false);
+    render_map_with(ui, state, height, None, false, false);
 }
 
 pub fn render_map_with(
@@ -115,6 +124,7 @@ pub fn render_map_with(
     height: f32,
     backend_url: Option<&str>,
     online: bool,
+    minimal: bool,
 ) {
     ensure_viewport(state);
     let compact = ui.available_width() < 520.0;
@@ -127,50 +137,61 @@ pub fn render_map_with(
         all_locations.push(own);
     }
 
-    ui.group(|ui| {
-        ui.horizontal_wrapped(|ui| {
-            if !compact {
-                ui.label(RichText::new("Interactive Slippy Map").size(16.0).strong());
-                ui.add_space(8.0);
-            }
-            if ui.small_button("−").clicked() && state.map_zoom > 2 {
-                state.map_zoom -= 1;
-            }
-            ui.label(
-                RichText::new(format!("z{}", state.map_zoom))
-                    .monospace()
-                    .size(12.0),
-            );
-            if ui.small_button("+").clicked() && state.map_zoom < 18 {
-                state.map_zoom += 1;
-            }
-            if !compact && ui.small_button("Chișinău").clicked() {
-                state.map_center_lat = DEFAULT_CENTER_LAT;
-                state.map_center_lon = DEFAULT_CENTER_LON;
-                state.map_zoom = DEFAULT_ZOOM;
-            }
-            if !all_locations.is_empty() && ui.small_button("Fit pins").clicked() {
-                let sum_lat: f64 = all_locations.iter().map(|l| l.latitude).sum();
-                let sum_lon: f64 = all_locations.iter().map(|l| l.longitude).sum();
-                let n = all_locations.len() as f64;
-                state.map_center_lat = sum_lat / n;
-                state.map_center_lon = sum_lon / n;
-            }
-            if !compact {
+    let frame = if minimal {
+        egui::Frame::NONE
+    } else {
+        egui::Frame::group(ui.style())
+    };
+    frame.show(ui, |ui| {
+        if !minimal {
+            ui.horizontal_wrapped(|ui| {
+                if !compact {
+                    ui.label(RichText::new("Interactive Slippy Map").size(16.0).strong());
+                    ui.add_space(8.0);
+                }
+                if ui.small_button("−").clicked() && state.map_zoom > 2 {
+                    state.map_zoom -= 1;
+                }
                 ui.label(
-                    RichText::new(format!(
-                        "center {:.4}, {:.4}",
-                        state.map_center_lat, state.map_center_lon
-                    ))
-                    .size(11.0)
-                    .color(Color32::from_rgb(148, 163, 184)),
+                    RichText::new(format!("z{}", state.map_zoom))
+                        .monospace()
+                        .size(12.0),
                 );
-            }
-        });
-        ui.add_space(6.0);
+                if ui.small_button("+").clicked() && state.map_zoom < 18 {
+                    state.map_zoom += 1;
+                }
+                if !compact && ui.small_button("Chișinău").clicked() {
+                    state.map_center_lat = DEFAULT_CENTER_LAT;
+                    state.map_center_lon = DEFAULT_CENTER_LON;
+                    state.map_zoom = DEFAULT_ZOOM;
+                }
+                if !all_locations.is_empty() && ui.small_button("Fit pins").clicked() {
+                    let sum_lat: f64 = all_locations.iter().map(|l| l.latitude).sum();
+                    let sum_lon: f64 = all_locations.iter().map(|l| l.longitude).sum();
+                    let n = all_locations.len() as f64;
+                    state.map_center_lat = sum_lat / n;
+                    state.map_center_lon = sum_lon / n;
+                }
+                if !compact {
+                    ui.label(
+                        RichText::new(format!(
+                            "center {:.4}, {:.4}",
+                            state.map_center_lat, state.map_center_lon
+                        ))
+                        .size(11.0)
+                        .color(Color32::from_rgb(148, 163, 184)),
+                    );
+                }
+            });
+            ui.add_space(6.0);
+        }
 
         // Allocate interactive canvas
-        let avail_width = (ui.available_width() - 8.0).max(240.0);
+        let avail_width = if minimal {
+            ui.available_width()
+        } else {
+            (ui.available_width() - 8.0).max(240.0)
+        };
         let canvas_size = Vec2::new(avail_width, height.max(220.0));
         let (map_rect, response) = ui.allocate_exact_size(canvas_size, Sense::click_and_drag());
 
@@ -298,51 +319,53 @@ pub fn render_map_with(
 
         ui.add_space(6.0);
 
-        // Legend
-        ui.horizontal_wrapped(|ui| {
-            if !compact {
-                ui.label(RichText::new("Legend:").size(12.0).strong());
-            }
-            ui.label(
-                RichText::new("● Exact")
-                    .size(12.0)
-                    .color(Color32::from_rgb(52, 211, 153)),
-            );
-            ui.label(
-                RichText::new("● Approximate")
-                    .size(12.0)
-                    .color(Color32::from_rgb(250, 204, 21)),
-            );
-            ui.label(
-                RichText::new("● City-only")
-                    .size(12.0)
-                    .color(Color32::from_rgb(248, 113, 113)),
-            );
-            if !compact {
-                ui.label(
-                    RichText::new("(drag map to pan, scroll/+/− to zoom)")
-                        .size(11.0)
-                        .color(Color32::from_rgb(148, 163, 184)),
-                );
-            }
-        });
-
-        // Map provider buttons (OSM data — ODbL; see docs/sdlc/07-openstreetmap-integration.md)
-        if let Some(first_loc) = all_locations.first() {
+        if !minimal {
+            // Legend
             ui.horizontal_wrapped(|ui| {
-                if ui.button("OpenStreetMap").clicked() {
-                    open_map_in_browser(ui.ctx(), first_loc, "osm");
+                if !compact {
+                    ui.label(RichText::new("Legend:").size(12.0).strong());
                 }
-                if !compact && ui.button("Directions (OSM)").clicked() {
-                    open_map_in_browser(ui.ctx(), first_loc, "directions");
-                }
-                if ui.button("Organic Maps").clicked() {
-                    open_map_in_browser(ui.ctx(), first_loc, "organic");
-                }
-                if ui.button("Google Maps").clicked() {
-                    open_map_in_browser(ui.ctx(), first_loc, "google");
+                ui.label(
+                    RichText::new("● Exact")
+                        .size(12.0)
+                        .color(Color32::from_rgb(52, 211, 153)),
+                );
+                ui.label(
+                    RichText::new("● Approximate")
+                        .size(12.0)
+                        .color(Color32::from_rgb(250, 204, 21)),
+                );
+                ui.label(
+                    RichText::new("● City-only")
+                        .size(12.0)
+                        .color(Color32::from_rgb(248, 113, 113)),
+                );
+                if !compact {
+                    ui.label(
+                        RichText::new("(drag map to pan, scroll/+/− to zoom)")
+                            .size(11.0)
+                            .color(Color32::from_rgb(148, 163, 184)),
+                    );
                 }
             });
+
+            // Map provider buttons (OSM data — ODbL; see docs/sdlc/07-openstreetmap-integration.md)
+            if let Some(first_loc) = all_locations.first() {
+                ui.horizontal_wrapped(|ui| {
+                    if ui.button("OpenStreetMap").clicked() {
+                        open_map_in_browser(ui.ctx(), first_loc, "osm");
+                    }
+                    if !compact && ui.button("Directions (OSM)").clicked() {
+                        open_map_in_browser(ui.ctx(), first_loc, "directions");
+                    }
+                    if ui.button("Organic Maps").clicked() {
+                        open_map_in_browser(ui.ctx(), first_loc, "organic");
+                    }
+                    if ui.button("Google Maps").clicked() {
+                        open_map_in_browser(ui.ctx(), first_loc, "google");
+                    }
+                });
+            }
         }
         ui.horizontal_wrapped(|ui| {
             ui.label(
@@ -359,16 +382,18 @@ pub fn render_map_with(
 
     ui.add_space(10.0);
 
-    if all_locations.is_empty() {
-        ui.group(|ui| {
-            ui.label(RichText::new("No friend locations shared yet").size(14.0));
-        });
-    } else if compact {
-        egui::ScrollArea::vertical()
-            .max_height(180.0)
-            .show(ui, |ui| draw_location_list(ui, &all_locations));
-    } else {
-        draw_location_list(ui, &all_locations);
+    if !minimal {
+        if all_locations.is_empty() {
+            ui.group(|ui| {
+                ui.label(RichText::new("No friend locations shared yet").size(14.0));
+            });
+        } else if compact {
+            egui::ScrollArea::vertical()
+                .max_height(180.0)
+                .show(ui, |ui| draw_location_list(ui, &all_locations));
+        } else {
+            draw_location_list(ui, &all_locations);
+        }
     }
 }
 

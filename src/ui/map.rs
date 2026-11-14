@@ -201,7 +201,7 @@ impl PinpointAppUI {
         let online = !self.app.is_offline_mode();
         let binding = self.app.data();
         let mut data = binding.lock().unwrap();
-        map::render_map_with(ui, &mut data, 320.0, Some(&backend_url), online);
+        map::render_map_with(ui, &mut data, 320.0, Some(&backend_url), online, false);
         let (center_lat, center_lon, zoom) =
             (data.map_center_lat, data.map_center_lon, data.map_zoom);
         let locations: Vec<FriendLocation> = data.locations.clone();
@@ -350,101 +350,354 @@ impl PinpointAppUI {
 }
 
 impl PinpointAppUI {
-    /// Map-first touch layout: full-width map, compact actions, publish sheet.
+    /// Map-first touch layout that mirrors the web shell: full-bleed map,
+    /// floating search/zoom/locate controls, results dropdown and a bottom
+    /// place/publish sheet.
     fn draw_mobile_map_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        let signed_in = self.app.is_signed_in();
-        ui.horizontal(|ui| {
-            ui.label(
-                RichText::new(if signed_in { "Live map" } else { "Demo map" })
-                    .size(16.0)
-                    .strong(),
-            );
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("📍 Locate").clicked() {
-                    self.spawn_action(PendingAction::PublishGpsLocation, ctx);
-                }
-            });
-        });
-        ui.add_space(4.0);
-
-        let height = (ui.available_height() - 150.0).clamp(260.0, 620.0);
+        let top = ui.next_widget_position().y;
+        let width = ctx.screen_rect().width();
+        let height = (ui.available_height() - 26.0).max(320.0);
         let backend_url = self.app.backend_url();
         let online = !self.app.is_offline_mode();
         {
             let binding = self.app.data();
             let mut data = binding.lock().unwrap();
-            crate::map::render_map_with(ui, &mut data, height, Some(&backend_url), online);
+            crate::map::render_map_with(ui, &mut data, height, Some(&backend_url), online, true);
         }
-        ui.add_space(6.0);
 
-        ui.horizontal_wrapped(|ui| {
-            if ui.button("Publish").clicked() {
-                self.mobile_publish_open = !self.mobile_publish_open;
-            }
-            if ui.button(i18n::t(self.lang, key::FRIENDS)).clicked() {
-                self.app.set_screen(crate::app::CurrentScreen::Friends);
-            }
-            if ui.button(i18n::t(self.lang, key::SHARING)).clicked() {
-                self.app.set_screen(crate::app::CurrentScreen::Sharing);
-            }
-            if ui.button(i18n::t(self.lang, key::PLACES)).clicked() {
-                self.app.set_screen(crate::app::CurrentScreen::Places);
-            }
-            if ui.button(i18n::t(self.lang, key::SAVED)).clicked() {
-                self.app.set_screen(crate::app::CurrentScreen::Bookmarks);
-            }
-        });
+        let panel = Color32::from_rgba_unmultiplied(15, 23, 42, 246);
+        let panel_solid = Color32::from_rgb(15, 23, 42);
+        let border = Color32::from_rgb(31, 41, 55);
+        let muted = Color32::from_rgb(156, 163, 175);
 
-        if self.mobile_publish_open {
-            ui.add_space(6.0);
-            ui.group(|ui| {
-                ui.label(
-                    RichText::new(i18n::t(self.lang, key::PUBLISH_MY_LOCATION))
-                        .size(14.0)
-                        .strong(),
-                );
-                ui.horizontal(|ui| {
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.publish_lat)
-                            .hint_text(i18n::t(self.lang, key::LATITUDE))
-                            .desired_width(110.0),
-                    );
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.publish_lon)
-                            .hint_text(i18n::t(self.lang, key::LONGITUDE))
-                            .desired_width(110.0),
-                    );
+        // Floating search pill (web `.search-form`).
+        let mut submit = false;
+        egui::Area::new(egui::Id::new("mobile_map_search"))
+            .order(egui::Order::Foreground)
+            .fixed_pos(egui::pos2(12.0, top + 10.0))
+            .show(ctx, |ui| {
+                ui.set_width(width - 24.0);
+                egui::Frame::new()
+                    .fill(panel)
+                    .stroke(egui::Stroke::new(1.0_f32, border))
+                    .corner_radius(egui::CornerRadius::same(22))
+                    .inner_margin(egui::Margin::symmetric(10, 4))
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            let edit = ui.add(
+                                egui::TextEdit::singleline(&mut self.search_query)
+                                    .hint_text("Search places…")
+                                    .frame(false)
+                                    .desired_width((ui.available_width() - 78.0).max(120.0)),
+                            );
+                            submit = ui.button("Search").clicked()
+                                || (edit.lost_focus()
+                                    && ui.input(|i| i.key_pressed(egui::Key::Enter)));
+                        });
+                    });
+            });
+        if submit && !self.search_query.trim().is_empty() {
+            let query = self.search_query.clone();
+            self.spawn_action(PendingAction::SearchPlaces { query }, ctx);
+        }
+
+        // Search results dropdown (web `.search-results`).
+        let results = self.app.data().lock().unwrap().search_results.clone();
+        if !results.is_empty() {
+            let mut chosen = None;
+            egui::Area::new(egui::Id::new("mobile_search_results"))
+                .order(egui::Order::Foreground)
+                .fixed_pos(egui::pos2(12.0, top + 64.0))
+                .show(ctx, |ui| {
+                    ui.set_width(width - 24.0);
+                    egui::Frame::new()
+                        .fill(panel_solid)
+                        .stroke(egui::Stroke::new(1.0_f32, border))
+                        .corner_radius(egui::CornerRadius::same(12))
+                        .inner_margin(egui::Margin::same(8))
+                        .show(ui, |ui| {
+                            egui::ScrollArea::vertical()
+                                .max_height(300.0)
+                                .show(ui, |ui| {
+                                    for place in &results {
+                                        let text =
+                                            format!("{}\n{}", place.short_name, place.display_name);
+                                        if ui
+                                            .add_sized(
+                                                egui::vec2(ui.available_width(), 42.0),
+                                                egui::Button::new(text).wrap(),
+                                            )
+                                            .clicked()
+                                        {
+                                            chosen = Some(place.clone());
+                                        }
+                                        ui.separator();
+                                    }
+                                });
+                        });
                 });
-                ui.horizontal(|ui| {
-                    if ui.button(i18n::t(self.lang, key::PUBLISH)).clicked() {
-                        match (
-                            self.publish_lat.trim().parse::<f64>(),
-                            self.publish_lon.trim().parse::<f64>(),
-                        ) {
-                            (Ok(lat), Ok(lon))
-                                if (-90.0..=90.0).contains(&lat)
-                                    && (-180.0..=180.0).contains(&lon) =>
-                            {
-                                self.spawn_action(
-                                    PendingAction::PublishLocation {
-                                        lat,
-                                        lon,
-                                        accuracy: 10.0,
-                                    },
-                                    ctx,
-                                );
-                            }
-                            _ => self.app.set_error(Some(
-                                "Enter a valid latitude (-90..90) and longitude (-180..180)"
-                                    .to_string(),
-                            )),
-                        }
+            if let Some(place) = chosen {
+                let binding = self.app.data();
+                let mut data = binding.lock().unwrap();
+                data.map_center_lat = place.latitude;
+                data.map_center_lon = place.longitude;
+                data.map_zoom = 15;
+                data.search_results.clear();
+                drop(data);
+                self.mobile_selected_place = Some(place);
+                self.mobile_publish_open = false;
+            }
+        }
+
+        // Floating zoom / locate / drawer controls.
+        let mut zoom_delta = 0i8;
+        let mut locate = false;
+        let mut menu = false;
+        egui::Area::new(egui::Id::new("mobile_map_controls"))
+            .order(egui::Order::Foreground)
+            .fixed_pos(egui::pos2(width - 56.0, top + 78.0))
+            .show(ctx, |ui| {
+                ui.vertical(|ui| {
+                    if ui
+                        .add(
+                            egui::Button::new("+")
+                                .min_size(egui::vec2(40.0, 40.0))
+                                .corner_radius(egui::CornerRadius::same(20)),
+                        )
+                        .clicked()
+                    {
+                        zoom_delta = 1;
                     }
-                    if ui.button("📍 Use GPS").clicked() {
-                        self.spawn_action(PendingAction::PublishGpsLocation, ctx);
+                    if ui
+                        .add(
+                            egui::Button::new("−")
+                                .min_size(egui::vec2(40.0, 40.0))
+                                .corner_radius(egui::CornerRadius::same(20)),
+                        )
+                        .clicked()
+                    {
+                        zoom_delta = -1;
+                    }
+                    if ui
+                        .add(
+                            egui::Button::new("◎")
+                                .min_size(egui::vec2(40.0, 40.0))
+                                .corner_radius(egui::CornerRadius::same(20)),
+                        )
+                        .clicked()
+                    {
+                        locate = true;
+                    }
+                    if ui
+                        .add(
+                            egui::Button::new("☰")
+                                .min_size(egui::vec2(40.0, 40.0))
+                                .corner_radius(egui::CornerRadius::same(20)),
+                        )
+                        .clicked()
+                    {
+                        menu = true;
                     }
                 });
             });
+        if zoom_delta != 0 {
+            let binding = self.app.data();
+            let mut data = binding.lock().unwrap();
+            let next = (data.map_zoom as i8 + zoom_delta).clamp(2, 18);
+            data.map_zoom = next as u8;
+        }
+        if locate {
+            self.spawn_action(PendingAction::PublishGpsLocation, ctx);
+        }
+        if menu {
+            self.mobile_nav_open = !self.mobile_nav_open;
+        }
+
+        // Bottom sheet: publish form or selected place.
+        if self.mobile_publish_open {
+            let mut publish = false;
+            let mut gps = false;
+            let mut close = false;
+            egui::Area::new(egui::Id::new("mobile_publish_sheet"))
+                .order(egui::Order::Foreground)
+                .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -10.0))
+                .show(ctx, |ui| {
+                    ui.set_width(width - 24.0);
+                    egui::Frame::new()
+                        .fill(panel_solid)
+                        .stroke(egui::Stroke::new(1.0_f32, border))
+                        .corner_radius(egui::CornerRadius::same(12))
+                        .inner_margin(egui::Margin::same(12))
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.label(
+                                    RichText::new(i18n::t(self.lang, key::PUBLISH_MY_LOCATION))
+                                        .size(16.0)
+                                        .strong(),
+                                );
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        if ui.button("×").clicked() {
+                                            close = true;
+                                        }
+                                    },
+                                );
+                            });
+                            ui.horizontal(|ui| {
+                                ui.add(
+                                    egui::TextEdit::singleline(&mut self.publish_lat)
+                                        .hint_text(i18n::t(self.lang, key::LATITUDE))
+                                        .desired_width(120.0),
+                                );
+                                ui.add(
+                                    egui::TextEdit::singleline(&mut self.publish_lon)
+                                        .hint_text(i18n::t(self.lang, key::LONGITUDE))
+                                        .desired_width(120.0),
+                                );
+                            });
+                            ui.horizontal_wrapped(|ui| {
+                                if ui.button(i18n::t(self.lang, key::PUBLISH)).clicked() {
+                                    publish = true;
+                                }
+                                if ui.button("◎ Use GPS").clicked() {
+                                    gps = true;
+                                }
+                            });
+                        });
+                });
+            if close {
+                self.mobile_publish_open = false;
+            }
+            if gps {
+                self.spawn_action(PendingAction::PublishGpsLocation, ctx);
+            }
+            if publish {
+                match (
+                    self.publish_lat.trim().parse::<f64>(),
+                    self.publish_lon.trim().parse::<f64>(),
+                ) {
+                    (Ok(lat), Ok(lon))
+                        if (-90.0..=90.0).contains(&lat) && (-180.0..=180.0).contains(&lon) =>
+                    {
+                        self.spawn_action(
+                            PendingAction::PublishLocation {
+                                lat,
+                                lon,
+                                accuracy: 10.0,
+                            },
+                            ctx,
+                        );
+                        self.mobile_publish_open = false;
+                    }
+                    _ => self.app.set_error(Some(
+                        "Enter a valid latitude (-90..90) and longitude (-180..180)".to_string(),
+                    )),
+                }
+            }
+        } else if let Some(place) = self.mobile_selected_place.clone() {
+            let mut close = false;
+            let mut save = false;
+            let mut open_url: Option<String> = None;
+            let name = encode_component(&place.short_name);
+            egui::Area::new(egui::Id::new("mobile_place_sheet"))
+                .order(egui::Order::Foreground)
+                .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -10.0))
+                .show(ctx, |ui| {
+                    ui.set_width(width - 24.0);
+                    egui::Frame::new()
+                        .fill(panel_solid)
+                        .stroke(egui::Stroke::new(1.0_f32, border))
+                        .corner_radius(egui::CornerRadius::same(12))
+                        .inner_margin(egui::Margin::same(12))
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.label(
+                                    RichText::new(&place.short_name)
+                                        .size(18.0)
+                                        .strong(),
+                                );
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        if ui.button("×").clicked() {
+                                            close = true;
+                                        }
+                                    },
+                                );
+                            });
+                            ui.label(
+                                RichText::new(&place.display_name)
+                                    .size(12.0)
+                                    .color(muted),
+                            );
+                            ui.add_space(6.0);
+                            ui.horizontal_wrapped(|ui| {
+                                if ui.button("Directions").clicked() {
+                                    open_url = Some(format!(
+                                        "https://www.openstreetmap.org/directions?to={:.4}%2C{:.4}",
+                                        place.latitude, place.longitude
+                                    ));
+                                }
+                                if ui.button("Save").clicked() {
+                                    save = true;
+                                }
+                                if ui.button("OSM").clicked() {
+                                    open_url = Some(format!(
+                                        "https://www.openstreetmap.org/?mlat={:.4}&mlon={:.4}#map=15/{:.4}/{:.4}",
+                                        place.latitude,
+                                        place.longitude,
+                                        place.latitude,
+                                        place.longitude
+                                    ));
+                                }
+                                if ui.button("Google").clicked() {
+                                    open_url = Some(format!(
+                                        "https://www.google.com/maps/search/?api=1&query={:.4},{:.4}",
+                                        place.latitude, place.longitude
+                                    ));
+                                }
+                                if ui.button("Organic").clicked() {
+                                    open_url = Some(format!(
+                                        "https://omaps.app/map?v=1&ll={:.4},{:.4}&n={name}",
+                                        place.latitude, place.longitude
+                                    ));
+                                }
+                                if ui.button("Magic Earth").clicked() {
+                                    open_url = Some(format!(
+                                        "magicearth://?show_on_map&lat={:.4}&lon={:.4}&name={name}",
+                                        place.latitude, place.longitude
+                                    ));
+                                }
+                            });
+                        });
+                });
+            if close {
+                self.mobile_selected_place = None;
+            }
+            if save {
+                let store = crate::bookmarks::BookmarkStore::default_location();
+                store.add(&place.short_name, place.latitude, place.longitude);
+                self.app
+                    .set_notice(Some(format!("Saved {}", place.short_name)));
+            }
+            if let Some(url) = open_url {
+                let _ = webbrowser::open(&url);
+            }
         }
     }
+}
+
+/// Percent-encode a URL path/query component (UTF-8 bytes, unreserved kept).
+fn encode_component(value: &str) -> String {
+    value
+        .bytes()
+        .map(|b| {
+            if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'~') {
+                (b as char).to_string()
+            } else {
+                format!("%{b:02X}")
+            }
+        })
+        .collect()
 }

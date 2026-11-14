@@ -14,7 +14,7 @@ The per-item flagged list for this release is in
 ### Added
 - [FEATURE] mobile: Port webapp Kiosk check-in mode & Admin console to Android app and eframe UI, with deep links `pinpoint://kiosk?token=...` and `pinpoint://admin`.
 - [FEATURE] Android APK: cargo-apk 0.10 build with NativeActivity/`android_main`, eframe `android-native-activity`, API 35 manifest metadata and launcher icons; runs on the API 37 x86_64 emulator.
-- [FEATURE] Mobile map-first shell: compact top bar + drawer, touch-sized controls, live tiles via the backend, publish sheet, scrollable locations and compact login/register forms.
+- [FEATURE] Mobile map-first shell: web-loyal full-bleed dark map with floating search, zoom/locate/menu controls, bottom drawer, publish/place sheets, touch-sized controls, compact login/register forms, live tiles and scrollable locations.
 - [FEATURE] On-device tile cache/prefetch through `/map/tiles` under the Android app data dir.
 
 ### Fixed

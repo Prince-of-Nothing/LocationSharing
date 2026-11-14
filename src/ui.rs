@@ -195,6 +195,7 @@ pub struct PinpointAppUI {
     // Mobile shell
     mobile_nav_open: bool,
     mobile_publish_open: bool,
+    mobile_selected_place: Option<crate::osm::SearchPlace>,
 }
 
 impl PinpointAppUI {
@@ -246,6 +247,7 @@ impl PinpointAppUI {
             kiosk_consent_accepted: false,
             mobile_nav_open: false,
             mobile_publish_open: false,
+            mobile_selected_place: None,
         }
     }
 
@@ -597,6 +599,7 @@ impl PinpointAppUI {
             } else if let Some(notice) = self.app.notice_message() {
                 ui.colored_label(Color32::from_rgb(52, 211, 153), notice);
             }
+            ui.separator();
             ui.add_space(4.0);
             return;
         }
@@ -781,44 +784,51 @@ impl eframe::App for PinpointAppUI {
             let current = self.app.current_screen();
             let mut chosen: Option<CurrentScreen> = None;
             let mut chosen_lang: Option<Lang> = None;
-            egui::SidePanel::left("mobile_nav")
+            egui::TopBottomPanel::bottom("mobile_nav")
                 .resizable(false)
-                .default_width(280.0)
+                .exact_height(380.0)
                 .show(ctx, |ui| {
-                    ui.add_space(28.0);
-                    ui.heading(i18n::t(lang, key::APP_TITLE));
-                    ui.separator();
-                    for (screen, key_str) in [
-                        (CurrentScreen::Map, key::MAP),
-                        (CurrentScreen::Friends, key::FRIENDS),
-                        (CurrentScreen::Sharing, key::SHARING),
-                        (CurrentScreen::Places, key::PLACES),
-                        (CurrentScreen::Bookmarks, key::SAVED),
-                        (CurrentScreen::Trips, key::TRIPS),
-                        (CurrentScreen::Emergency, key::EMERGENCY),
-                        (CurrentScreen::Profile, key::PROFILE),
-                        (CurrentScreen::Admin, key::ADMIN),
-                        (CurrentScreen::Kiosk, key::KIOSK),
-                        (CurrentScreen::ChangePassword, key::PASSWORD),
-                    ] {
-                        if ui
-                            .selectable_label(current == screen, i18n::t(lang, key_str))
-                            .clicked()
-                        {
-                            chosen = Some(screen);
-                        }
-                    }
-                    ui.separator();
-                    ui.label("Language");
-                    egui::ComboBox::from_id_salt("mobile_lang")
-                        .selected_text(lang.native_name())
-                        .show_ui(ui, |ui| {
-                            for l in Lang::all() {
-                                if ui.selectable_label(lang == *l, l.native_name()).clicked() {
-                                    chosen_lang = Some(*l);
-                                }
+                    ui.add_space(6.0);
+                    let (handle, _) =
+                        ui.allocate_exact_size(egui::vec2(42.0, 4.0), egui::Sense::hover());
+                    ui.painter()
+                        .rect_filled(handle, 2.0, Color32::from_rgb(71, 85, 105));
+                    ui.add_space(4.0);
+                    egui::ScrollArea::vertical().show(ui, |ui| {
+                        ui.heading(i18n::t(lang, key::APP_TITLE));
+                        ui.separator();
+                        for (screen, key_str) in [
+                            (CurrentScreen::Map, key::MAP),
+                            (CurrentScreen::Friends, key::FRIENDS),
+                            (CurrentScreen::Sharing, key::SHARING),
+                            (CurrentScreen::Places, key::PLACES),
+                            (CurrentScreen::Bookmarks, key::SAVED),
+                            (CurrentScreen::Trips, key::TRIPS),
+                            (CurrentScreen::Emergency, key::EMERGENCY),
+                            (CurrentScreen::Profile, key::PROFILE),
+                            (CurrentScreen::Admin, key::ADMIN),
+                            (CurrentScreen::Kiosk, key::KIOSK),
+                            (CurrentScreen::ChangePassword, key::PASSWORD),
+                        ] {
+                            if ui
+                                .selectable_label(current == screen, i18n::t(lang, key_str))
+                                .clicked()
+                            {
+                                chosen = Some(screen);
                             }
-                        });
+                        }
+                        ui.separator();
+                        ui.label("Language");
+                        egui::ComboBox::from_id_salt("mobile_lang")
+                            .selected_text(lang.native_name())
+                            .show_ui(ui, |ui| {
+                                for l in Lang::all() {
+                                    if ui.selectable_label(lang == *l, l.native_name()).clicked() {
+                                        chosen_lang = Some(*l);
+                                    }
+                                }
+                            });
+                    });
                 });
             if let Some(screen) = chosen {
                 self.app.set_screen(screen);
@@ -829,7 +839,13 @@ impl eframe::App for PinpointAppUI {
             }
         }
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        let panel = if compact {
+            egui::CentralPanel::default()
+                .frame(egui::Frame::NONE.fill(Color32::from_rgb(11, 16, 32)))
+        } else {
+            egui::CentralPanel::default()
+        };
+        panel.show(ctx, |ui| {
             self.draw_header_bar(ui, ctx);
 
             match self.app.current_screen() {
