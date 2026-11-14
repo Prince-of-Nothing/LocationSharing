@@ -11,6 +11,7 @@
 
 use crate::backend::{Backend, BackendFuture, DynBackend};
 use crate::models::{CheckIn, EmergencyAlert, FriendLocation, Friendship, LocationShare, User};
+use crate::osm::{MapCapabilities, Route, SearchPlace};
 use crate::security::circuit_breaker::CircuitBreaker;
 use std::future::Future;
 use std::sync::Arc;
@@ -402,6 +403,60 @@ impl Backend for FailoverBackend {
             self.try_all("get_my_location", |b| {
                 let b = b.clone();
                 async move { b.get_my_location().await }
+            })
+            .await
+        })
+    }
+
+    fn map_capabilities(&self) -> BackendFuture<'_, MapCapabilities> {
+        Box::pin(async move {
+            self.try_all("map_capabilities", |b| {
+                let b = b.clone();
+                async move { b.map_capabilities().await }
+            })
+            .await
+        })
+    }
+
+    fn map_search<'a>(
+        &'a self,
+        q: &'a str,
+        lat: Option<f64>,
+        lon: Option<f64>,
+        limit: usize,
+    ) -> BackendFuture<'a, Vec<SearchPlace>> {
+        Box::pin(async move {
+            self.try_all("map_search", |b| {
+                let b = b.clone();
+                async move { b.map_search(q, lat, lon, limit).await }
+            })
+            .await
+        })
+    }
+
+    fn map_reverse(&self, lat: f64, lon: f64) -> BackendFuture<'_, SearchPlace> {
+        Box::pin(async move {
+            self.try_all("map_reverse", |b| {
+                let b = b.clone();
+                async move { b.map_reverse(lat, lon).await }
+            })
+            .await
+        })
+    }
+
+    fn map_route<'a>(
+        &'a self,
+        from: (f64, f64),
+        to: (f64, f64),
+        mode: &'a str,
+        via: &'a [(f64, f64)],
+        avoid: &'a [String],
+        alternatives: bool,
+    ) -> BackendFuture<'a, Vec<Route>> {
+        Box::pin(async move {
+            self.try_all("map_route", |b| {
+                let b = b.clone();
+                async move { b.map_route(from, to, mode, via, avoid, alternatives).await }
             })
             .await
         })

@@ -1033,6 +1033,7 @@ pub mod map_handlers {
                 longitude: 28.8,
                 category: "pharmacy".into(),
                 place_type: "chemist".into(),
+                distance_m: None,
             };
             let value = place_json(&place, Some((47.01, 28.81)));
             for key in [

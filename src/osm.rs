@@ -13,7 +13,7 @@
 //! https://wiki.openstreetmap.org/wiki/Main_Page
 //! Friend/shared locations are NEVER sent to any of these services.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
 /// Public demo endpoints (defaults only). Production must point the
@@ -80,7 +80,7 @@ const USER_AGENT: &str = "PinpointRust/0.1.0 (privacy-first OSM client)";
 // Types
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SearchPlace {
     pub display_name: String,
     pub short_name: String,
@@ -88,6 +88,21 @@ pub struct SearchPlace {
     pub longitude: f64,
     pub category: String,
     pub place_type: String,
+    /// Backend-computed distance from the search map centre, when supplied.
+    #[serde(default)]
+    pub distance_m: Option<f64>,
+}
+
+/// Server-advertised map capabilities. The client uses these to hide
+/// walk/bike modes or avoid options the server cannot serve.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct MapCapabilities {
+    #[serde(default)]
+    pub autocomplete: bool,
+    #[serde(default)]
+    pub modes: Vec<String>,
+    #[serde(default)]
+    pub avoid: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -107,20 +122,20 @@ impl TravelMode {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RouteStep {
     pub text: String,
     pub distance_m: Option<f64>,
     pub duration_s: Option<f64>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RouteLeg {
     pub distance_m: f64,
     pub duration_s: f64,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Route {
     pub points: Vec<(f64, f64)>,
     pub distance_m: f64,
@@ -179,6 +194,7 @@ impl NominatimItem {
             longitude: self.lon.parse().unwrap_or(0.0),
             category: self.class_,
             place_type: self.type_,
+            distance_m: None,
         }
     }
 }

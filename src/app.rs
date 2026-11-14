@@ -1,5 +1,6 @@
 use crate::backend::DynBackend;
 use crate::models::*;
+use crate::osm::{MapCapabilities, Route, SearchPlace};
 use crate::patterns::state::StateContext;
 use crate::security::{AuditLogger, KeyManager, RateLimiter};
 use std::sync::{Arc, Mutex};
@@ -1019,6 +1020,38 @@ impl PinpointApp {
             }
             Err(_) => Ok(()), // 404 when never published — not an error
         }
+    }
+
+    pub async fn map_capabilities(&self) -> anyhow::Result<MapCapabilities> {
+        self.backend.map_capabilities().await
+    }
+
+    pub async fn map_search(
+        &self,
+        query: &str,
+        lat: Option<f64>,
+        lon: Option<f64>,
+        limit: usize,
+    ) -> anyhow::Result<Vec<SearchPlace>> {
+        self.backend.map_search(query, lat, lon, limit).await
+    }
+
+    pub async fn map_reverse(&self, lat: f64, lon: f64) -> anyhow::Result<SearchPlace> {
+        self.backend.map_reverse(lat, lon).await
+    }
+
+    pub async fn map_route(
+        &self,
+        from: (f64, f64),
+        to: (f64, f64),
+        mode: &str,
+        via: &[(f64, f64)],
+        avoid: &[String],
+        alternatives: bool,
+    ) -> anyhow::Result<Vec<Route>> {
+        self.backend
+            .map_route(from, to, mode, via, avoid, alternatives)
+            .await
     }
 
     pub async fn refresh_check_ins(&self) -> anyhow::Result<()> {

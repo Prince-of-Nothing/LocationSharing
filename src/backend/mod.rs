@@ -21,6 +21,7 @@ pub mod health;
 pub mod rest;
 
 use crate::models::{CheckIn, EmergencyAlert, FriendLocation, Friendship, LocationShare, User};
+use crate::osm::{MapCapabilities, Route, SearchPlace};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -118,6 +119,25 @@ pub trait Backend: BackendBounds {
         accuracy: f64,
     ) -> BackendFuture<'a, ()>;
     fn get_my_location<'a>(&'a self) -> BackendFuture<'a, FriendLocation>;
+
+    fn map_capabilities(&self) -> BackendFuture<'_, MapCapabilities>;
+    fn map_search<'a>(
+        &'a self,
+        q: &'a str,
+        lat: Option<f64>,
+        lon: Option<f64>,
+        limit: usize,
+    ) -> BackendFuture<'a, Vec<SearchPlace>>;
+    fn map_reverse(&self, lat: f64, lon: f64) -> BackendFuture<'_, SearchPlace>;
+    fn map_route<'a>(
+        &'a self,
+        from: (f64, f64),
+        to: (f64, f64),
+        mode: &'a str,
+        via: &'a [(f64, f64)],
+        avoid: &'a [String],
+        alternatives: bool,
+    ) -> BackendFuture<'a, Vec<Route>>;
 
     fn list_users<'a>(&'a self) -> BackendFuture<'a, Vec<User>>;
     fn search_users<'a>(&'a self, q: &'a str) -> BackendFuture<'a, Vec<User>>;

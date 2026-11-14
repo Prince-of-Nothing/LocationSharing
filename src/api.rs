@@ -14,6 +14,7 @@
 use crate::models::{
     CheckIn, EmergencyAlert, FriendLocation, Friendship, LocationShare, LoginResponse, User,
 };
+use crate::osm::{MapCapabilities, Route, SearchPlace};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use url::Url;
@@ -631,6 +632,121 @@ impl ApiClient {
         let response = Self::check(response, "Failed to fetch emergencies").await?;
         Ok(response.json().await?)
     }
+
+    /// `GET /map/capabilities` — which routing modes/avoid options the
+    /// server-side OSRM deployment supports.
+    pub async fn map_capabilities(&self) -> anyhow::Result<MapCapabilities> {
+        let response = self
+            .request(reqwest::Method::GET, "/map/capabilities", None)
+            .await?;
+        let response = Self::check(response, "Failed to load map capabilities").await?;
+        Ok(response.json().await?)
+    }
+
+    /// `GET /map/search?q=&lat=&lon=&limit=` — backend-proxied Nominatim.
+    pub async fn map_search(
+        &self,
+        q: &str,
+        lat: Option<f64>,
+        lon: Option<f64>,
+        limit: usize,
+    ) -> anyhow::Result<Vec<SearchPlace>> {
+        if q.trim().chars().count() < 3 {
+            anyhow::bail!("Search needs at least 3 characters.");
+        }
+        if lat.is_some() != lon.is_some() {
+            anyhow::bail!("lat and lon must be supplied together.");
+        }
+        let mut path = format!(
+            "/map/search?q={}&limit={}",
+            urlencoding(q.trim()),
+            limit.clamp(1, 10)
+        );
+        if let (Some(lat), Some(lon)) = (lat, lon) {
+            path.push_str(&format!("&lat={lat:.6}&lon={lon:.6}"));
+        }
+        let response = self.request(reqwest::Method::GET, &path, None).await?;
+        let response = Self::check(response, "Search failed").await?;
+        let body: SearchResponse = response.json().await?;
+        Ok(body.results)
+    }
+
+    /// `GET /map/reverse?lat=&lon=` — backend-proxied reverse geocoding.
+    pub async fn map_reverse(&self, lat: f64, lon: f64) -> anyhow::Result<SearchPlace> {
+        if !lat.is_finite() || !lon.is_finite() {
+            anyhow::bail!("Coordinates must be finite.");
+        }
+        let path = format!("/map/reverse?lat={lat:.6}&lon={lon:.6}");
+        let response = self.request(reqwest::Method::GET, &path, None).await?;
+        let response = Self::check(response, "Reverse geocoding failed").await?;
+        Ok(response.json().await?)
+    }
+
+    /// `GET /map/route` — backend-proxied OSRM with stops and exclusions.
+    pub async fn map_route(
+        &self,
+        from: (f64, f64),
+        to: (f64, f64),
+        mode: &str,
+        via: &[(f64, f64)],
+        avoid: &[String],
+        alternatives: bool,
+    ) -> anyhow::Result<Vec<Route>> {
+        if via.len() > 6 {
+            anyhow::bail!("A route can have at most 6 stops.");
+        }
+        if avoid.len() > 3 {
+            anyhow::bail!("At most 3 avoid classes are supported.");
+        }
+        let path = map_route_path(from, to, mode, via, avoid, alternatives);
+        let response = self.request(reqwest::Method::GET, &path, None).await?;
+        let response = Self::check(response, "Routing failed").await?;
+        let body: RouteResponse = response.json().await?;
+        Ok(body.routes)
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct SearchResponse {
+    results: Vec<SearchPlace>,
+}
+
+#[derive(serde::Deserialize)]
+struct RouteResponse {
+    routes: Vec<Route>,
+}
+
+/// Build the `/map/route` query string. Kept pure so the encoding is
+/// testable without a network call; commas/semicolons are legal in a query.
+fn map_route_path(
+    from: (f64, f64),
+    to: (f64, f64),
+    mode: &str,
+    via: &[(f64, f64)],
+    avoid: &[String],
+    alternatives: bool,
+) -> String {
+    let mut path = format!(
+        "/map/route?from_lat={:.6}&from_lon={:.6}&to_lat={:.6}&to_lon={:.6}&mode={}&alternatives={}",
+        from.0,
+        from.1,
+        to.0,
+        to.1,
+        urlencoding(mode),
+        alternatives
+    );
+    if !via.is_empty() {
+        let encoded = via
+            .iter()
+            .map(|(lat, lon)| format!("{lat:.6},{lon:.6}"))
+            .collect::<Vec<_>>()
+            .join(";");
+        path.push_str(&format!("&via={encoded}"));
+    }
+    if !avoid.is_empty() {
+        path.push_str(&format!("&avoid={}", avoid.join(",")));
+    }
+    path
 }
 
 fn urlencoding(s: &str) -> String {
@@ -846,6 +962,38 @@ impl crate::backend::Backend for ApiClient {
     ) -> crate::backend::BackendFuture<'a, crate::models::FriendLocation> {
         Box::pin(async move { ApiClient::get_my_location(self).await })
     }
+    fn map_capabilities(&self) -> crate::backend::BackendFuture<'_, crate::osm::MapCapabilities> {
+        Box::pin(async move { ApiClient::map_capabilities(self).await })
+    }
+    fn map_search<'a>(
+        &'a self,
+        q: &'a str,
+        lat: Option<f64>,
+        lon: Option<f64>,
+        limit: usize,
+    ) -> crate::backend::BackendFuture<'a, Vec<crate::osm::SearchPlace>> {
+        Box::pin(async move { ApiClient::map_search(self, q, lat, lon, limit).await })
+    }
+    fn map_reverse(
+        &self,
+        lat: f64,
+        lon: f64,
+    ) -> crate::backend::BackendFuture<'_, crate::osm::SearchPlace> {
+        Box::pin(async move { ApiClient::map_reverse(self, lat, lon).await })
+    }
+    fn map_route<'a>(
+        &'a self,
+        from: (f64, f64),
+        to: (f64, f64),
+        mode: &'a str,
+        via: &'a [(f64, f64)],
+        avoid: &'a [String],
+        alternatives: bool,
+    ) -> crate::backend::BackendFuture<'a, Vec<crate::osm::Route>> {
+        Box::pin(async move {
+            ApiClient::map_route(self, from, to, mode, via, avoid, alternatives).await
+        })
+    }
     fn list_users<'a>(&'a self) -> crate::backend::BackendFuture<'a, Vec<crate::models::User>> {
         Box::pin(async move { ApiClient::list_users(self).await })
     }
@@ -895,7 +1043,7 @@ impl crate::backend::Backend for ApiClient {
 
 #[cfg(test)]
 mod tests {
-    use super::validate_backend_url_with_allowlist;
+    use super::{map_route_path, validate_backend_url_with_allowlist};
 
     #[test]
     fn accepts_loopback_http_development_urls() {
@@ -960,5 +1108,54 @@ mod tests {
                 "{url} must be rejected"
             );
         }
+    }
+
+    #[test]
+    fn search_place_deserializes_distance() {
+        let value = serde_json::json!({
+            "display_name": "Cafe",
+            "short_name": "Cafe",
+            "latitude": 47.0,
+            "longitude": 28.8,
+            "category": "cafe",
+            "place_type": "cafe",
+            "distance_m": 12.5
+        });
+        let place: crate::osm::SearchPlace = serde_json::from_value(value).unwrap();
+        assert_eq!(place.distance_m, Some(12.5));
+    }
+
+    #[test]
+    fn route_deserializes_points_and_steps() {
+        let value = serde_json::json!({
+            "distance_m": 4200.0,
+            "duration_s": 540.0,
+            "summary": "Main",
+            "points": [[47.0, 28.8], [47.1, 28.9]],
+            "steps": [{"text": "Turn right", "distance_m": 120.0, "duration_s": 18.0}],
+            "legs": [{"distance_m": 4200.0, "duration_s": 540.0}]
+        });
+        let route: crate::osm::Route = serde_json::from_value(value).unwrap();
+        assert_eq!(route.points.len(), 2);
+        assert_eq!(route.steps[0].distance_m, Some(120.0));
+    }
+
+    #[test]
+    fn map_route_path_encodes_via_avoid_and_mode() {
+        let path = map_route_path(
+            (47.0, 28.8),
+            (47.1, 28.9),
+            "foot",
+            &[(47.05, 28.85)],
+            &["toll".to_string(), "ferry".to_string()],
+            true,
+        );
+        assert!(path.starts_with("/map/route?"));
+        assert!(path.contains("from_lat=47.000000"));
+        assert!(path.contains("mode=foot"));
+        assert!(path.contains("via=47.050000,28.850000"));
+        assert!(path.contains("avoid=toll,ferry"));
+        assert!(path.contains("alternatives=true"));
+        assert!(!path.contains("email"));
     }
 }

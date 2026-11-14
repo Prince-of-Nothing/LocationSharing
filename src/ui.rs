@@ -324,25 +324,23 @@ impl PinpointAppUI {
                         app.set_error(Some(v.errors.join("; ")));
                         return;
                     }
-                    if !app
-                        .rate_limiter()
-                        .lock()
-                        .unwrap()
-                        .check("nominatim")
-                        .is_allowed()
+                    let (lat, lon) = {
+                        let d = app.data();
+                        let d = d.lock().unwrap();
+                        (d.map_center_lat, d.map_center_lon)
+                    };
+                    match app
+                        .map_search(&query, Some(lat), Some(lon), 8)
+                        .await
                     {
-                        app.set_error(Some("Search rate limited — try again shortly.".to_string()));
-                        return;
-                    }
-                    let client = OsmClient::new().ok();
-                    if let Some(client) = client {
-                        match client.search(&query).await {
-                            Ok(results) => {
-                                app.data().lock().unwrap().search_results = results;
-                            }
-                            Err(e) => {
-                                app.data().lock().unwrap().search_error = Some(e.to_string());
-                            }
+                        Ok(results) => {
+                            let data = app.data();
+                            let mut d = data.lock().unwrap();
+                            d.search_results = results;
+                            d.search_error = None;
+                        }
+                        Err(e) => {
+                            app.data().lock().unwrap().search_error = Some(e.to_string());
                         }
                     }
                 }
@@ -380,24 +378,23 @@ impl PinpointAppUI {
                     let _ = app.trigger_emergency(lat, lon).await;
                 }
                 PendingAction::Route { from, to, mode } => {
-                    let travel_mode = match mode.as_str() {
-                        "driving" => crate::osm::TravelMode::Driving,
-                        "bike" => crate::osm::TravelMode::Bike,
-                        _ => crate::osm::TravelMode::Foot,
-                    };
-                    if let Ok(client) = OsmClient::new() {
-                        match client.route(from, to, travel_mode).await {
-                            Ok(r) => {
-                                let mins = (r.duration_s / 60.0) as i64;
+                    match app
+                        .map_route(from, to, &mode, &[], &[], true)
+                        .await
+                    {
+                        Ok(routes) => match routes.into_iter().next() {
+                            Some(route) => {
+                                let mins = (route.duration_s / 60.0) as i64;
                                 app.set_notice(Some(format!(
                                     "Route: {:.2} km, ~{} min.",
-                                    r.distance_m / 1000.0,
+                                    route.distance_m / 1000.0,
                                     mins
                                 )));
-                                app.data().lock().unwrap().last_route = Some(r);
+                                app.data().lock().unwrap().last_route = Some(route);
                             }
-                            Err(e) => app.set_error(Some(e.to_string())),
-                        }
+                            None => app.set_error(Some("No route found.".to_string())),
+                        },
+                        Err(e) => app.set_error(Some(e.to_string())),
                     }
                 }
                 PendingAction::Poi { lat, lon, category } => {
@@ -416,13 +413,12 @@ impl PinpointAppUI {
                     }
                 }
                 PendingAction::Reverse { lat, lon } => {
-                    if let Ok(client) = OsmClient::new() {
-                        match client.reverse(lat, lon).await {
-                            Ok(place) => {
-                                app.set_notice(Some(format!("Address: {}", place.display_name)));
-                            }
-                            Err(e) => app.set_error(Some(e.to_string())),
+                    match app.map_reverse(lat, lon).await {
+                        Ok(place) => {
+                            app.set_notice(Some(format!("Address: {}", place.display_name)));
+                            app.data().lock().unwrap().selected_place = Some(place);
                         }
+                        Err(e) => app.set_error(Some(e.to_string())),
                     }
                 }
                 PendingAction::UpdateProfile { full_name } => {

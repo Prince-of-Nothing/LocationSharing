@@ -320,6 +320,10 @@ pub struct AppData {
     pub must_change_password: bool,
     pub search_results: Vec<SearchPlace>,
     pub search_error: Option<String>,
+    /// Place selected from search, reverse geocode or a map tap.
+    pub selected_place: Option<SearchPlace>,
+    /// One-shot map tap coordinate consumed by the UI.
+    pub map_click: Option<(f64, f64)>,
     /// Nearby POI results from the last Overpass query (Places screen).
     pub poi_results: Vec<crate::osm::Poi>,
     /// Last calculated route (summary/steps/GPX export).
