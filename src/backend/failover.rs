@@ -10,7 +10,9 @@
 //!   let user = failover.login("alice@example.com", "password").await?;
 
 use crate::backend::{Backend, BackendFuture, DynBackend};
-use crate::models::{CheckIn, EmergencyAlert, FriendLocation, Friendship, LocationShare, User};
+use crate::models::{
+    CheckIn, EmergencyAlert, FriendLocation, Friendship, LocationShare, SessionInfo, User,
+};
 use crate::osm::{MapCapabilities, Route, SearchPlace};
 use crate::security::circuit_breaker::CircuitBreaker;
 use std::future::Future;
@@ -157,6 +159,24 @@ impl Backend for FailoverBackend {
         }
     }
 
+    fn export_session(&self) -> Option<String> {
+        let entries = self.backends.try_read().ok()?;
+        entries
+            .iter()
+            .find_map(|entry| entry.backend.export_session())
+    }
+
+    fn import_session(&self, raw: &str) -> anyhow::Result<()> {
+        let entries = self
+            .backends
+            .try_read()
+            .map_err(|_| anyhow::anyhow!("backend pool is busy; cannot restore session"))?;
+        for entry in entries.iter() {
+            let _ = entry.backend.import_session(raw);
+        }
+        Ok(())
+    }
+
     fn login<'a>(&'a self, email: &'a str, password: &'a str) -> BackendFuture<'a, User> {
         Box::pin(async move {
             self.try_all("login", |b| {
@@ -202,6 +222,81 @@ impl Backend for FailoverBackend {
             self.try_all("logout", |b| {
                 let b = b.clone();
                 async move { b.logout().await }
+            })
+            .await
+        })
+    }
+
+    fn me(&self) -> BackendFuture<'_, User> {
+        Box::pin(async move {
+            self.try_all("me", |b| {
+                let b = b.clone();
+                async move { b.me().await }
+            })
+            .await
+        })
+    }
+
+    fn anonymous<'a>(&'a self, device_name: &'a str) -> BackendFuture<'a, (User, String)> {
+        Box::pin(async move {
+            self.try_all("anonymous", |b| {
+                let b = b.clone();
+                async move { b.anonymous(device_name).await }
+            })
+            .await
+        })
+    }
+
+    fn recover_account<'a>(&'a self, code: &'a str) -> BackendFuture<'a, (User, String)> {
+        Box::pin(async move {
+            self.try_all("recover_account", |b| {
+                let b = b.clone();
+                async move { b.recover_account(code).await }
+            })
+            .await
+        })
+    }
+
+    fn list_sessions(&self) -> BackendFuture<'_, Vec<SessionInfo>> {
+        Box::pin(async move {
+            self.try_all("list_sessions", |b| {
+                let b = b.clone();
+                async move { b.list_sessions().await }
+            })
+            .await
+        })
+    }
+
+    fn revoke_session<'a>(&'a self, id: &'a str) -> BackendFuture<'a, ()> {
+        Box::pin(async move {
+            self.try_all("revoke_session", |b| {
+                let b = b.clone();
+                async move { b.revoke_session(id).await }
+            })
+            .await
+        })
+    }
+
+    fn logout_all(&self) -> BackendFuture<'_, ()> {
+        Box::pin(async move {
+            self.try_all("logout_all", |b| {
+                let b = b.clone();
+                async move { b.logout_all().await }
+            })
+            .await
+        })
+    }
+
+    fn submit_diagnostic<'a>(
+        &'a self,
+        category: &'a str,
+        message: &'a str,
+        platform: &'a str,
+    ) -> BackendFuture<'a, i64> {
+        Box::pin(async move {
+            self.try_all("submit_diagnostic", |b| {
+                let b = b.clone();
+                async move { b.submit_diagnostic(category, message, platform).await }
             })
             .await
         })

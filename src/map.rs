@@ -260,6 +260,9 @@ pub fn render_map_with(
 
         // Draw visible 256×256 Slippy tiles
         let z = state.map_zoom;
+        let label_size = state.map_label_size.unwrap_or(12.0).clamp(10.0, 18.0);
+        let icon_size = state.map_icon_size.unwrap_or(26.0).clamp(18.0, 40.0);
+        let pin_radius = icon_size * 0.27;
         let max_tile = (1u32 << z).saturating_sub(1);
         let (cx, cy) = latlon_to_world_px(state.map_center_lat, state.map_center_lon, z);
         let top_left_world_x = cx - (map_rect.width() as f64) / 2.0;
@@ -373,6 +376,30 @@ pub fn render_map_with(
             }
         }
 
+        // Selected search/reverse-geocode place (web `.marker.center`).
+        if let Some(place) = &state.selected_place {
+            let p = project_to_rect(
+                place.latitude,
+                place.longitude,
+                state.map_center_lat,
+                state.map_center_lon,
+                z,
+                map_rect,
+            );
+            if map_rect.expand(40.0).contains(p) {
+                let accent = Color32::from_rgb(52, 211, 153);
+                painter.circle_stroke(p, icon_size * 0.54, Stroke::new(2.5_f32, accent));
+                painter.circle_filled(p, pin_radius * 0.7, accent);
+                painter.text(
+                    p + Vec2::new(0.0, -(icon_size * 0.7)),
+                    egui::Align2::CENTER_BOTTOM,
+                    &place.short_name,
+                    egui::FontId::proportional(label_size),
+                    accent,
+                );
+            }
+        }
+
         // Draw pins for each location
         for loc in &all_locations {
             let pin_pos = project_to_rect(
@@ -387,24 +414,24 @@ pub fn render_map_with(
                 continue;
             }
             let (pin_color, ring_radius) = match loc.precision_level.as_str() {
-                "exact" => (Color32::from_rgb(52, 211, 153), 12.0),
-                "approximate" => (Color32::from_rgb(250, 204, 21), 22.0),
-                "city_only" => (Color32::from_rgb(248, 113, 113), 34.0),
-                _ => (Color32::from_rgb(148, 163, 184), 14.0),
+                "exact" => (Color32::from_rgb(52, 211, 153), pin_radius + 5.0),
+                "approximate" => (Color32::from_rgb(250, 204, 21), pin_radius + 15.0),
+                "city_only" => (Color32::from_rgb(248, 113, 113), pin_radius + 27.0),
+                _ => (Color32::from_rgb(148, 163, 184), pin_radius + 7.0),
             };
             painter.circle_stroke(
                 pin_pos,
                 ring_radius,
                 Stroke::new(1.5_f32, pin_color.gamma_multiply(0.55)),
             );
-            painter.circle_filled(pin_pos, 7.0, pin_color);
-            painter.circle_stroke(pin_pos, 7.0, Stroke::new(2.0_f32, Color32::BLACK));
+            painter.circle_filled(pin_pos, pin_radius, pin_color);
+            painter.circle_stroke(pin_pos, pin_radius, Stroke::new(2.0_f32, Color32::BLACK));
 
             painter.text(
-                pin_pos + Vec2::new(0.0, -12.0),
+                pin_pos + Vec2::new(0.0, -(icon_size * 0.46)),
                 egui::Align2::CENTER_BOTTOM,
                 &loc.user_name,
-                egui::FontId::proportional(12.0),
+                egui::FontId::proportional(label_size),
                 Color32::WHITE,
             );
         }

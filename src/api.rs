@@ -12,9 +12,11 @@
 //!   else must be HTTPS (fail closed â€” see ADR-0006).
 
 use crate::models::{
-    CheckIn, EmergencyAlert, FriendLocation, Friendship, LocationShare, LoginResponse, User,
+    CheckIn, EmergencyAlert, FriendLocation, Friendship, LocationShare, LoginResponse, SessionInfo,
+    User,
 };
 use crate::osm::{MapCapabilities, Route, SearchPlace};
+use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use url::Url;
@@ -81,6 +83,29 @@ struct Session {
     csrf_token: Option<String>,
 }
 
+/// Serialisable session material persisted in the OS keychain. It contains
+/// only the opaque cookie and CSRF token — never a password or email.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SessionSnapshot {
+    pub cookies: Vec<String>,
+    #[serde(default)]
+    pub csrf_token: Option<String>,
+}
+
+impl SessionSnapshot {
+    pub fn to_json(&self) -> String {
+        serde_json::to_string(self).unwrap_or_default()
+    }
+
+    pub fn from_json(raw: &str) -> anyhow::Result<Self> {
+        let snapshot: Self = serde_json::from_str(raw)?;
+        if snapshot.cookies.is_empty() {
+            anyhow::bail!("session snapshot has no cookies");
+        }
+        Ok(snapshot)
+    }
+}
+
 pub struct ApiClient {
     backend_url: String,
     http: reqwest::Client,
@@ -122,6 +147,29 @@ impl ApiClient {
 
     fn session_snapshot(&self) -> Option<Session> {
         self.session.lock().unwrap().clone()
+    }
+
+    /// Export opaque session material for keychain persistence.
+    pub fn export_session(&self) -> Option<String> {
+        let session = self.session_snapshot()?;
+        Some(
+            SessionSnapshot {
+                cookies: session.cookies,
+                csrf_token: session.csrf_token,
+            }
+            .to_json(),
+        )
+    }
+
+    /// Import a previously persisted session snapshot. Fails closed when the
+    /// blob is malformed or contains no cookies.
+    pub fn import_session(&self, raw: &str) -> anyhow::Result<()> {
+        let snapshot = SessionSnapshot::from_json(raw)?;
+        self.store_session(Some(Session {
+            cookies: snapshot.cookies,
+            csrf_token: snapshot.csrf_token,
+        }));
+        Ok(())
     }
 
     /// Issues a request, attaching the session cookie on every request and
@@ -281,6 +329,113 @@ impl ApiClient {
         let _ = response;
         self.store_session(None);
         Ok(())
+    }
+
+    /// `GET /api/v1/auth/me` — current user for session resume.
+    pub async fn me(&self) -> anyhow::Result<User> {
+        let response = self
+            .request(reqwest::Method::GET, "/api/v1/auth/me", None)
+            .await?;
+        let response = Self::check(response, "Session expired").await?;
+        Ok(response.json().await?)
+    }
+
+    /// `POST /api/v1/auth/anonymous` — device-bound account plus recovery code.
+    pub async fn anonymous(&self, device_name: &str) -> anyhow::Result<(User, String)> {
+        let response = self
+            .request(
+                reqwest::Method::POST,
+                "/api/v1/auth/anonymous",
+                Some(serde_json::json!({ "device_name": device_name })),
+            )
+            .await?;
+        let response = Self::check(response, "Anonymous sign-in failed").await?;
+        let headers = response.headers().clone();
+        let body: AnonymousResponse = response.json().await?;
+        let login = LoginResponse {
+            access_token: String::new(),
+            csrf_token: body.csrf_token.clone(),
+            user: body.user.clone(),
+        };
+        self.capture_session(&headers, &login)?;
+        Ok((body.user, body.recovery_code))
+    }
+
+    /// `POST /api/v1/auth/anonymous/recover` — rotate and restore via code.
+    pub async fn recover_account(&self, recovery_code: &str) -> anyhow::Result<(User, String)> {
+        let response = self
+            .request(
+                reqwest::Method::POST,
+                "/api/v1/auth/anonymous/recover",
+                Some(serde_json::json!({ "recovery_code": recovery_code })),
+            )
+            .await?;
+        let response = Self::check(response, "Recovery failed").await?;
+        let headers = response.headers().clone();
+        let body: AnonymousResponse = response.json().await?;
+        let login = LoginResponse {
+            access_token: String::new(),
+            csrf_token: body.csrf_token.clone(),
+            user: body.user.clone(),
+        };
+        self.capture_session(&headers, &login)?;
+        Ok((body.user, body.recovery_code))
+    }
+
+    /// `GET /api/v1/auth/sessions` — active sessions for the current user.
+    pub async fn list_sessions(&self) -> anyhow::Result<Vec<SessionInfo>> {
+        let response = self
+            .request(reqwest::Method::GET, "/api/v1/auth/sessions", None)
+            .await?;
+        let response = Self::check(response, "Failed to load sessions").await?;
+        let body: SessionsResponse = response.json().await?;
+        Ok(body.sessions)
+    }
+
+    /// `DELETE /api/v1/auth/sessions/:id` — revoke a session by id prefix.
+    pub async fn revoke_session(&self, id: &str) -> anyhow::Result<()> {
+        let response = self
+            .request(
+                reqwest::Method::DELETE,
+                &format!("/api/v1/auth/sessions/{}", urlencoding(id)),
+                None,
+            )
+            .await?;
+        Self::check(response, "Failed to revoke session").await?;
+        Ok(())
+    }
+
+    /// `POST /api/v1/auth/logout-all` — revoke every session and clear local.
+    pub async fn logout_all(&self) -> anyhow::Result<()> {
+        let response = self
+            .request(reqwest::Method::POST, "/api/v1/auth/logout-all", None)
+            .await?;
+        let result = Self::check(response, "Sign out everywhere failed").await;
+        self.store_session(None);
+        result.map(|_| ())
+    }
+
+    /// `POST /api/v1/diagnostics/report` — PII-free user-initiated report.
+    pub async fn submit_diagnostic(
+        &self,
+        category: &str,
+        message: &str,
+        platform: &str,
+    ) -> anyhow::Result<i64> {
+        let response = self
+            .request(
+                reqwest::Method::POST,
+                "/api/v1/diagnostics/report",
+                Some(serde_json::json!({
+                    "category": category,
+                    "message": message,
+                    "platform": platform,
+                })),
+            )
+            .await?;
+        let response = Self::check(response, "Diagnostic report failed").await?;
+        let body: serde_json::Value = response.json().await?;
+        Ok(body["id"].as_i64().unwrap_or(0))
     }
 
     /// MFA: start enrolment; returns (secret, otpauth_uri).
@@ -721,6 +876,19 @@ struct RouteResponse {
     routes: Vec<Route>,
 }
 
+#[derive(serde::Deserialize)]
+struct SessionsResponse {
+    sessions: Vec<SessionInfo>,
+}
+
+#[derive(serde::Deserialize)]
+struct AnonymousResponse {
+    user: User,
+    recovery_code: String,
+    #[serde(default)]
+    csrf_token: Option<String>,
+}
+
 fn update_share_body(
     is_active: Option<bool>,
     precision: Option<&str>,
@@ -868,6 +1036,12 @@ impl crate::backend::Backend for ApiClient {
     fn session_active(&self) -> bool {
         ApiClient::session_active(self)
     }
+    fn export_session(&self) -> Option<String> {
+        ApiClient::export_session(self)
+    }
+    fn import_session(&self, raw: &str) -> anyhow::Result<()> {
+        ApiClient::import_session(self, raw)
+    }
     fn login<'a>(
         &'a self,
         email: &'a str,
@@ -893,6 +1067,40 @@ impl crate::backend::Backend for ApiClient {
     }
     fn logout<'a>(&'a self) -> crate::backend::BackendFuture<'a, ()> {
         Box::pin(async move { ApiClient::logout(self).await })
+    }
+    fn me(&self) -> crate::backend::BackendFuture<'_, crate::models::User> {
+        Box::pin(async move { ApiClient::me(self).await })
+    }
+    fn anonymous<'a>(
+        &'a self,
+        device_name: &'a str,
+    ) -> crate::backend::BackendFuture<'a, (crate::models::User, String)> {
+        Box::pin(async move { ApiClient::anonymous(self, device_name).await })
+    }
+    fn recover_account<'a>(
+        &'a self,
+        code: &'a str,
+    ) -> crate::backend::BackendFuture<'a, (crate::models::User, String)> {
+        Box::pin(async move { ApiClient::recover_account(self, code).await })
+    }
+    fn list_sessions(&self) -> crate::backend::BackendFuture<'_, Vec<crate::models::SessionInfo>> {
+        Box::pin(async move { ApiClient::list_sessions(self).await })
+    }
+    fn revoke_session<'a>(&'a self, id: &'a str) -> crate::backend::BackendFuture<'a, ()> {
+        Box::pin(async move { ApiClient::revoke_session(self, id).await })
+    }
+    fn logout_all(&self) -> crate::backend::BackendFuture<'_, ()> {
+        Box::pin(async move { ApiClient::logout_all(self).await })
+    }
+    fn submit_diagnostic<'a>(
+        &'a self,
+        category: &'a str,
+        message: &'a str,
+        platform: &'a str,
+    ) -> crate::backend::BackendFuture<'a, i64> {
+        Box::pin(
+            async move { ApiClient::submit_diagnostic(self, category, message, platform).await },
+        )
     }
     fn mfa_enroll<'a>(&'a self) -> crate::backend::BackendFuture<'a, (String, String)> {
         Box::pin(async move { ApiClient::mfa_enroll(self).await })
@@ -1087,6 +1295,7 @@ impl crate::backend::Backend for ApiClient {
 mod tests {
     use super::{
         login_body, map_route_path, update_share_body, validate_backend_url_with_allowlist,
+        SessionSnapshot,
     };
 
     #[test]
@@ -1182,6 +1391,35 @@ mod tests {
         let route: crate::osm::Route = serde_json::from_value(value).unwrap();
         assert_eq!(route.points.len(), 2);
         assert_eq!(route.steps[0].distance_m, Some(120.0));
+    }
+
+    #[test]
+    fn session_snapshot_round_trips_without_identity_fields() {
+        let snapshot = SessionSnapshot {
+            cookies: vec!["session_id=abc".into()],
+            csrf_token: Some("csrf".into()),
+        };
+        let json = snapshot.to_json();
+        assert!(json.contains("session_id=abc"));
+        assert!(!json.contains("password"));
+        assert!(!json.contains("email"));
+        let back = SessionSnapshot::from_json(&json).unwrap();
+        assert_eq!(back, snapshot);
+    }
+
+    #[test]
+    fn session_info_deserializes_current_flag() {
+        let value = serde_json::json!({
+            "id": "abcd1234",
+            "current": true,
+            "auth_method": "email",
+            "mfa_pending": false,
+            "created_at": "2026-11-14T00:00:00Z",
+            "last_activity": "2026-11-14T00:00:00Z"
+        });
+        let session: crate::models::SessionInfo = serde_json::from_value(value).unwrap();
+        assert!(session.current);
+        assert_eq!(session.id, "abcd1234");
     }
 
     #[test]

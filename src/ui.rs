@@ -45,6 +45,11 @@ enum PendingAction {
         full_name: String,
     },
     Logout,
+    RestorePersistedSession,
+    AnonymousSignIn,
+    RecoverAnonymous {
+        code: String,
+    },
     SendFriendRequest {
         handle: String,
     },
@@ -138,6 +143,16 @@ enum PendingAction {
         zoom: u8,
     },
     RefreshAll,
+    RefreshSessions,
+    RevokeSession {
+        id: String,
+        current: bool,
+    },
+    LogoutAll,
+    SubmitDiagnostic {
+        category: String,
+        message: String,
+    },
     KioskResolveToken {
         token: String,
     },
@@ -162,6 +177,8 @@ pub struct PinpointAppUI {
     login_email: String,
     login_password: String,
     login_totp: String,
+    show_recover_form: bool,
+    recover_code_input: String,
     register_email: String,
     register_password: String,
     register_full_name: String,
@@ -194,6 +211,9 @@ pub struct PinpointAppUI {
     bookmark_lon: String,
     // Profile
     profile_name: String,
+    diagnostic_category: String,
+    diagnostic_message: String,
+    sessions_requested: bool,
     // MFA
     mfa_code: String,
     // Emergency
@@ -214,6 +234,7 @@ pub struct PinpointAppUI {
     route_result_seq: u64,
     route_nav_last_fix: Option<std::time::Instant>,
     route_nav_gps_warned: bool,
+    session_restore_attempted: bool,
     // Per-friend sharing sheet
     share_sheet: Option<share_sheet::ShareSheet>,
     // Mobile shell
@@ -235,6 +256,8 @@ impl PinpointAppUI {
             login_email: String::new(),
             login_password: String::new(),
             login_totp: String::new(),
+            show_recover_form: false,
+            recover_code_input: String::new(),
             register_email: String::new(),
             register_password: String::new(),
             register_full_name: String::new(),
@@ -257,6 +280,9 @@ impl PinpointAppUI {
             bookmark_lat: String::new(),
             bookmark_lon: String::new(),
             profile_name: String::new(),
+            diagnostic_category: "map".to_string(),
+            diagnostic_message: String::new(),
+            sessions_requested: false,
             mfa_code: String::new(),
             emergency_lat: String::new(),
             emergency_lon: String::new(),
@@ -271,6 +297,7 @@ impl PinpointAppUI {
             route_result_seq: 0,
             route_nav_last_fix: None,
             route_nav_gps_warned: false,
+            session_restore_attempted: false,
             share_sheet: None,
             mobile_nav_open: false,
             mobile_publish_open: false,
@@ -319,6 +346,21 @@ impl PinpointAppUI {
                 }
                 PendingAction::Logout => {
                     let _ = app.logout().await;
+                }
+                PendingAction::RestorePersistedSession => {
+                    let _ = app.restore_persisted_session().await;
+                }
+                PendingAction::AnonymousSignIn => {
+                    let device =
+                        format!("Pinpoint {}", crate::platform::Platform::current().label());
+                    if let Ok(code) = app.sign_in_anonymous(device).await {
+                        app.data().lock().unwrap().recovery_code = Some(code);
+                    }
+                }
+                PendingAction::RecoverAnonymous { code } => {
+                    if let Ok(new_code) = app.recover_anonymous(code).await {
+                        app.data().lock().unwrap().recovery_code = Some(new_code);
+                    }
                 }
                 PendingAction::SendFriendRequest { handle } => {
                     let _ = app.send_friend_request(handle).await;
@@ -589,6 +631,25 @@ impl PinpointAppUI {
                     let _ = app.refresh_check_ins().await;
                     let _ = app.refresh_emergencies().await;
                     let _ = app.refresh_users().await;
+                }
+                PendingAction::RefreshSessions => {
+                    let _ = app.refresh_sessions().await;
+                }
+                PendingAction::RevokeSession { id, current } => {
+                    if current {
+                        let _ = app.logout().await;
+                    } else {
+                        let _ = app.revoke_session(id).await;
+                    }
+                }
+                PendingAction::LogoutAll => {
+                    let _ = app.logout_all().await;
+                }
+                PendingAction::SubmitDiagnostic { category, message } => {
+                    match app.submit_diagnostic(category, message).await {
+                        Ok(id) => app.set_notice(Some(format!("Report #{id} sent. Thank you."))),
+                        Err(e) => app.set_error(Some(e.to_string())),
+                    }
                 }
                 PendingAction::KioskResolveToken { token } => {
                     let backend_url = app.backend().backend_url().to_string();
@@ -882,6 +943,12 @@ impl eframe::App for PinpointAppUI {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.sync_route_results();
         self.tick_navigation();
+        if !self.session_restore_attempted {
+            self.session_restore_attempted = true;
+            if self.app.has_persisted_session() {
+                self.spawn_action(PendingAction::RestorePersistedSession, ctx);
+            }
+        }
         if Self::is_compact(ctx) && self.mobile_selected_place.is_none() {
             if let Some(place) = self.app.data().lock().unwrap().selected_place.clone() {
                 self.mobile_selected_place = Some(place);
@@ -1123,6 +1190,7 @@ impl eframe::App for PinpointAppUI {
         });
 
         self.draw_share_sheet(ctx);
+        self.draw_recovery_code(ctx);
 
         // Request repaint for animation/screenshot
         if self.app.screenshot_mode() && !self.app.screenshot_taken() {

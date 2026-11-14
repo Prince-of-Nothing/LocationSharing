@@ -101,6 +101,22 @@ pub struct LoginResponse {
     pub user: User,
 }
 
+/// One active server-side session as shown by the account/session manager.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SessionInfo {
+    pub id: String,
+    #[serde(default)]
+    pub current: bool,
+    #[serde(default)]
+    pub auth_method: String,
+    #[serde(default)]
+    pub mfa_pending: bool,
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default)]
+    pub last_activity: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Friendship {
     pub id: i64,
@@ -332,6 +348,13 @@ pub struct AppData {
     pub route_results: Vec<Route>,
     pub route_error: Option<String>,
     pub route_result_seq: u64,
+    /// Active server-side sessions shown in the account screen.
+    pub sessions: Vec<SessionInfo>,
+    /// One-time anonymous recovery code; cleared after the user dismisses it.
+    pub recovery_code: Option<String>,
+    /// Map appearance overrides (web appearance.js parity).
+    pub map_label_size: Option<f32>,
+    pub map_icon_size: Option<f32>,
     // New feature state (populated by the server where applicable).
     pub my_location: Option<FriendLocation>,
     pub check_ins: Vec<CheckIn>,

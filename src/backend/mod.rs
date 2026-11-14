@@ -20,7 +20,9 @@ pub mod failover;
 pub mod health;
 pub mod rest;
 
-use crate::models::{CheckIn, EmergencyAlert, FriendLocation, Friendship, LocationShare, User};
+use crate::models::{
+    CheckIn, EmergencyAlert, FriendLocation, Friendship, LocationShare, SessionInfo, User,
+};
 use crate::osm::{MapCapabilities, Route, SearchPlace};
 use std::future::Future;
 use std::pin::Pin;
@@ -58,6 +60,10 @@ pub trait Backend: BackendBounds {
     fn backend_url(&self) -> &str;
     /// Whether an authenticated session/state is currently held.
     fn session_active(&self) -> bool;
+    /// Export opaque session material for keychain persistence.
+    fn export_session(&self) -> Option<String>;
+    /// Import opaque session material; fail closed on malformed data.
+    fn import_session(&self, raw: &str) -> anyhow::Result<()>;
 
     fn login<'a>(&'a self, email: &'a str, password: &'a str) -> BackendFuture<'a, User>;
     /// Login with an optional TOTP code for MFA-enabled accounts.
@@ -75,6 +81,18 @@ pub trait Backend: BackendBounds {
     ) -> BackendFuture<'a, User>;
     /// Confirm logout with the backend before dropping local session state.
     fn logout<'a>(&'a self) -> BackendFuture<'a, ()>;
+    fn me(&self) -> BackendFuture<'_, User>;
+    fn anonymous<'a>(&'a self, device_name: &'a str) -> BackendFuture<'a, (User, String)>;
+    fn recover_account<'a>(&'a self, code: &'a str) -> BackendFuture<'a, (User, String)>;
+    fn list_sessions(&self) -> BackendFuture<'_, Vec<SessionInfo>>;
+    fn revoke_session<'a>(&'a self, id: &'a str) -> BackendFuture<'a, ()>;
+    fn logout_all(&self) -> BackendFuture<'_, ()>;
+    fn submit_diagnostic<'a>(
+        &'a self,
+        category: &'a str,
+        message: &'a str,
+        platform: &'a str,
+    ) -> BackendFuture<'a, i64>;
 
     fn mfa_enroll<'a>(&'a self) -> BackendFuture<'a, (String, String)>;
     fn mfa_verify<'a>(&'a self, code: &'a str) -> BackendFuture<'a, ()>;
