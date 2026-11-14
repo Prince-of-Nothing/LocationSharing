@@ -18,6 +18,7 @@ pub(crate) mod map;
 pub(crate) mod places;
 pub(crate) mod profile;
 pub(crate) mod route;
+pub(crate) mod share_sheet;
 pub(crate) mod sharing;
 pub(crate) mod trips;
 
@@ -81,6 +82,13 @@ enum PendingAction {
         direction: String,
         precision: String,
         duration_hours: Option<i64>,
+    },
+    SaveShare {
+        friendship_id: i64,
+        share_id: Option<i64>,
+        enabled: bool,
+        precision: String,
+        duration_hours: i64,
     },
     DeleteFriendship {
         id: i64,
@@ -203,6 +211,8 @@ pub struct PinpointAppUI {
     // Route planner
     route_plan: RoutePlan,
     route_result_seq: u64,
+    // Per-friend sharing sheet
+    share_sheet: Option<share_sheet::ShareSheet>,
     // Mobile shell
     mobile_nav_open: bool,
     mobile_publish_open: bool,
@@ -256,6 +266,7 @@ impl PinpointAppUI {
             kiosk_consent_accepted: false,
             route_plan: RoutePlan::default(),
             route_result_seq: 0,
+            share_sheet: None,
             mobile_nav_open: false,
             mobile_publish_open: false,
             mobile_selected_place: None,
@@ -321,7 +332,9 @@ impl PinpointAppUI {
                     share_id,
                     is_active,
                 } => {
-                    let _ = app.update_share(share_id, Some(is_active), None).await;
+                    let _ = app
+                        .update_share(share_id, Some(is_active), None, None)
+                        .await;
                 }
                 PendingAction::ChangePassword {
                     current,
@@ -380,6 +393,39 @@ impl PinpointAppUI {
                 }
                 PendingAction::DeleteFriendship { id } => {
                     let _ = app.delete_friendship(id).await;
+                }
+                PendingAction::SaveShare {
+                    friendship_id,
+                    share_id,
+                    enabled,
+                    precision,
+                    duration_hours,
+                } => {
+                    if let Some(share_id) = share_id {
+                        let _ = app
+                            .update_share(
+                                share_id,
+                                Some(enabled),
+                                Some(precision),
+                                Some(duration_hours),
+                            )
+                            .await;
+                    } else if enabled {
+                        let expiry = if duration_hours > 0 {
+                            Some(duration_hours)
+                        } else {
+                            None
+                        };
+                        let _ = app
+                            .create_share_with_expiry(
+                                friendship_id,
+                                "to_friend".to_string(),
+                                precision,
+                                expiry,
+                                None,
+                            )
+                            .await;
+                    }
                 }
                 PendingAction::CreateCheckIn {
                     lat,
@@ -798,13 +844,6 @@ impl PinpointAppUI {
     }
 }
 
-/// Row data for the friends screen (kept tiny to satisfy borrow rules
-/// inside the egui closures).
-struct FriendshipRef {
-    id: i64,
-    requester_name: String,
-}
-
 impl eframe::App for PinpointAppUI {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.sync_route_results();
@@ -1028,6 +1067,8 @@ impl eframe::App for PinpointAppUI {
                 }
             }
         });
+
+        self.draw_share_sheet(ctx);
 
         // Request repaint for animation/screenshot
         if self.app.screenshot_mode() && !self.app.screenshot_taken() {

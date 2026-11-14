@@ -441,15 +441,9 @@ impl ApiClient {
         share_id: i64,
         is_active: Option<bool>,
         precision: Option<String>,
+        duration_hours: Option<i64>,
     ) -> anyhow::Result<()> {
-        let mut body = serde_json::json!({});
-        if let Some(active) = is_active {
-            body["is_active"] = serde_json::Value::Bool(active);
-        }
-        if let Some(p) = precision {
-            body["precision_level"] = serde_json::Value::String(p);
-        }
-
+        let body = update_share_body(is_active, precision.as_deref(), duration_hours);
         let response = self
             .request(
                 reqwest::Method::PATCH,
@@ -727,6 +721,24 @@ struct RouteResponse {
     routes: Vec<Route>,
 }
 
+fn update_share_body(
+    is_active: Option<bool>,
+    precision: Option<&str>,
+    duration_hours: Option<i64>,
+) -> serde_json::Value {
+    let mut body = serde_json::json!({});
+    if let Some(active) = is_active {
+        body["is_active"] = serde_json::Value::Bool(active);
+    }
+    if let Some(p) = precision {
+        body["precision_level"] = serde_json::Value::String(p.to_string());
+    }
+    if let Some(hours) = duration_hours {
+        body["duration_hours"] = serde_json::Value::Number(hours.into());
+    }
+    body
+}
+
 fn login_body(email: &str, password: &str, totp: Option<&str>) -> serde_json::Value {
     match totp.map(str::trim).filter(|code| !code.is_empty()) {
         Some(code) => {
@@ -962,9 +974,11 @@ impl crate::backend::Backend for ApiClient {
         share_id: i64,
         is_active: Option<bool>,
         precision: Option<String>,
+        duration_hours: Option<i64>,
     ) -> crate::backend::BackendFuture<'a, ()> {
         Box::pin(async move {
-            ApiClient::update_location_share(self, share_id, is_active, precision).await
+            ApiClient::update_location_share(self, share_id, is_active, precision, duration_hours)
+                .await
         })
     }
     fn delete_share<'a>(&'a self, share_id: i64) -> crate::backend::BackendFuture<'a, ()> {
@@ -1071,7 +1085,9 @@ impl crate::backend::Backend for ApiClient {
 
 #[cfg(test)]
 mod tests {
-    use super::{login_body, map_route_path, validate_backend_url_with_allowlist};
+    use super::{
+        login_body, map_route_path, update_share_body, validate_backend_url_with_allowlist,
+    };
 
     #[test]
     fn accepts_loopback_http_development_urls() {
@@ -1166,6 +1182,16 @@ mod tests {
         let route: crate::osm::Route = serde_json::from_value(value).unwrap();
         assert_eq!(route.points.len(), 2);
         assert_eq!(route.steps[0].distance_m, Some(120.0));
+    }
+
+    #[test]
+    fn update_share_body_includes_duration_and_precision() {
+        let body = update_share_body(Some(false), Some("city_only"), Some(24));
+        assert_eq!(body["is_active"], false);
+        assert_eq!(body["precision_level"], "city_only");
+        assert_eq!(body["duration_hours"], 24);
+        let unchanged = update_share_body(None, None, None);
+        assert!(unchanged.as_object().unwrap().is_empty());
     }
 
     #[test]

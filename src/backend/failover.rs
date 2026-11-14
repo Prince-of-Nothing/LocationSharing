@@ -364,13 +364,14 @@ impl Backend for FailoverBackend {
         share_id: i64,
         is_active: Option<bool>,
         precision: Option<String>,
+        duration_hours: Option<i64>,
     ) -> BackendFuture<'a, ()> {
         Box::pin(async move {
             self.try_all("update_location_share", |b| {
                 let b = b.clone();
                 let precision = precision.clone();
                 async move {
-                    b.update_location_share(share_id, is_active, precision)
+                    b.update_location_share(share_id, is_active, precision, duration_hours)
                         .await
                 }
             })
